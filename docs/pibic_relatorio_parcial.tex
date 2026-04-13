@@ -1,0 +1,381 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{indentfirst}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{amsmath}
+\usepackage{xcolor}
+
+\geometry{left=3cm,right=2cm,top=3cm,bottom=2cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=blue,
+    citecolor=black,
+    pdftitle={Relatorio Parcial PIBIC - FLORA},
+    pdfauthor={Joao Pedro Pereira Santiago}
+}
+
+\onehalfspacing
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0.15cm}
+\captionsetup{font=small,labelfont=bf}
+
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection.}{0.5em}{}
+
+\newcommand{\reportfigure}[3]{
+    \begin{figure}[H]
+        \centering
+        \IfFileExists{#1}{
+            \includegraphics[width=0.86\textwidth]{#1}
+        }{
+            \fbox{
+                \parbox[c][6cm][c]{0.82\textwidth}{
+                    \centering
+                    Placeholder da figura\\[0.3cm]
+                    \texttt{#1}
+                }
+            }
+        }
+        \caption{#2}
+        \label{#3}
+    \end{figure}
+}
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+        {\large \textbf{[NOME DA INSTITUICAO]}}\\
+        {\large \textbf{[NOME DO PROGRAMA]}}\\
+        {\large \textbf{Programa Institucional de Bolsas de Iniciacao Cientifica (PIBIC/CNPq)}}\\
+
+        \vspace{4cm}
+
+        {\Large \textbf{RELATORIO PARCIAL DE PESQUISA}}\\
+
+        \vspace{1.8cm}
+
+        {\Large \textbf{PVM2263-2025}}\\
+        {\Large \textbf{FLORA: Friendly Local Open Resource for Analysis}}\\
+
+        \vspace{4cm}
+
+        \begin{flushleft}
+            \textbf{Bolsista:} Joao Pedro Pereira Santiago\\
+            \textbf{Orientador:} Prof. Dr. Diego Lisboa Rios\\
+            \textbf{Periodo de avaliacao:} Agosto/2025 a Marco/2026
+        \end{flushleft}
+
+        \vfill
+
+        {\large [Cidade -- Estado]}\\
+        {\large Abril de 2026}
+    \end{center}
+\end{titlepage}
+
+\begin{abstract}
+Este relatorio apresenta os resultados parciais do projeto FLORA (\textit{Friendly Local Open Resource for Analysis}), uma biblioteca em Python voltada para analise ponta a ponta de dados de microbioma baseados em amplicons do gene rRNA 16S. No periodo avaliado, o projeto evoluiu de uma proposta inicialmente centrada em interface para uma arquitetura de biblioteca cientifica robusta, organizada em camadas de ingestao, armazenamento analitico, engenharia de atributos, aprendizado de maquina, visualizacao e geracao automatizada de relatorios. Como resultado, foram consolidados um nucleo analitico baseado em DuckDB e Parquet, modulos de normalizacao composicional com transformacao CLR, rotinas de calculo de diversidade alfa e beta, modelos supervisionados com \textit{scikit-learn}/XGBoost e uma pipeline de relatorios interativos e documentacao cientifica. Em avaliacao experimental com dados do Earth Microbiome Project (EMP), a pipeline processou 89 amostras, preservou 1.183 atributos apos filtragem de prevalencia e obteve acuracia de 0{,}8636, F1-macro de 0{,}6381 e ROC-AUC de 0{,}9510 na classificacao de categorias ambientais. Os resultados indicam maturidade suficiente para a etapa seguinte, focada em usabilidade, ampliacao metodologica e validacao em novas bases publicas.
+\vspace{0.4cm}\\
+\textbf{Palavras-chave:} microbioma, rRNA 16S, bioinformatica, machine learning, DuckDB, composicionalidade.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introducao}
+
+A analise de comunidades microbianas independentes de cultivo se consolidou como uma das principais abordagens para investigacao de ambientes naturais, sistemas hospedeiros e processos ecologicos. No contexto de microbiomas, o sequenciamento de amplicons do gene rRNA 16S permanece como uma estrategia amplamente adotada por apresentar custo relativamente reduzido, protocolos padronizados e vasta base comparativa na literatura. Ferramentas como QIIME 2 \cite{bolyen2019} e DADA2 \cite{callahan2016} elevaram o rigor da area ao permitir inferencia de variantes de sequencia de alta resolucao.
+
+Apesar desse avanco, ainda persiste um gargalo importante entre o processamento primario dos dados e a construcao de modelos interpretaveis de aprendizado de maquina. Em geral, o pesquisador precisa integrar manualmente diferentes formatos de entrada, bancos de dados, bibliotecas de transformacao estatistica, pacotes de visualizacao e modelos preditivos. Esse acoplamento manual aumenta a complexidade do fluxo de trabalho, dificulta reproducibilidade e compromete a adocao por usuarios com menor familiaridade em programacao cientifica.
+
+Outro ponto critico e a natureza composicional dos dados de abundancia microbiana. Matrizes de ASVs representam distribuicoes relativas, nao medidas absolutas independentes, de modo que abordagens estatisticas convencionais podem introduzir correlacoes espurias e interpretacoes enviesadas. A literatura recomenda transformacoes log-ratio, como CLR, para reduzir esse problema \cite{gloor2017}, mas tais procedimentos frequentemente permanecem ausentes ou opcionais em pipelines aplicados.
+
+Nesse contexto, o projeto \textbf{FLORA} foi concebido como uma infraestrutura local, aberta e integrada para analise de microbiomas. A proposta combina armazenamento analitico embutido, transformacoes composicionais, machine learning e geracao de relatorios em uma unica base de codigo, tornando o pipeline mais reproduzivel, auditavel e acessivel.
+
+\section{Objetivos}
+
+\subsection{Objetivo Geral}
+
+Desenvolver uma biblioteca e plataforma local em Python para analise ponta a ponta de dados de amplicons 16S rRNA, integrando ingestao, armazenamento analitico, transformacoes composicionais, aprendizado de maquina e geracao automatizada de relatorios.
+
+\subsection{Objetivos Especificos}
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item desenvolver uma interface de uso amigavel, em CLI e camada web local, sobre um nucleo cientifico reutilizavel;
+    \item implementar uma arquitetura de armazenamento analitico local capaz de operar com dados maiores que a memoria RAM;
+    \item incorporar tecnicas adequadas para dados composicionais, especialmente a transformacao CLR, como etapa padrao para modelagem;
+    \item integrar processamento de sequencias e estruturas de dados oriundas de QIIME 2/DADA2;
+    \item disponibilizar modulos de visualizacao, relatorios e interpretabilidade de modelos.
+\end{itemize}
+
+\section{Metodologia}
+
+O desenvolvimento foi estruturado em modulos independentes, seguindo principios de engenharia de software cientifico e validacao incremental.
+
+\subsection{Arquitetura de Dados}
+
+Foi adotado o \textbf{DuckDB} \cite{raasveldt2019} como motor analitico local. A escolha se deve ao suporte eficiente a formato colunar, consultas SQL in-process e boa interoperabilidade com Arrow e Parquet. Essa camada concentra o estado do pipeline em tabelas normalizadas de amostras, ASVs, taxonomia e metricas derivadas, reduzindo dependencia de arquivos temporarios CSV e melhorando reproducibilidade.
+
+\subsection{Engenharia de Atributos}
+
+As transformacoes tabulares foram implementadas com \textbf{Polars}, priorizando operacoes vetorizadas e boa escalabilidade em matrizes de alta dimensionalidade. A normalizacao CLR passou a ser a forma padrao de gerar matrizes para aprendizado supervisionado. Tambem foram incorporadas rotinas para filtragem por prevalencia, diversidade alfa (Shannon, Chao1, Simpson) e diversidade beta com distancia Bray-Curtis.
+
+\subsection{Modelagem e Avaliacao}
+
+No modulo de aprendizado de maquina foram estabilizadas classes para classificacao, regressao e clustering, com uso de \texttt{scikit-learn} e \texttt{XGBoost}. O desenho experimental passou a incorporar comparacao entre \textit{baseline} majoritario, Random Forest, SVM e XGBoost, sob diferentes normalizacoes (\textit{raw}, TSS e CLR). Alem de acuracia, o trabalho passou a considerar F1-macro, \textit{balanced accuracy} e ROC-AUC, o que melhora a leitura do desempenho em cenarios com desbalanceamento entre classes.
+
+\subsection{Hipotese Experimental}
+
+A hipotese central do trabalho foi explicitada da seguinte forma: \textit{a normalizacao composicional CLR melhora a separacao entre classes ambientais e o desempenho preditivo em relacao a abundancias brutas, mantendo coerencia biologica nos atributos mais discriminantes}. Essa formulacao desloca o FLORA de uma prova de conceito apenas tecnica para um estudo comparativo com valor cientifico verificavel.
+
+\subsection{Ligacao entre pipeline biologico e modelagem}
+
+Para fins de interpretacao metodologica, o pipeline foi compreendido em duas camadas articuladas. A primeira e biologica: controle de qualidade dos reads, remocao de primers, \textit{denoising} por DADA2, geracao de ASVs, remocao de quimeras e classificacao taxonomica. A segunda e computacional: ingestao em DuckDB, transformacao composicional, filtragem por prevalencia, diversidade, treinamento supervisionado e interpretacao das features. O valor cientifico do FLORA depende exatamente dessa continuidade entre preparo biologico e inferencia estatistica.
+
+\subsection{Documentacao e Visualizacao}
+
+O projeto passou a gerar relatorios HTML autocontidos com visualizacoes interativas. Paralelamente, foram produzidos artefatos estaticos em PNG e documentos em Markdown para uso direto em relatorios institucionais e apresentacoes. Esse passo conecta a camada computacional ao produto academico esperado em PIBIC.
+
+\section{Resultados Parciais e Discussao}
+
+No periodo avaliado, houve uma redefinicao arquitetural importante. A proposta inicial dava maior peso a uma interface grafica, mas a experiencia de desenvolvimento mostrou que a sustentabilidade do projeto dependia da consolidacao previa de um nucleo cientifico robusto. A partir disso, o FLORA passou a ser organizado como biblioteca modular, sobre a qual interfaces e automacoes podem ser construidas com menor risco tecnico.
+
+Os principais avancos consolidados foram:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \textbf{camada DuckDB estabilizada:} unificacao do pipeline em banco analitico local e persistencia de tabelas biologicas e metricas derivadas;
+    \item \textbf{ingestao de dados reais do EMP:} incorporacao de caminho robusto de ingestao por BIOM filtrado por metadados, reduzindo custo computacional e aumentando estabilidade;
+    \item \textbf{pipeline composicional:} geracao automatica de matriz CLR com filtragem por prevalencia para alimentar modulos de ML;
+    \item \textbf{visualizacao e relatorios:} geracao de relatorio HTML, markdown analitico e figuras estaticas prontas para relatorio academico;
+    \item \textbf{suite de testes funcional:} a bateria de testes executou integralmente com 73 testes aprovados sem falhas funcionais.
+\end{itemize}
+
+\subsection{Sintese do que foi efetivamente desenvolvido}
+
+Considerando o estado atual do repositorio e das pipelines executadas no periodo, o FLORA ja entrega um conjunto coerente de componentes cientificos e operacionais:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \textbf{ingestao microbiologica estruturada:} leitura de \texttt{metadata.tsv}, \texttt{taxonomy.tsv}, tabelas de ASV em TSV e BIOM, com persistencia em DuckDB;
+    \item \textbf{camada analitica local:} consultas em DuckDB, exportacao tabular e estrutura apropriada para analise \textit{out-of-core};
+    \item \textbf{engenharia de atributos:} matrizes largas por amostra, filtro por prevalencia, transformacoes \textit{raw}, TSS e CLR;
+    \item \textbf{diversidade microbiana:} calculo de Shannon, Chao1, Simpson, Bray-Curtis e PCoA;
+    \item \textbf{aprendizado de maquina:} treinamento e avaliacao com \textit{baseline} majoritario, Random Forest, SVM e XGBoost;
+    \item \textbf{interpretabilidade:} importancia de atributos, SHAP e mapeamento taxonomico das features mais discriminantes;
+    \item \textbf{relatorios:} geracao automatica de artefatos em HTML, Markdown e imagens estaticas para documentacao cientifica.
+\end{itemize}
+
+Esse conjunto mostra que o projeto ja ultrapassou a fase de prototipo conceitual. O nucleo do trabalho hoje nao e apenas construir interface, mas consolidar uma infraestrutura local reproduzivel para microbioma, com foco simultaneo em ingestao, modelagem e interpretacao.
+
+\subsection{Experimento com Earth Microbiome Project}
+
+Foi executada uma pipeline completa com dados locais do Earth Microbiome Project. A Tabela \ref{tab:emp_resumo} resume os principais indicadores obtidos.
+
+\begin{table}[H]
+    \centering
+    \caption{Resumo quantitativo da pipeline EMP no FLORA.}
+    \label{tab:emp_resumo}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{8cm}p{4cm}}
+        \toprule
+        \textbf{Indicador} & \textbf{Valor} \\
+        \midrule
+        Amostras ingeridas & 89 \\
+        Amostras usadas no modelo & 85 \\
+        Observacoes ASV carregadas & 28.857 \\
+        Taxonomias carregadas & 197.711 \\
+        Features apos filtro de prevalencia & 1.183 \\
+        Acuracia no conjunto de teste & 0,8636 \\
+        F1-macro no conjunto de teste & 0,6381 \\
+        ROC-AUC & 0,9510 \\
+        Shannon medio & 3,5223 \\
+        Chao1 medio & 354,84 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Os resultados sugerem que a estrutura do dado possui sinal suficiente para discriminacao entre categorias ambientais selecionadas. O ROC-AUC elevado mostra bom poder discriminativo global. Em contrapartida, o F1-macro mais moderado indica que o desbalanceamento entre classes ainda afeta a distribuicao de erros, especialmente nas categorias com menos amostras. Esse comportamento era esperado e reforca a necessidade de interpretar a qualidade preditiva para alem da acuracia agregada.
+
+\subsection{Comparacao metodologica}
+
+Um avanco importante do periodo foi a introducao de comparacao entre configuracoes metodologicas distintas. No benchmark atual, \texttt{CLR + XGBoost} apresentou o melhor equilibrio entre acuracia, \textit{balanced accuracy} e F1-macro. Em paralelo, \texttt{TSS + Random Forest} tambem apresentou desempenho elevado, enquanto o \textit{baseline} majoritario confirmou que a tarefa nao pode ser analisada apenas pela frequencia da classe dominante. Esse resultado constitui evidencia inicial de que a camada composicional agrega valor real ao pipeline.
+
+\begin{table}[H]
+    \centering
+    \caption{Comparacao resumida entre configuracoes metodologicas no benchmark EMP.}
+    \label{tab:benchmark_emp}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}p{3.0cm} c c c c}
+        \toprule
+        \textbf{Normalizacao} & \textbf{Modelo} & \textbf{Accuracy} & \textbf{Bal. Acc.} & \textbf{F1-macro} & \textbf{ROC-AUC} \\
+        \midrule
+        Raw & Majority & 0,7529 & 0,3333 & 0,2863 & 0,5000 \\
+        Raw & XGBoost & 0,9294 & 0,8252 & 0,8204 & 0,9946 \\
+        TSS & Random Forest & 0,9471 & 0,8838 & 0,8801 & 0,9941 \\
+        TSS & XGBoost & 0,9471 & 0,8782 & 0,8757 & 0,9952 \\
+        CLR & Random Forest & 0,9471 & 0,8615 & 0,8721 & 0,9924 \\
+        CLR & XGBoost & 0,9529 & 0,8919 & 0,8903 & 0,9936 \\
+        CLR & SVM & 0,9294 & 0,8085 & 0,8072 & 0,9874 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Os dados da Tabela \ref{tab:benchmark_emp} mostram que o ganho metodologico da normalizacao nao deve ser lido apenas pela acuracia. Quando o problema e desbalanceado, como neste subconjunto do EMP, metricas como F1-macro e \textit{balanced accuracy} descrevem melhor se o modelo esta tratando adequadamente as classes minoritarias. Nesse sentido, a configuracao \texttt{CLR + XGBoost} foi a mais favoravel.
+
+\subsection{Relacao entre ML e biologia}
+
+Outro avanco importante foi a reconexao entre atributos discriminantes e grupos taxonomicos plausiveis. Entre os filos mais frequentes nas top features apareceram Proteobacteria, Planctomycetes, Firmicutes e Bacteroidetes. Isso fortalece a interpretacao do modelo, pois o resultado deixa de ser apenas numerico e passa a ser biologicamente discutivel em termos de assinaturas microbianas e contexto ecologico.
+
+\begin{table}[H]
+    \centering
+    \caption{Sinal taxonomico agregado das features mais discriminantes.}
+    \label{tab:taxonomic_signal}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{4.5cm} c c}
+        \toprule
+        \textbf{Phylum} & \textbf{N features} & \textbf{Score total} \\
+        \midrule
+        Proteobacteria & 11 & 0,0571 \\
+        Planctomycetes & 2 & 0,0110 \\
+        Firmicutes & 1 & 0,0088 \\
+        Bacteroidetes & 1 & 0,0058 \\
+        Chloroflexi & 1 & 0,0047 \\
+        Acidobacteria & 1 & 0,0043 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Essa ponte entre atributo computacional e filo taxonomico e central para a argumentacao cientifica do trabalho. Em vez de produzir apenas um classificador com boa metrica, o FLORA permite perguntar quais grupos microbianos estao sustentando a separacao entre ambientes e se esses grupos sao ecologicamente plausiveis.
+
+\subsection{Interpretacao dos Graficos}
+
+As figuras geradas cumprem papeis complementares no relatorio:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \textbf{PCoA Bray-Curtis:} mostra estruturacao global e separacao composicional entre grupos ambientais;
+    \item \textbf{Shannon e Chao1:} quantificam diversidade local sob perspectivas complementares de uniformidade e riqueza;
+    \item \textbf{barplot taxonomico e heatmap taxonomico:} conectam separacao estatistica a assinaturas biologicas observaveis;
+    \item \textbf{ROC e matriz de confusao:} permitem auditar desempenho do classificador sob metodos distintos;
+    \item \textbf{importancia de features e SHAP:} indicam quais ASVs sustentam as decisoes do modelo.
+\end{itemize}
+
+\subsection{Robustez experimental}
+
+As analises de sensibilidade adicionadas ao benchmark reforcam que as decisoes de preprocessamento alteram materialmente os resultados. Em relacao a profundidade de rarefacao, o melhor compromisso observado ocorreu em \texttt{sampling depth = 5000}, com \textit{accuracy} de 0,9803, \textit{balanced accuracy} de 0,9883 e F1-macro de 0,9693. Em profundidades mais altas, a perda de amostras reduziu parte da robustez. De modo semelhante, o filtro de prevalencia mostrou que valores intermediarios entre 0,03 e 0,10 preservam desempenho competitivo com forte reducao de dimensionalidade, enquanto filtros muito agressivos removem sinal biologico util.
+
+\begin{table}[H]
+    \centering
+    \caption{Resumo das analises de robustez para a configuracao \texttt{CLR + XGBoost}.}
+    \label{tab:robustez_emp}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{3.0cm} c c c c}
+        \toprule
+        \textbf{Cenario} & \textbf{Accuracy} & \textbf{Bal. Acc.} & \textbf{F1-macro} & \textbf{N features} \\
+        \midrule
+        Rarefacao 3000 & 0,9375 & 0,7057 & 0,6931 & 995 \\
+        Rarefacao 5000 & 0,9803 & 0,9883 & 0,9693 & 1193 \\
+        Rarefacao 8000 & 0,9857 & 0,9648 & 0,9544 & 1048 \\
+        Rarefacao 10000 & 0,9609 & 0,8667 & 0,8228 & 1005 \\
+        Prevalencia 0,03 & 0,9416 & 0,8446 & 0,8475 & 2616 \\
+        Prevalencia 0,10 & 0,9356 & 0,8420 & 0,8441 & 532 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Figuras sugeridas para o relatorio}
+
+As figuras da pipeline principal ja existem como artefatos prontos em \texttt{docs/assets/emp}. Para facilitar a finalizacao do relatorio parcial, foram incluidos abaixo espacos reservados que incorporam automaticamente a imagem, quando disponivel, ou mantem um placeholder compativel com compilacao.
+
+\reportfigure{docs/assets/emp/pcoa_braycurtis.png}{PCoA Bray-Curtis mostrando separacao global entre os grupos ambientais utilizados no experimento EMP.}{fig:pcoa_emp}
+
+\reportfigure{docs/assets/emp/taxonomy_barplot.png}{Composicao taxonomica media por classe ambiental, usada para relacionar a separacao estatistica a assinaturas biologicas observaveis.}{fig:taxonomy_barplot}
+
+\reportfigure{docs/assets/emp/roc_curve.png}{Curva ROC do classificador supervisionado no experimento EMP.}{fig:roc_emp}
+
+\reportfigure{docs/assets/emp/feature_importance.png}{Importancia das features mais discriminantes no modelo supervisionado.}{fig:importance_emp}
+
+Esses resultados fortalecem a ideia de que o FLORA ja ultrapassou a fase de prototipagem conceitual e passou a oferecer uma base operacional para estudos aplicados em microbioma.
+
+\subsection{Limitacoes}
+
+Apesar dos avancos, algumas limitacoes precisam ser reconhecidas explicitamente:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item a secao biologica ainda precisa detalhar com maior rigor primers, regiao-alvo e parametros de \textit{denoising};
+    \item a validacao principal ainda esta concentrada no EMP, o que exige ampliacao para mais datasets reais;
+    \item a etapa de SHAP ainda depende de estabilizacao do ambiente computacional;
+    \item o benchmark ampliado ainda tem custo computacional relevante, exigindo refinamento operacional e checkpoints.
+\end{itemize}
+
+\section{Cronograma e Proximos Passos}
+
+Para o proximo periodo, o projeto deve concentrar esforcos em quatro frentes:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item ampliar o repertorio estatistico com metodos de abundancia diferencial;
+    \item refinar a camada de interpretabilidade e resolver incompatibilidades ambientais em dependencias como SHAP;
+    \item consolidar a interface de usuario local e o empacotamento para uso por nao programadores;
+    \item elevar cobertura de testes e validacao cruzada em novos datasets publicos.
+\end{itemize}
+
+\subsection{Plano de acao imediato}
+
+\textbf{Semana 1:} definir formalmente a hipotese do trabalho e consolidar os experimentos comparando com e sem CLR.
+
+\textbf{Semana 2:} incorporar \textit{baseline} de ML, rodar validacao cruzada repetida e consolidar tabela comparativa central.
+
+\textbf{Semana 3:} escrever a secao de comparacao, melhorar a discussao dos resultados e fortalecer a ligacao entre sinal de ML e plausibilidade biologica.
+
+\section{Conclusao Parcial}
+
+O desenvolvimento do FLORA no periodo analisado resultou em avancos tecnicos consistentes e alinhados aos objetivos de uma iniciacao cientifica em software cientifico. A mudanca de foco, da interface para a consolidacao da biblioteca, mostrou-se correta do ponto de vista metodologico. O projeto ja oferece ingestao de dados reais, armazenamento analitico robusto, transformacoes composicionais, modelagem supervisionada, visualizacao e relatorios reproduziveis.
+
+Como resultado, o FLORA se posiciona nao apenas como um prototipo de interface, mas como uma infraestrutura computacional em evolucao para analise de microbiomas. O que falta agora nao e mais apenas desenvolvimento tecnico, mas evidencia comparativa suficiente para provar cientificamente o valor do que foi construido. A etapa seguinte consiste em expandir confiabilidade estatistica, cobertura experimental e usabilidade, aproximando o projeto de um produto cientifico publicavel e reutilizavel.
+
+\newpage
+\renewcommand{\refname}{Referencias Bibliograficas}
+\begin{thebibliography}{9}
+
+\bibitem{bolyen2019}
+BOLYEN, E. et al. Reproducible, interactive, scalable and extensible microbiome data science using QIIME 2. \textbf{Nature Biotechnology}, v. 37, p. 852--857, 2019.
+
+\bibitem{callahan2016}
+CALLAHAN, B. J. et al. DADA2: High-resolution sample inference from Illumina amplicon data. \textbf{Nature Methods}, v. 13, p. 581--583, 2016.
+
+\bibitem{gloor2017}
+GLOOR, G. B. et al. Microbiome datasets are compositional: and this is not optional. \textbf{Frontiers in Microbiology}, v. 8, 2224, 2017.
+
+\bibitem{raasveldt2019}
+RAASVELDT, M.; MUEHLEISEN, H. DuckDB: an embeddable analytical database. \textbf{Proceedings of SIGMOD 2019}, p. 1981--1984, 2019.
+
+\bibitem{lundberg2017}
+LUNDBERG, S. M.; LEE, S.-I. A unified approach to interpreting model predictions. \textbf{Advances in Neural Information Processing Systems}, v. 30, 2017.
+
+\end{thebibliography}
+
+\vspace{3cm}
+\begin{center}
+    \rule{8cm}{0.5pt}\\
+    \textbf{Joao Pedro Pereira Santiago}\\
+    Bolsista de Iniciacao Cientifica
+
+    \vspace{2cm}
+
+    \rule{8cm}{0.5pt}\\
+    \textbf{Prof. Dr. Diego Lisboa Rios}\\
+    Orientador do Projeto
+\end{center}
+
+\end{document}

@@ -29,11 +29,19 @@ Reference: Katz et al. (2022). The Sequence Read Archive: a decade more of explo
 ### Earth Microbiome Project (EMP)
 
 **URL:** https://www.earthmicrobiome.org/  
-**Data portal:** https://qiita.ucsd.edu/emp/  
-**Format:** BIOM / TSV  
-**Documentation:** https://www.earthmicrobiome.org/protocols-and-standards/
+**Zenodo archive:** https://zenodo.org/record/890000  
+**Format:** BIOM + TSV  
+**DOI:** https://doi.org/10.5281/zenodo.890000
 
-The EMP is a systematic characterization of microbial life on Earth, using standardized 16S rRNA amplicon protocols. FLORA integrates with the EMP portal to download per-study feature tables and metadata.
+The EMP is a systematic characterization of microbial life on Earth, using standardized 16S rRNA amplicon protocols. FLORA downloads the Release 1 data directly from Zenodo — no authentication required.
+
+Files used by `EMPDownloader`:
+
+| File | Size | Description |
+|---|---|---|
+| `emp_deblur_150bp.release1.biom` | 167 MB | Deblur-denoised OTU table (smallest available) |
+| `emp_qiime_mapping_subset_2k_20170912.tsv` | 1.6 MB | Metadata for 2k-sample subset |
+| `emp_observation_info_deblur.tar.gz` | 46 MB | Observation info including taxonomy |
 
 Reference: Thompson et al. (2017). A communal catalogue reveals Earth's multiscale microbial diversity. *Nature*, 551, 457-463. https://doi.org/10.1038/nature24621
 

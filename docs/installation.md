@@ -38,8 +38,8 @@ pip install "flora-bio[hdbscan,imbalanced,qiime2]"
 ## Option 2 — conda environment
 
 ```bash
-git clone https://github.com/flora-bio/flora
-cd flora
+git clone https://github.com/JPEDROPS092/FLORA
+cd FLORA
 conda env create -f environment.yml
 conda activate flora
 ```
@@ -49,8 +49,8 @@ conda activate flora
 ## Option 3 — development install
 
 ```bash
-git clone https://github.com/flora-bio/flora
-cd flora
+git clone https://github.com/JPEDROPS092/FLORA
+cd FLORA
 pip install -e ".[dev]"
 ```
 
@@ -86,10 +86,19 @@ If QIIME 2 is not installed, FLORA operates entirely on pre-processed BIOM / TSV
 
 ---
 
-## sra-tools setup (optional, for NCBI SRA downloads)
+## sra-tools setup
+
+`sra-tools` is included in `environment.yml` and is installed automatically when using the conda environment:
 
 ```bash
-conda install -c bioconda sra-tools
+conda env create -f environment.yml
+conda activate flora
 ```
 
-Required only if using `NCBISRADownloader`. The MGnify and EarthMicrobiome downloaders work without it.
+If installing via pip, add it manually:
+
+```bash
+conda install -c bioconda sra-tools>=2.9
+```
+
+`sra-tools` is a system binary (`prefetch`, `fasterq-dump`) and cannot be installed via pip. It is required only for `NCBISRADownloader`. The MGnify and EarthMicrobiome downloaders work without it.

@@ -21,6 +21,19 @@ from flora.core.exceptions import ValidationError
 
 logger = logging.getLogger("flora.feature_engineering.selection")
 
+_NUMERIC_DTYPES = {
+    pl.Int8,
+    pl.Int16,
+    pl.Int32,
+    pl.Int64,
+    pl.UInt8,
+    pl.UInt16,
+    pl.UInt32,
+    pl.UInt64,
+    pl.Float32,
+    pl.Float64,
+}
+
 
 def filter_by_variance(
     df: pl.DataFrame,
@@ -51,7 +64,13 @@ def filter_by_variance(
     if "sample_id" not in df.columns:
         raise ValidationError("DataFrame must have a 'sample_id' column", field="sample_id")
 
-    feature_cols = [c for c in df.columns if c != "sample_id"]
+    feature_cols = [
+        c
+        for c, dtype in df.schema.items()
+        if c != "sample_id" and dtype in _NUMERIC_DTYPES
+    ]
+    if not feature_cols:
+        raise ValidationError("DataFrame has no numeric feature columns after excluding metadata")
     X = df.select(feature_cols).to_numpy().astype(np.float64)
 
     variances = X.var(axis=0)
@@ -100,7 +119,13 @@ def filter_by_prevalence(
     if "sample_id" not in df.columns:
         raise ValidationError("DataFrame must have a 'sample_id' column", field="sample_id")
 
-    feature_cols = [c for c in df.columns if c != "sample_id"]
+    feature_cols = [
+        c
+        for c, dtype in df.schema.items()
+        if c != "sample_id" and dtype in _NUMERIC_DTYPES
+    ]
+    if not feature_cols:
+        raise ValidationError("DataFrame has no numeric feature columns after excluding metadata")
     X = df.select(feature_cols).to_numpy().astype(np.float64)
     n_samples = X.shape[0]
 
@@ -165,7 +190,13 @@ def select_by_importance(
     if n_features is not None and top_fraction is not None:
         raise ValueError("Specify either n_features or top_fraction, not both")
 
-    feature_cols = [c for c in df.columns if c != "sample_id"]
+    feature_cols = [
+        c
+        for c, dtype in df.schema.items()
+        if c != "sample_id" and dtype in _NUMERIC_DTYPES
+    ]
+    if not feature_cols:
+        raise ValidationError("DataFrame has no numeric feature columns after excluding metadata")
     X = df.select(feature_cols).to_numpy().astype(np.float64)
     y = list(labels) if hasattr(labels, "__iter__") else labels
 

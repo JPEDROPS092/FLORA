@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import traceback
 import webbrowser
@@ -42,6 +43,113 @@ from flora.core.logging import setup_logging
 logger = logging.getLogger("flora.ui.server")
 
 _UI_DIR = Path(__file__).parent
+
+# In-memory circular log buffer — last 500 lines, used by /api/logs
+_LOG_BUFFER: list[str] = []
+_LOG_BUFFER_MAX = 500
+_SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_SAMPLE_COLUMNS = {"biome", "location", "latitude", "longitude", "sequencing_depth"}
+
+
+class _BufferHandler(logging.Handler):
+    """Appends formatted records to _LOG_BUFFER."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        line = self.format(record)
+        _LOG_BUFFER.append(line)
+        if len(_LOG_BUFFER) > _LOG_BUFFER_MAX:
+            del _LOG_BUFFER[: len(_LOG_BUFFER) - _LOG_BUFFER_MAX]
+
+
+def _install_buffer_handler() -> None:
+    root = logging.getLogger()
+    for h in root.handlers:
+        if isinstance(h, _BufferHandler):
+            return
+    bh = _BufferHandler()
+    bh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s"))
+    root.addHandler(bh)
+
+
+def _validate_identifier(name: str, *, field: str) -> str:
+    if not name or not _SAFE_IDENTIFIER.match(name):
+        raise ValueError(f"Invalid {field}: '{name}'")
+    return name
+
+
+def _taxonomy_expr(level: str) -> str:
+    level = _validate_identifier(level, field="taxonomy level")
+    return 't."order"' if level == "order" else f"t.{level}"
+
+
+def _group_projection(group_by: str | None) -> tuple[str, str, str]:
+    if not group_by:
+        return "", "", ""
+
+    group_by = _validate_identifier(group_by, field="group_by")
+    if group_by in _SAMPLE_COLUMNS:
+        return f", s.{group_by} AS {group_by}", "", group_by
+
+    join = f"""
+    LEFT JOIN (
+        SELECT sample_id, value AS {group_by}
+        FROM sample_metadata
+        WHERE key = '{group_by}'
+    ) grp ON a.sample_id = grp.sample_id
+    """
+    return f", grp.{group_by} AS {group_by}", join, group_by
+
+
+def _fetch_sample_taxonomy_profile(db, level: str) -> "pl.DataFrame":
+    import polars as pl
+
+    expr = _taxonomy_expr(level)
+    sql = f"""
+    SELECT
+        a.sample_id,
+        COALESCE(NULLIF({expr}, ''), 'Unassigned') AS {level},
+        SUM(a.abundance) AS abundance
+    FROM asv a
+    LEFT JOIN taxonomy t USING(feature_id)
+    GROUP BY a.sample_id, {level}
+    ORDER BY a.sample_id, abundance DESC
+    """
+    return db.query(sql).to_polars()
+
+
+def _fetch_taxonomy_hierarchy(db, group_by: str | None, top_n: int) -> "pl.DataFrame":
+    import polars as pl
+
+    select_group, join_group, group_name = _group_projection(group_by)
+    group_cols = f", {group_name}" if group_name else ""
+    sql = f"""
+    WITH lineage AS (
+        SELECT
+            COALESCE(NULLIF(t.kingdom, ''), 'Unassigned') AS kingdom,
+            COALESCE(NULLIF(t.phylum, ''), 'Unassigned') AS phylum,
+            COALESCE(NULLIF(t.class, ''), 'Unassigned') AS class,
+            COALESCE(NULLIF(t."order", ''), 'Unassigned') AS "order",
+            COALESCE(NULLIF(t.family, ''), 'Unassigned') AS family,
+            COALESCE(NULLIF(t.genus, ''), 'Unassigned') AS genus,
+            COALESCE(NULLIF(t.species, ''), 'Unassigned') AS species
+            {select_group},
+            SUM(a.abundance) AS abundance
+        FROM asv a
+        LEFT JOIN taxonomy t USING(feature_id)
+        JOIN samples s USING(sample_id)
+        {join_group}
+        GROUP BY kingdom, phylum, class, "order", family, genus, species{group_cols}
+    ),
+    ranked AS (
+        SELECT *, ROW_NUMBER() OVER (ORDER BY abundance DESC) AS rn
+        FROM lineage
+    )
+    SELECT * EXCLUDE (rn)
+    FROM ranked
+    WHERE rn <= {int(top_n)}
+    ORDER BY abundance DESC
+    """
+    return db.query(sql).to_polars()
 
 
 class FLORAState:
@@ -95,7 +203,7 @@ def _read_body(handler: BaseHTTPRequestHandler) -> dict:
 def _make_handler(state: FLORAState):
     class FLORAHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
-            logger.debug("HTTP %s", fmt % args)
+            logger.info("HTTP %s", fmt % args)
 
         def do_OPTIONS(self):
             self.send_response(204)
@@ -125,6 +233,23 @@ def _make_handler(state: FLORAState):
                 elif path == "/api/viz/alpha":
                     params = parse_qs(parsed.query)
                     self._handle_viz_alpha(params)
+                elif path == "/api/viz/taxonomy_heatmap":
+                    params = parse_qs(parsed.query)
+                    self._handle_viz_taxonomy_heatmap(params)
+                elif path == "/api/viz/beta_heatmap":
+                    params = parse_qs(parsed.query)
+                    self._handle_viz_beta_heatmap(params)
+                elif path == "/api/viz/krona":
+                    params = parse_qs(parsed.query)
+                    self._handle_viz_krona(params)
+                elif path == "/api/viz/tree":
+                    params = parse_qs(parsed.query)
+                    self._handle_viz_tree(params)
+                elif path == "/api/viz/network":
+                    params = parse_qs(parsed.query)
+                    self._handle_viz_network(params)
+                elif path == "/api/logs":
+                    self._handle_logs()
                 elif path.startswith("/api/"):
                     _error_response(self, f"Unknown endpoint: {path}", 404)
                 else:
@@ -155,6 +280,10 @@ def _make_handler(state: FLORAState):
                     self._handle_download_mgnify(body)
                 elif path == "/api/download/sra":
                     self._handle_download_sra(body)
+                elif path == "/api/download/emp":
+                    self._handle_download_emp(body)
+                elif path == "/api/download/synthetic":
+                    self._handle_download_synthetic(body)
                 elif path == "/api/report":
                     self._handle_report(body)
                 else:
@@ -368,6 +497,78 @@ def _make_handler(state: FLORAState):
             except Exception as exc:
                 _error_response(self, str(exc))
 
+        def _handle_viz_taxonomy_heatmap(self, params: dict):
+            level = params.get("level", ["genus"])[0]
+            top_n = int(params.get("top_n", ["25"])[0])
+            try:
+                from flora.ui.analytics import build_taxonomy_heatmap
+
+                sample_taxa = _fetch_sample_taxonomy_profile(state.db, level)
+                fig = build_taxonomy_heatmap(sample_taxa, level=level, top_n=top_n)
+                _json_response(self, {"success": True, "plot": json.loads(fig.to_json())})
+            except Exception as exc:
+                _error_response(self, str(exc))
+
+        def _handle_viz_beta_heatmap(self, params: dict):
+            metric = params.get("metric", ["bray_curtis"])[0]
+            normalize = params.get("normalize", ["tss"])[0]
+            max_samples = int(params.get("max_samples", ["60"])[0])
+            try:
+                from flora.diversity.beta import compute_beta_diversity
+                from flora.ui.analytics import build_beta_heatmap
+
+                fm = state.pipeline.get_feature_matrix(normalize=None if normalize == "none" else normalize)
+                if max_samples > 0:
+                    fm = fm.head(max_samples)
+                beta_df = compute_beta_diversity(fm, metric=metric)
+                state.db.load_dataframe("diversity_beta", beta_df, if_exists="replace")
+                fig = build_beta_heatmap(beta_df, metric=metric)
+                _json_response(self, {"success": True, "plot": json.loads(fig.to_json())})
+            except Exception as exc:
+                _error_response(self, str(exc))
+
+        def _handle_viz_krona(self, params: dict):
+            group_by = params.get("group_by", [None])[0]
+            top_n = int(params.get("top_n", ["120"])[0])
+            try:
+                from flora.ui.analytics import build_krona_sunburst
+
+                lineage = _fetch_taxonomy_hierarchy(state.db, group_by, top_n=top_n)
+                fig = build_krona_sunburst(lineage, group_by=group_by)
+                _json_response(self, {"success": True, "plot": json.loads(fig.to_json())})
+            except Exception as exc:
+                _error_response(self, str(exc))
+
+        def _handle_viz_tree(self, params: dict):
+            group_by = params.get("group_by", [None])[0]
+            top_n = int(params.get("top_n", ["120"])[0])
+            try:
+                from flora.ui.analytics import build_taxonomy_tree
+
+                lineage = _fetch_taxonomy_hierarchy(state.db, group_by, top_n=top_n)
+                fig = build_taxonomy_tree(lineage, group_by=group_by)
+                _json_response(self, {"success": True, "plot": json.loads(fig.to_json())})
+            except Exception as exc:
+                _error_response(self, str(exc))
+
+        def _handle_viz_network(self, params: dict):
+            level = params.get("level", ["genus"])[0]
+            top_n = int(params.get("top_n", ["18"])[0])
+            threshold = float(params.get("threshold", ["0.35"])[0])
+            try:
+                from flora.ui.analytics import build_correlation_network
+
+                profile = _fetch_sample_taxonomy_profile(state.db, level)
+                fig = build_correlation_network(
+                    profile,
+                    level=level,
+                    top_n=top_n,
+                    threshold=threshold,
+                )
+                _json_response(self, {"success": True, "plot": json.loads(fig.to_json())})
+            except Exception as exc:
+                _error_response(self, str(exc))
+
         def _handle_download_mgnify(self, body: dict):
             from flora.io.downloaders import MGnifyDownloader
 
@@ -415,6 +616,72 @@ def _make_handler(state: FLORAState):
             except Exception as exc:
                 _error_response(self, str(exc))
 
+        def _handle_logs(self):
+            n = min(int(parse_qs(urlparse(self.path).query).get("n", ["100"])[0]), 500)
+            _json_response(self, {"success": True, "lines": _LOG_BUFFER[-n:]})
+
+        def _handle_download_emp(self, body: dict):
+            from flora.io.downloaders import EMPDownloader
+
+            output_dir = body.get("output_dir", str(state.workdir / "raw" / "emp"))
+            biome = body.get("biome_filter") or None
+            max_samples = int(body.get("max_samples", 200))
+            dl = EMPDownloader(biome_filter=biome)
+            try:
+                files = dl.fetch(output_dir=output_dir, max_samples=max_samples)
+                _json_response(self, {
+                    "success": True,
+                    "asv_table": str(files["asv_table"]),
+                    "taxonomy":  str(files["taxonomy"]),
+                    "metadata":  str(files["metadata"]),
+                })
+            except Exception as exc:
+                _error_response(self, str(exc))
+
+        def _handle_download_synthetic(self, body: dict):
+            import numpy as np
+            from pathlib import Path as _Path
+
+            output_dir = body.get("output_dir", str(state.workdir / "raw" / "synthetic"))
+            n = int(body.get("samples", 80))
+            f = int(body.get("features", 200))
+            seed = int(body.get("seed", 42))
+
+            out = _Path(output_dir)
+            out.mkdir(parents=True, exist_ok=True)
+            rng = np.random.default_rng(seed)
+            sids = [f"S{i:03d}" for i in range(n)]
+            fids = [f"ASV_{j:04d}" for j in range(f)]
+            biomes = (["Amazon", "Cerrado", "Atlantic_Forest", "Pantanal"] * (n // 4 + 1))[:n]
+            counts = rng.negative_binomial(n=5, p=0.3, size=(n, f)).astype(int)
+
+            meta_path = out / "metadata.tsv"
+            with open(meta_path, "w") as fh:
+                fh.write("sample_id\tbiome\tlocation\n")
+                for i, sid in enumerate(sids):
+                    fh.write(f"{sid}\t{biomes[i]}\tBrazil\n")
+
+            asv_path = out / "asv_table.tsv"
+            with open(asv_path, "w") as fh:
+                fh.write("sample_id\t" + "\t".join(fids) + "\n")
+                for i, sid in enumerate(sids):
+                    fh.write(sid + "\t" + "\t".join(map(str, counts[i])) + "\n")
+
+            phyla = ["Proteobacteria", "Firmicutes", "Bacteroidetes", "Actinobacteria", "Chloroflexi"]
+            tax_path = out / "taxonomy.tsv"
+            with open(tax_path, "w") as fh:
+                fh.write("feature_id\tkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies\n")
+                for j, fid in enumerate(fids):
+                    fh.write(f"{fid}\tBacteria\t{phyla[j % len(phyla)]}\tClass_{j % 6}\tOrder_{j % 8}\tFamily_{j % 10}\tGenus_{j % 15}\t\n")
+
+            logger.info("Synthetic data generated: %d samples, %d features -> %s", n, f, out)
+            _json_response(self, {
+                "success": True,
+                "asv_table": str(asv_path),
+                "taxonomy":  str(tax_path),
+                "metadata":  str(meta_path),
+            })
+
         def _handle_report(self, body: dict):
             from flora.reports.html_report import FLORAReport
             from flora.diversity.alpha import compute_alpha_diversity
@@ -457,7 +724,11 @@ def _make_handler(state: FLORAState):
 
 def _build_index_html() -> str:
     """Return the complete single-page HTML application."""
-    return """<!DOCTYPE html>
+    from flora.ui.webapp import build_index_html
+
+    return build_index_html()
+
+    """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1305,6 +1576,7 @@ def run_server(
     config: FloraConfig | None = None,
     workdir: str | Path = "results",
     open_browser: bool = True,
+    log_level: str = "INFO",
 ) -> None:
     """Start the FLORA web interface server.
 
@@ -1326,7 +1598,8 @@ def run_server(
     >>> from flora.ui import run_server
     >>> run_server(port=8765, workdir="results/")
     """
-    setup_logging()
+    setup_logging(level=log_level)
+    _install_buffer_handler()
     cfg = config or load_config()
     state = FLORAState(config=cfg, workdir=Path(workdir))
     handler_cls = _make_handler(state)
@@ -1335,7 +1608,7 @@ def run_server(
     url = f"http://{host}:{port}"
     logger.info("FLORA web interface: %s", url)
     print(f"\nFLORA Web Interface running at: {url}")
-    print("Press Ctrl+C to stop.\n")
+    print(f"Log level: {log_level}  |  Press Ctrl+C to stop.\n")
 
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()

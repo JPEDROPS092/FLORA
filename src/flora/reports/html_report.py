@@ -15,6 +15,7 @@ from typing import Any
 
 import polars as pl
 from jinja2 import Environment, BaseLoader
+from plotly.offline import get_plotlyjs
 
 logger = logging.getLogger("flora.reports")
 
@@ -46,7 +47,7 @@ _TEMPLATE = """<!DOCTYPE html>
   footer { text-align: center; color: #888; padding: 24px; font-size: 0.85em; }
   .plotly-chart { width: 100%; }
 </style>
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>{{ plotly_js | safe }}</script>
 </head>
 <body>
 <header>
@@ -328,6 +329,7 @@ class FLORAReport:
             version=self.version,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
             sections=section_dicts,
+            plotly_js=get_plotlyjs(),
         )
 
         with open(dest, "w", encoding="utf-8") as fh:

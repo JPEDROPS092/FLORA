@@ -25,6 +25,7 @@ logger = logging.getLogger("flora.db.ingestion")
 def ingest_biom(
     db: "FloraDB",
     biom_path: str | Path,
+    filter_sample_ids: list[str] | set[str] | None = None,
     parquet_dir: str | Path | None = None,
 ) -> int:
     """Ingest a BIOM feature table into the DuckDB ``asv`` table.
@@ -39,6 +40,10 @@ def ingest_biom(
         Active database connection with initialized schema.
     biom_path : str or Path
         Path to the ``.biom`` file.
+    filter_sample_ids : list or set of str, optional
+        If provided, keep only this subset of samples before converting to
+        long format. Useful for large BIOM tables when only a metadata subset
+        should be ingested.
     parquet_dir : str or Path, optional
         If provided, write the long-format Parquet to this directory for
         caching. The filename is derived from the BIOM file name.
@@ -73,11 +78,22 @@ def ingest_biom(
     except Exception as exc:
         raise IngestionError(f"Failed to parse BIOM file: {exc}", source=str(path)) from exc
 
+    if filter_sample_ids is not None:
+        sample_ids = [str(sample_id) for sample_id in filter_sample_ids]
+        table = table.filter(sample_ids, axis="sample", inplace=False)
+
+    matrix = table.matrix_data.tocoo()
+    feature_ids = table.ids(axis="observation")
+    sample_ids = table.ids(axis="sample")
     rows = []
-    for feature_id, sample_id, abundance in table.iter_data(dense=True, axis="sample"):
+    for row_idx, col_idx, abundance in zip(matrix.row, matrix.col, matrix.data, strict=False):
         if abundance > 0:
             rows.append(
-                {"sample_id": str(sample_id), "feature_id": str(feature_id), "abundance": float(abundance)}
+                {
+                    "sample_id": str(sample_ids[col_idx]),
+                    "feature_id": str(feature_ids[row_idx]),
+                    "abundance": float(abundance),
+                }
             )
 
     if not rows:
