@@ -7,6 +7,8 @@ when a parquet_dir is specified, enabling re-use without re-parsing.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -399,3 +401,293 @@ def _parse_qiime2_taxon(df: pl.DataFrame) -> pl.DataFrame:
             pl.Series(rank, [p[rank] for p in parsed], dtype=pl.Utf8)
         )
     return df.drop("Taxon")
+
+
+# ---------------------------------------------------------------------------
+# Download catalog ingestion (source-aware acquisition layer)
+# ---------------------------------------------------------------------------
+
+_SOURCE_PREFIXES = {
+    "mgnify": ("MGYS",),
+    "ena": ("ERR", "ERS", "ERP", "ERX"),
+    "sra": ("SRR", "SRS", "SRP", "SRX", "DRR", "DRS", "DRP", "DRX"),
+}
+
+_STD_META_COLS = {"sample_id", "biome", "ecosystem", "location", "latitude", "longitude"}
+
+
+def detect_source(accessions: list[str]) -> str:
+    """Infer the data source from accession ID prefixes.
+
+    Parameters
+    ----------
+    accessions : list of str
+        Sample/run accession identifiers.
+
+    Returns
+    -------
+    str
+        One of ``"mgnify"``, ``"ena"``, ``"sra"``. Defaults to ``"sra"`` when
+        no known prefix matches.
+    """
+    for acc in accessions:
+        up = str(acc).upper()
+        for source, prefixes in _SOURCE_PREFIXES.items():
+            if up.startswith(prefixes):
+                return source
+    return "sra"
+
+
+def _md5(path: Path, chunk_size: int = 1 << 20) -> str:
+    """Compute the MD5 checksum of a file."""
+    h = hashlib.md5()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(chunk_size), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _file_format(name: str) -> str:
+    """Return a normalized file-format label from a file name."""
+    lower = name.lower()
+    for ext in (".fastq.gz", ".fq.gz", ".fastq", ".fq", ".biom", ".tsv", ".qza"):
+        if lower.endswith(ext):
+            return ext.lstrip(".")
+    return Path(name).suffix.lstrip(".") or "unknown"
+
+
+def ingest_download_catalog(
+    db: "FloraDB",
+    output_dir: str | Path,
+    source: str | None = None,
+    compute_checksums: bool = False,
+) -> int:
+    """Ingest a downloaded directory into the source-aware catalog tables.
+
+    Reads ``manifest.tsv`` (QIIME2 paired/single format) and, when present,
+    ``metadata.tsv`` from ``output_dir`` and upserts rows into ``sample_catalog``
+    and ``files``. Re-running is safe: existing rows are updated in place
+    (incremental updates), enabling repeated downloads of the same study.
+
+    Parameters
+    ----------
+    db : FloraDB
+        Active database connection with the schema initialized.
+    output_dir : str or Path
+        Directory containing ``manifest.tsv`` and optionally ``metadata.tsv``.
+    source : str, optional
+        Data source key (``"sra"``, ``"ena"``, ``"mgnify"``, ``"emp"``). When
+        omitted, it is inferred from the sample accessions.
+    compute_checksums : bool
+        When True, compute the MD5 of each local FASTQ file (slower).
+
+    Returns
+    -------
+    int
+        Number of samples upserted into ``sample_catalog``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If neither ``manifest.tsv`` nor ``metadata.tsv`` is present.
+    """
+    out = Path(output_dir)
+    manifest_path = out / "manifest.tsv"
+    metadata_path = out / "metadata.tsv"
+
+    if not manifest_path.exists() and not metadata_path.exists():
+        raise FileNotFoundError(
+            f"No manifest.tsv or metadata.tsv found in {out} for catalog ingestion"
+        )
+
+    # ---- Load manifest (files + sample ids + layout) --------------------
+    manifest_rows: list[dict] = []
+    sample_ids: list[str] = []
+    if manifest_path.exists():
+        man = pl.read_csv(str(manifest_path), separator="\t", infer_schema_length=10000)
+        rev_col = "reverse-absolute-filepath"
+        for row in man.iter_rows(named=True):
+            sid = row.get("sample-id")
+            if sid is None:
+                continue
+            sample_ids.append(str(sid))
+            fwd = row.get("forward-absolute-filepath") or row.get("absolute-filepath")
+            rev = row.get(rev_col) if rev_col in man.columns else None
+            manifest_rows.append({"sample_id": str(sid), "forward": fwd, "reverse": rev})
+
+    # ---- Load metadata (biome, location, extra -> JSON) -----------------
+    meta_by_sample: dict[str, dict] = {}
+    if metadata_path.exists():
+        meta = pl.read_csv(str(metadata_path), separator="\t", infer_schema_length=10000)
+        sample_col = "sample_id" if "sample_id" in meta.columns else meta.columns[0]
+        for row in meta.iter_rows(named=True):
+            sid = row.get(sample_col)
+            if sid is None:
+                continue
+            sid = str(sid)
+            meta_by_sample[sid] = dict(row)
+            if sid not in sample_ids:
+                sample_ids.append(sid)
+
+    if not sample_ids:
+        return 0
+
+    resolved_source = source or detect_source(sample_ids)
+
+    def _clean(value) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if text == "" or text.lower() in {"none", "nan", "null"}:
+            return None
+        return text
+
+    def _to_float(value) -> float | None:
+        text = _clean(value)
+        if text is None:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
+    # ---- Build catalog rows --------------------------------------------
+    catalog_rows: list[dict] = []
+    layout_by_sample: dict[str, str] = {}
+    for mrow in manifest_rows:
+        layout_by_sample[mrow["sample_id"]] = "paired" if _clean(mrow.get("reverse")) else "single"
+
+    for sid in sample_ids:
+        meta = meta_by_sample.get(sid, {})
+        extra = {k: v for k, v in meta.items() if k not in _STD_META_COLS and v is not None}
+        catalog_rows.append(
+            {
+                "source": resolved_source,
+                "sample_accession": sid,
+                "study_accession": _clean(meta.get("study_accession") or meta.get("study")),
+                "run_accession": _clean(meta.get("run_accession") or meta.get("run_id")),
+                "experiment_type": _clean(meta.get("experiment_type")),
+                "library_strategy": _clean(meta.get("library_strategy")),
+                "library_source": _clean(meta.get("library_source")),
+                "organism": _clean(meta.get("organism")),
+                "scientific_name": _clean(meta.get("scientific_name")),
+                "tax_id": int(_clean(meta.get("tax_id"))) if _clean(meta.get("tax_id")) and str(meta.get("tax_id")).isdigit() else None,
+                "biome": _clean(meta.get("biome")),
+                "ecosystem": _clean(meta.get("ecosystem")),
+                "location": _clean(meta.get("location")),
+                "latitude": _to_float(meta.get("latitude")),
+                "longitude": _to_float(meta.get("longitude")),
+                "layout": layout_by_sample.get(sid),
+                "metadata": json.dumps(extra, default=str) if extra else None,
+            }
+        )
+
+    # ---- Build file rows ------------------------------------------------
+    file_rows: list[dict] = []
+    for mrow in manifest_rows:
+        sid = mrow["sample_id"]
+        for direction, key in (("forward", "forward"), ("reverse", "reverse")):
+            fp = _clean(mrow.get(key))
+            if fp is None:
+                continue
+            p = Path(fp)
+            size = p.stat().st_size if p.exists() else None
+            checksum = _md5(p) if (compute_checksums and p.exists()) else None
+            dir_label = direction if layout_by_sample.get(sid) == "paired" else "single"
+            file_rows.append(
+                {
+                    "source": resolved_source,
+                    "sample_accession": sid,
+                    "file_name": p.name,
+                    "file_path": str(p),
+                    "direction": dir_label,
+                    "file_format": _file_format(p.name),
+                    "size_bytes": size,
+                    "checksum": checksum,
+                    "checksum_algo": "md5" if checksum else None,
+                }
+            )
+
+    # ---- Upsert catalog -------------------------------------------------
+    catalog_df = pl.DataFrame(
+        catalog_rows,
+        schema={
+            "source": pl.Utf8, "sample_accession": pl.Utf8, "study_accession": pl.Utf8,
+            "run_accession": pl.Utf8, "experiment_type": pl.Utf8, "library_strategy": pl.Utf8,
+            "library_source": pl.Utf8, "organism": pl.Utf8, "scientific_name": pl.Utf8,
+            "tax_id": pl.Int64, "biome": pl.Utf8, "ecosystem": pl.Utf8, "location": pl.Utf8,
+            "latitude": pl.Float64, "longitude": pl.Float64, "layout": pl.Utf8, "metadata": pl.Utf8,
+        },
+    )
+    db.register_view("_tmp_catalog", catalog_df)
+    db.execute(
+        """
+        INSERT INTO sample_catalog (
+            source, sample_accession, study_accession, run_accession, experiment_type,
+            library_strategy, library_source, organism, scientific_name, tax_id,
+            biome, ecosystem, location, latitude, longitude, layout, metadata
+        )
+        SELECT
+            source, sample_accession, study_accession, run_accession, experiment_type,
+            library_strategy, library_source, organism, scientific_name, tax_id,
+            biome, ecosystem, location, latitude, longitude, layout,
+            CAST(metadata AS JSON)
+        FROM _tmp_catalog
+        ON CONFLICT (source, sample_accession) DO UPDATE SET
+            study_accession  = COALESCE(EXCLUDED.study_accession, sample_catalog.study_accession),
+            run_accession    = COALESCE(EXCLUDED.run_accession, sample_catalog.run_accession),
+            experiment_type  = COALESCE(EXCLUDED.experiment_type, sample_catalog.experiment_type),
+            library_strategy = COALESCE(EXCLUDED.library_strategy, sample_catalog.library_strategy),
+            library_source   = COALESCE(EXCLUDED.library_source, sample_catalog.library_source),
+            organism         = COALESCE(EXCLUDED.organism, sample_catalog.organism),
+            scientific_name  = COALESCE(EXCLUDED.scientific_name, sample_catalog.scientific_name),
+            tax_id           = COALESCE(EXCLUDED.tax_id, sample_catalog.tax_id),
+            biome            = COALESCE(EXCLUDED.biome, sample_catalog.biome),
+            ecosystem        = COALESCE(EXCLUDED.ecosystem, sample_catalog.ecosystem),
+            location         = COALESCE(EXCLUDED.location, sample_catalog.location),
+            latitude         = COALESCE(EXCLUDED.latitude, sample_catalog.latitude),
+            longitude        = COALESCE(EXCLUDED.longitude, sample_catalog.longitude),
+            layout           = COALESCE(EXCLUDED.layout, sample_catalog.layout),
+            metadata         = COALESCE(EXCLUDED.metadata, sample_catalog.metadata),
+            updated_at       = now()
+        """
+    )
+    db.execute("DROP VIEW IF EXISTS _tmp_catalog")
+
+    # ---- Upsert files ---------------------------------------------------
+    if file_rows:
+        files_df = pl.DataFrame(
+            file_rows,
+            schema={
+                "source": pl.Utf8, "sample_accession": pl.Utf8, "file_name": pl.Utf8,
+                "file_path": pl.Utf8, "direction": pl.Utf8, "file_format": pl.Utf8,
+                "size_bytes": pl.Int64, "checksum": pl.Utf8, "checksum_algo": pl.Utf8,
+            },
+        )
+        db.register_view("_tmp_files", files_df)
+        db.execute(
+            """
+            INSERT INTO files (
+                source, sample_accession, file_name, file_path, direction,
+                file_format, size_bytes, checksum, checksum_algo
+            )
+            SELECT
+                source, sample_accession, file_name, file_path, direction,
+                file_format, size_bytes, checksum, checksum_algo
+            FROM _tmp_files
+            ON CONFLICT (source, sample_accession, file_name) DO UPDATE SET
+                file_path     = EXCLUDED.file_path,
+                direction     = EXCLUDED.direction,
+                file_format   = EXCLUDED.file_format,
+                size_bytes    = COALESCE(EXCLUDED.size_bytes, files.size_bytes),
+                checksum      = COALESCE(EXCLUDED.checksum, files.checksum),
+                checksum_algo = COALESCE(EXCLUDED.checksum_algo, files.checksum_algo)
+            """
+        )
+        db.execute("DROP VIEW IF EXISTS _tmp_files")
+
+    logger.info(
+        "Catalog ingest: %d samples, %d files from %s (source=%s)",
+        len(catalog_rows), len(file_rows), out, resolved_source,
+    )
+    return len(catalog_rows)

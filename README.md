@@ -23,6 +23,7 @@ A Python library for 16S rRNA amplicon microbiome analysis, combining QIIME2/DAD
 ```
 
 **Key design decisions:**
+
 - DuckDB is the central query engine between ingestion and ML. All analytical joins, aggregations, and feature matrix generation happen via SQL.
 - Polars handles high-performance tabular transformations.
 - Parquet is the intermediate storage format. DuckDB reads Parquet directly without loading everything into memory.
@@ -41,6 +42,13 @@ For development:
 ```bash
 git clone https://github.com/flora-bio/flora
 cd flora
+# 2. Crie o ambiente virtual (substitua 'venv' pelo nome que preferir)
+python3 -m venv venv
+# 3. Ative o ambiente virtual
+# No Linux/macOS:
+source venv/bin/activate
+# No Windows:
+# venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
@@ -216,11 +224,11 @@ All tests use DuckDB in-memory. No external files or services required.
 
 ## Supported Public Datasets
 
-| Dataset | Source | Biome | Samples |
-|---------|--------|-------|---------|
-| MGYS00005116 | MGnify | Amazonian Forest | ~80 |
-| SRP151124 | NCBI SRA | Brazilian Tropical Soil | ~60 |
-| ERP009703 | MGnify | Amazonian Rhizosphere | ~120 |
+| Dataset      | Source   | Biome                   | Samples |
+| ------------ | -------- | ----------------------- | ------- |
+| MGYS00005116 | MGnify   | Amazonian Forest        | ~80     |
+| SRP151124    | NCBI SRA | Brazilian Tropical Soil | ~60     |
+| ERP009703    | MGnify   | Amazonian Rhizosphere   | ~120    |
 
 ---
 

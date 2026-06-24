@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -417,22 +418,127 @@ class NCBISRADownloader:
     n_jobs: int = 4
     max_size: str = "50G"
     temp_dir: str | Path | None = None
+    allow_ena_fallback: bool = True
 
-    def _check_tools(self) -> None:
-        """Verify sra-tools are installed and accessible."""
+    def _check_tools(self) -> list[str]:
+        """Return missing sra-tools executables."""
         missing = []
         for tool in ("prefetch", "fasterq-dump"):
-            result = subprocess.run(
-                ["which", tool], capture_output=True, text=True
-            )
-            if result.returncode != 0:
+            if shutil.which(tool) is None:
                 missing.append(tool)
-        if missing:
+        return missing
+
+    def _fetch_ena_fastq_urls(self, accession: str, session: requests.Session) -> list[str]:
+        """Get FASTQ URLs for a run accession from ENA Portal API."""
+        url = "https://www.ebi.ac.uk/ena/portal/api/filereport"
+        params = {
+            "accession": accession,
+            "result": "read_run",
+            "fields": "run_accession,fastq_ftp",
+            "format": "tsv",
+        }
+        try:
+            resp = session.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
             raise IngestionError(
-                f"sra-tools not found: {missing}. "
-                "Install from https://github.com/ncbi/sra-tools",
-                context={"missing": missing},
+                f"Failed to query ENA for {accession}: {exc}",
+                source=accession,
+            ) from exc
+
+        lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
+        if len(lines) < 2:
+            return []
+
+        header = lines[0].split("\t")
+        if "fastq_ftp" not in header:
+            return []
+
+        idx = header.index("fastq_ftp")
+        urls: list[str] = []
+        for line in lines[1:]:
+            cols = line.split("\t")
+            if idx >= len(cols):
+                continue
+            for raw in cols[idx].split(";"):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                if raw.startswith("ftp://"):
+                    urls.append("https://" + raw[len("ftp://"):])
+                elif raw.startswith("http://") or raw.startswith("https://"):
+                    urls.append(raw)
+                else:
+                    urls.append("https://" + raw)
+        return urls
+
+    def _download_via_ena(
+        self,
+        accessions: list[str],
+        fastq_dir: Path,
+        skip_existing: bool = True,
+    ) -> list[dict]:
+        """Download FASTQ files via ENA direct links (no sra-tools required)."""
+        session = _make_session()
+        manifest_rows: list[dict] = []
+
+        for acc in tqdm(accessions, desc="Downloading SRA (ENA fallback)"):
+            try:
+                urls = self._fetch_ena_fastq_urls(acc, session)
+            except IngestionError as exc:
+                logger.error("ENA lookup failed for %s: %s", acc, exc)
+                continue
+
+            if not urls:
+                logger.warning("No ENA FASTQ links found for %s", acc)
+                continue
+
+            downloaded: list[Path] = []
+            for url in urls:
+                fname = url.split("/")[-1].split("?")[0]
+                if not fname:
+                    logger.warning("Skipping malformed ENA URL for %s: %s", acc, url)
+                    continue
+                dest = fastq_dir / fname
+                if skip_existing and dest.exists() and dest.stat().st_size > 100:
+                    downloaded.append(dest)
+                    continue
+                try:
+                    _download_file(url, dest, session=session)
+                    downloaded.append(dest)
+                except IngestionError as exc:
+                    logger.error("ENA download failed for %s (%s): %s", acc, url, exc)
+
+            if not downloaded:
+                continue
+
+            r1: Path | None = None
+            r2: Path | None = None
+            for fp in downloaded:
+                name = fp.name
+                lower_name = name.lower()
+                if ("_1.fastq" in lower_name) or ("_r1" in lower_name) or ("_1.fq" in lower_name):
+                    r1 = fp
+                elif ("_2.fastq" in lower_name) or ("_r2" in lower_name) or ("_2.fq" in lower_name):
+                    r2 = fp
+
+            if r1 is None:
+                r1 = downloaded[0]
+            if r2 is None and len(downloaded) >= 2:
+                for fp in downloaded:
+                    if fp != r1:
+                        r2 = fp
+                        break
+
+            manifest_rows.append(
+                {
+                    "sample_id": acc,
+                    "forward": str(r1.resolve()),
+                    "reverse": str(r2.resolve()) if r2 else "",
+                }
             )
+
+        return manifest_rows
 
     def _run(self, cmd: list[str], desc: str) -> subprocess.CompletedProcess:
         """Run a shell command with logging."""
@@ -467,12 +573,37 @@ class NCBISRADownloader:
         Raises
         ------
         IngestionError
-            If sra-tools is not installed.
+            If no supported download backend is available.
         """
-        self._check_tools()
+        missing_tools = self._check_tools()
         out = Path(output_dir)
         fastq_dir = out / "fastq"
         fastq_dir.mkdir(parents=True, exist_ok=True)
+
+        if missing_tools:
+            if not self.allow_ena_fallback:
+                raise IngestionError(
+                    f"sra-tools not found: {missing_tools}. "
+                    "Install from https://github.com/ncbi/sra-tools",
+                    context={"missing": missing_tools},
+                )
+
+            logger.warning(
+                "sra-tools missing (%s). Falling back to ENA direct FASTQ downloads.",
+                ", ".join(missing_tools),
+            )
+            manifest_rows = self._download_via_ena(
+                accessions=accessions,
+                fastq_dir=fastq_dir,
+                skip_existing=skip_existing,
+            )
+            manifest = _write_manifest(out, manifest_rows, paired_end=True)
+            logger.info(
+                "SRA fetch complete via ENA fallback: %d/%d accessions in manifest",
+                len(manifest_rows),
+                len(accessions),
+            )
+            return manifest
 
         sra_cache = Path(self.temp_dir) if self.temp_dir else out / ".sra_cache"
         sra_cache.mkdir(parents=True, exist_ok=True)

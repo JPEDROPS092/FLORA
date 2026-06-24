@@ -73,6 +73,10 @@ class FloraDB:
 
     def _connect(self) -> None:
         try:
+            if self._path != ":memory:":
+                parent = Path(self._path).parent
+                if parent and not parent.exists():
+                    parent.mkdir(parents=True, exist_ok=True)
             self._conn = duckdb.connect(
                 database=self._path,
                 read_only=self._read_only,
@@ -548,9 +552,15 @@ class FloraDB:
                 LEFT JOIN taxonomy t USING(feature_id)
             """,
             "v_diversity_wide": """
-                PIVOT diversity_alpha
-                ON metric
-                USING AVG(value)
+                SELECT
+                    sample_id,
+                    AVG(CASE WHEN metric = 'shannon' THEN value END) AS shannon,
+                    AVG(CASE WHEN metric = 'observed_features' THEN value END)
+                        AS observed_features,
+                    AVG(CASE WHEN metric = 'chao1' THEN value END) AS chao1,
+                    AVG(CASE WHEN metric = 'simpson' THEN value END) AS simpson,
+                    AVG(CASE WHEN metric = 'faith_pd' THEN value END) AS faith_pd
+                FROM diversity_alpha
                 GROUP BY sample_id
             """,
         }
@@ -619,7 +629,7 @@ class QueryResult:
         -------
         polars.DataFrame
         """
-        return pl.from_arrow(self._rel.arrow())
+        return pl.from_arrow(self._rel.to_arrow_table())
 
     def to_polars(self) -> pl.DataFrame:
         """Alias for to_df().
@@ -646,7 +656,7 @@ class QueryResult:
         -------
         pyarrow.Table
         """
-        return self._rel.arrow()
+        return self._rel.to_arrow_table()
 
     def to_parquet(self, path: str | Path) -> None:
         """Write result directly to a Parquet file.
@@ -660,5 +670,5 @@ class QueryResult:
         dest.parent.mkdir(parents=True, exist_ok=True)
         import pyarrow.parquet as pq
 
-        pq.write_table(self._rel.arrow(), dest)
+        pq.write_table(self._rel.to_arrow_table(), dest)
         logger.debug("Query result written to %s", dest)
