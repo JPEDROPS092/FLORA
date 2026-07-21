@@ -42,6 +42,31 @@ from flora.core.logging import setup_logging
 logger = logging.getLogger("flora.ui.server")
 
 _UI_DIR = Path(__file__).parent
+_FRONT_DIST = _UI_DIR.parent / "front" / "dist"
+
+# MIME types for static file serving
+_MIME_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".eot": "application/vnd.ms-fontobject",
+    ".map": "application/json",
+}
+
+
+def _angular_dist_available() -> bool:
+    """Check if the Angular frontend has been built."""
+    return _FRONT_DIST.is_dir() and any(_FRONT_DIST.iterdir())
 
 
 class FLORAState:
@@ -127,6 +152,8 @@ def _make_handler(state: FLORAState):
                     self._handle_viz_alpha(params)
                 elif path.startswith("/api/"):
                     _error_response(self, f"Unknown endpoint: {path}", 404)
+                elif _angular_dist_available():
+                    self._serve_static(path)
                 else:
                     _error_response(self, "Not found", 404)
             except Exception as exc:
@@ -164,11 +191,52 @@ def _make_handler(state: FLORAState):
                 _error_response(self, f"Internal error: {exc}", 500)
 
         def _serve_index(self):
+            if _angular_dist_available():
+                index_path = _FRONT_DIST / "index.html"
+                if index_path.exists():
+                    body = index_path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
             html = _build_index_html()
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _serve_static(self, path: str):
+            """Serve static files from the Angular dist directory."""
+            file_path = (_FRONT_DIST / path.lstrip("/")).resolve()
+            if not str(file_path).startswith(str(_FRONT_DIST.resolve())):
+                _error_response(self, "Forbidden", 403)
+                return
+            if file_path.is_dir():
+                file_path = file_path / "index.html"
+            if not file_path.exists() or not file_path.is_file():
+                index_path = _FRONT_DIST / "index.html"
+                if index_path.exists():
+                    body = index_path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    _error_response(self, "Not found", 404)
+                return
+            suffix = file_path.suffix.lower()
+            content_type = _MIME_TYPES.get(suffix, "application/octet-stream")
+            body = file_path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            if suffix in (".js", ".css", ".woff", ".woff2", ".ttf", ".eot"):
+                self.send_header("Cache-Control", "public, max-age=31536000")
             self.end_headers()
             self.wfile.write(body)
 

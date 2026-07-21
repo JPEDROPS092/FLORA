@@ -5,7 +5,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -54,3 +53,13 @@ data/cache/
 results/
 *.qza
 *.qzv
+
+# Angular frontend - source and dependencies (not distributed)
+src/flora/front/node_modules/
+src/flora/front/.angular/
+src/flora/front/dist/app/
+src/flora/front/src/
+
+# But keep the built dist/ that gets copied by build_frontend.sh
+!src/flora/front/dist/
+!src/flora/front/dist/**

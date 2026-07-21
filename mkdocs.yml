@@ -30,22 +30,14 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting Started: getting_started.md
-  - Architecture: architecture.md
-  - API Reference:
-      - Config: api/config.md
-      - Database: api/db.md
-      - IO: api/io.md
-      - Preprocessing: api/preprocessing.md
-      - Feature Engineering: api/feature_engineering.md
-      - Diversity: api/diversity.md
-      - Taxonomy: api/taxonomy.md
-      - Machine Learning: api/ml.md
-      - Visualization: api/viz.md
-      - Reports: api/reports.md
-      - Pipelines: api/pipelines.md
-  - Tutorials: tutorials/
-  - Contributing: contributing.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - User Guide: user_guide.md
+  - Web Interface: ui.md
+  - Datasets: datasets.md
+  - Methods: methods.md
+  - Article: article.md
+  - Report: report.md
 
 markdown_extensions:
   - pymdownx.highlight:

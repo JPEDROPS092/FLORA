@@ -72,20 +72,39 @@ Then use the downloaded files as input to `FLORAPipeline`.
 
 ---
 
+## Web interface
+
+Start the interactive dashboard:
+
+```bash
+flora ui
+```
+
+Opens at `http://127.0.0.1:8765` with:
+
+- Dashboard showing pipeline status and database stats
+- Forms for data ingestion, downloads, and ML training
+- Interactive Plotly visualizations
+- One-click HTML report generation
+
+See the [Web Interface documentation](ui.md) for details.
+
+---
+
 ## CLI usage
 
 ```bash
 # Start local web interface
 flora ui --host 127.0.0.1 --port 8765 --workdir results/
 
-# Download from MGnify
-flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80
+# Download from MGnify and ingest into DuckDB
+flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80 --to-duckdb
 
 # Download from NCBI SRA
 flora download sra SRR12345678 SRR12345679 --outdir data/raw --jobs 4
 
-# Run a pipeline from a YAML config
-flora run config.yaml --workdir results/
+# Ingest an existing download directory
+flora ingest data/raw --duckdb-path results/flora.duckdb
 ```
 
 ---

@@ -11,6 +11,7 @@ Version 0.1.0 — Python library for 16S rRNA amplicon microbiome analysis.
 - [Installation](installation.md) — setup via pip, conda, or development mode
 - [Quick Start](quickstart.md) — run the pipeline in five minutes
 - [User Guide](user_guide.md) — complete reference for every module
+- [Web Interface](ui.md) — browser-based dashboard for interactive analysis
 - [Datasets](datasets.md) — supported public datasets and download instructions
 - [Methods](methods.md) — scientific background for every algorithm used
 - [Article](article.md) — full scientific article describing the project
@@ -35,18 +36,20 @@ FLORA provides an end-to-end workflow for microbiome data analysis:
 
 ## Architecture
 
-```
-[QIIME2 / DADA2]
-      |
-[Export: BIOM / TSV]
-      |
-[DuckDB + Parquet — analytics core]
-      |
-[Feature Engineering (SQL + Polars)]
-      |
-[ML Pipeline (scikit-learn / XGBoost / SHAP)]
-      |
-[Visualization + HTML Report (Plotly)]
+```mermaid
+flowchart TD
+    A["QIIME2 / DADA2"] --> B["Export: BIOM / TSV"]
+    B --> C["DuckDB + Parquet\nAnalytics Core"]
+    C --> D["Feature Engineering\nSQL + Polars"]
+    D --> E["ML Pipeline\nscikit-learn / XGBoost / SHAP"]
+    E --> F["Visualization + HTML Report\nPlotly"]
+
+    style A fill:#1a1a2e,stroke:#16213e,color:#e2e8f0
+    style B fill:#1a1a2e,stroke:#16213e,color:#e2e8f0
+    style C fill:#0f3460,stroke:#16213e,color:#e2e8f0
+    style D fill:#0f3460,stroke:#16213e,color:#e2e8f0
+    style E fill:#0f3460,stroke:#16213e,color:#e2e8f0
+    style F fill:#533483,stroke:#16213e,color:#e2e8f0
 ```
 
 ---
