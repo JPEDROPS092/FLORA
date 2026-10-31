@@ -7,13 +7,7 @@ are executed via SQL on DuckDB, with data persisted in Parquet.
 
 from flora.db.connection import FloraDB
 from flora.db.schema import initialize_schema
-from flora.db.ingestion import (
-    ingest_biom,
-    ingest_tsv_asv,
-    ingest_metadata,
-    ingest_download_catalog,
-    detect_source,
-)
+from flora.db.ingestion import ingest_biom, ingest_tsv_asv, ingest_metadata
 
 __all__ = [
     "FloraDB",
@@ -21,6 +15,4 @@ __all__ = [
     "ingest_biom",
     "ingest_tsv_asv",
     "ingest_metadata",
-    "ingest_download_catalog",
-    "detect_source",
 ]

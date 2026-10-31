@@ -82,6 +82,7 @@ class HyperparameterTuner:
         n_trials: int = 50,
         cv_folds: int = 5,
         random_state: int = 42,
+        n_jobs: int = 1,
         output_dir: str | Path | None = None,
     ) -> None:
         self.model_type = model_type
@@ -90,6 +91,7 @@ class HyperparameterTuner:
         self.n_trials = n_trials
         self.cv_folds = cv_folds
         self.random_state = random_state
+        self.n_jobs = n_jobs
         self.output_dir = Path(output_dir) if output_dir else None
 
     def _objective(
@@ -102,12 +104,12 @@ class HyperparameterTuner:
             cv = StratifiedKFold(
                 n_splits=self.cv_folds, shuffle=True, random_state=self.random_state
             )
-            scores = cross_val_score(estimator, X, y, cv=cv, scoring="f1_macro", n_jobs=-1)
+            scores = cross_val_score(estimator, X, y, cv=cv, scoring="f1_macro", n_jobs=self.n_jobs)
         else:
             from sklearn.model_selection import KFold
 
             cv = KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
-            scores = cross_val_score(estimator, X, y, cv=cv, scoring="r2", n_jobs=-1)
+            scores = cross_val_score(estimator, X, y, cv=cv, scoring="r2", n_jobs=self.n_jobs)
 
         return float(np.mean(scores))
 
@@ -142,15 +144,15 @@ class HyperparameterTuner:
             from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
             cls = RandomForestClassifier if self.task == "classification" else RandomForestRegressor
-            return cls(random_state=self.random_state, n_jobs=-1, **params)
+            return cls(random_state=self.random_state, n_jobs=self.n_jobs, **params)
         if self.model_type == "xgboost":
             try:
                 from xgboost import XGBClassifier, XGBRegressor
             except ImportError as exc:
                 raise MLError("xgboost required") from exc
             cls = XGBClassifier if self.task == "classification" else XGBRegressor
-            extra = {"use_label_encoder": False, "eval_metric": "logloss"} if self.task == "classification" else {}
-            return cls(random_state=self.random_state, n_jobs=-1, **params, **extra)
+            extra = {"eval_metric": "logloss"} if self.task == "classification" else {}
+            return cls(random_state=self.random_state, n_jobs=self.n_jobs, **params, **extra)
         if self.model_type == "svm":
             from sklearn.svm import SVC, SVR
 

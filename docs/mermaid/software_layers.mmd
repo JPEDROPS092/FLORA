@@ -1,0 +1,7 @@
+flowchart TB
+    A[Presentation Layer\ncli / server / handlers / SPA] --> B[Application Layer\nFLORAPipeline]
+    B --> C[Analytics Layer\nFloraDB / SQL / Views]
+    B --> D[Domain Services\ndiversity / feature_engineering / ml / reports / viz]
+    B --> E[External Adapters\ndownloaders / filesystem / config]
+    C --> F[(DuckDB)]
+    E --> G[APIs externas e arquivos locais]

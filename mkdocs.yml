@@ -30,14 +30,21 @@ plugins:
 
 nav:
   - Home: index.md
+  - Architecture: architecture.md
   - Installation: installation.md
   - Quick Start: quickstart.md
   - User Guide: user_guide.md
-  - Web Interface: ui.md
+  - Development: development.md
+  - Contributing: contributing.md
+  - Troubleshooting: troubleshooting.md
   - Datasets: datasets.md
   - Methods: methods.md
   - Article: article.md
-  - Report: report.md
+  - Technical Report: report.md
+  - Execution Report: technical_execution_report.md
+  - Experimental Evaluation: experimental_evaluation.md
+  - EMP Analysis: emp_report.md
+  - Graph Guide: graph_guide.md
 
 markdown_extensions:
   - pymdownx.highlight:

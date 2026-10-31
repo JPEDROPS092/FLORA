@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -150,6 +149,30 @@ def _write_manifest(output_dir: Path, samples: list[dict], paired_end: bool = Tr
     return manifest_path
 
 
+def _as_lower_text(value: object) -> str:
+    """Safely coerce an arbitrary API value to lowercase text.
+
+    MGnify attribute fields are not always plain strings; they may arrive as
+    dict/list/null depending on endpoint and payload shape.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.lower()
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for candidate_key in ("name", "label", "description", "id", "value"):
+            candidate = value.get(candidate_key)
+            if isinstance(candidate, str) and candidate.strip():
+                parts.append(candidate)
+        if parts:
+            return " ".join(parts).lower()
+        return " ".join(str(v) for v in value.values() if v is not None).lower()
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(str(v) for v in value if v is not None).lower()
+    return str(value).lower()
+
+
 # ---------------------------------------------------------------------------
 # MGnify downloader
 # ---------------------------------------------------------------------------
@@ -181,6 +204,7 @@ class MGnifyDownloader:
 
     def _api_get(self, session: requests.Session, url: str) -> dict:
         """GET a JSON response from the MGnify API with error handling."""
+        logger.debug("GET %s", url)
         try:
             resp = session.get(url, timeout=30)
             resp.raise_for_status()
@@ -230,7 +254,7 @@ class MGnifyDownloader:
                         "run_id": run_id,
                         "sample_id": sample_accession,
                         "url": dl_link,
-                        "description": attrs.get("description", "").lower(),
+                        "description": _as_lower_text(attrs.get("description")),
                     })
         return downloads
 
@@ -359,6 +383,235 @@ class MGnifyDownloader:
                 fh.write("\t".join(str(row.get(k, "")) for k in keys) + "\n")
         logger.info("Metadata written: %s (%d samples)", meta_path, len(rows))
 
+    def fetch_analyses(
+        self,
+        study_accession: str,
+        output_dir: str | Path,
+        max_analyses: int = 5,
+    ) -> dict[str, Path]:
+        """Download pre-computed OTU table and taxonomy from MGnify analyses.
+
+        Queries the MGnify analyses endpoint, downloads the first available
+        OTU table TSV and taxonomy TSV, and writes them as ``asv_table.tsv``
+        and ``taxonomy.tsv`` ready for ``FLORAPipeline``.
+
+        Parameters
+        ----------
+        study_accession : str
+            MGnify study accession (e.g. ``"MGYS00005116"``).
+        output_dir : str or Path
+            Directory to write output files.
+        max_analyses : int
+            Maximum number of analyses to inspect when searching for files.
+
+        Returns
+        -------
+        dict
+            Keys: ``"asv_table"``, ``"taxonomy"``, ``"metadata"`` — Path objects.
+
+        Raises
+        ------
+        IngestionError
+            If no OTU table or taxonomy file is found for the study.
+        """
+        import csv
+        import io
+
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        session = _make_session()
+
+        url = f"{self.api_base}/studies/{study_accession}/analyses"
+        logger.info(
+            "Fetching MGnify analyses for study=%s from %s (limit=%d)",
+            study_accession,
+            url,
+            max_analyses,
+        )
+        analyses = list(self._iter_paginated(session, url))[:max_analyses]
+
+        if not analyses:
+            raise IngestionError(
+                f"No analyses found for study {study_accession}",
+                source=study_accession,
+            )
+
+        logger.info(
+            "Found %d analyses to inspect for study=%s",
+            len(analyses),
+            study_accession,
+        )
+
+        asv_rows: dict[str, dict] = {}   # sample_id -> {feature_id: count}
+        tax_rows: dict[str, dict] = {}   # feature_id -> lineage dict
+        metadata_rows: list[dict] = []
+
+        for analysis in tqdm(analyses, desc=f"Analyses {study_accession}"):
+            acc = analysis.get("id", "")
+            logger.info("Inspecting analysis=%s", acc)
+            rels = analysis.get("relationships", {})
+            sample_acc = (
+                rels.get("sample", {}).get("data", {}).get("id", acc)
+                if isinstance(rels.get("sample", {}).get("data"), dict)
+                else acc
+            )
+
+            dl_url = f"{self.api_base}/analyses/{acc}/downloads"
+            try:
+                dl_data = self._api_get(session, dl_url)
+            except IngestionError:
+                logger.warning("Could not fetch downloads for analysis=%s", acc)
+                continue
+            time.sleep(self.request_delay)
+
+            otu_url: str | None = None
+            tax_url: str | None = None
+            available_downloads: list[str] = []
+
+            for item in dl_data.get("data", []):
+                attrs = item.get("attributes", {})
+                alias = _as_lower_text(attrs.get("alias"))
+                desc  = _as_lower_text(attrs.get("description"))
+                link  = attrs.get("url", "")
+                fmt   = _as_lower_text(attrs.get("file-format", {}).get("name", ""))
+                available_downloads.append(
+                    f"alias={alias or '-'} | format={fmt or '-'} | description={desc or '-'}"
+                )
+
+                is_tsv = fmt in ("tsv", "csv", "text") or link.endswith(".tsv") or link.endswith(".txt")
+                if not is_tsv:
+                    continue
+
+                if otu_url is None and any(
+                    k in alias or k in desc
+                    for k in ("otu table", "asv table", "reads ssu", "sequences ssu")
+                ):
+                    otu_url = link
+
+                if tax_url is None and any(
+                    k in alias or k in desc
+                    for k in ("taxonom", "tax assign", "ssu rrna")
+                ):
+                    tax_url = link
+
+            logger.info(
+                "Analysis=%s sample=%s otu=%s taxonomy=%s",
+                acc,
+                sample_acc,
+                "yes" if otu_url else "no",
+                "yes" if tax_url else "no",
+            )
+            if not otu_url and not tax_url and available_downloads:
+                logger.warning(
+                    "Analysis=%s exposes downloads, but none matched FLORA's OTU/taxonomy filters: %s",
+                    acc,
+                    " || ".join(available_downloads),
+                )
+            elif not available_downloads:
+                logger.warning("Analysis=%s returned no downloadable files", acc)
+
+            # Download OTU table
+            if otu_url:
+                try:
+                    logger.info("Downloading OTU table for analysis=%s", acc)
+                    resp = session.get(otu_url, timeout=60)
+                    resp.raise_for_status()
+                    reader = csv.DictReader(
+                        io.StringIO(resp.text), delimiter="\t"
+                    )
+                    for row in reader:
+                        feature_id = row.get("#OTU ID") or row.get("OTU ID") or row.get("feature-id") or list(row.values())[0]
+                        count = row.get(sample_acc) or row.get(acc) or "0"
+                        if sample_acc not in asv_rows:
+                            asv_rows[sample_acc] = {}
+                        asv_rows[sample_acc][feature_id] = count
+                    logger.info("Loaded OTU data for sample=%s from analysis=%s", sample_acc, acc)
+                except Exception as exc:
+                    logger.warning("OTU table download failed for %s: %s", acc, exc)
+
+            # Download taxonomy
+            if tax_url and not tax_rows:
+                try:
+                    logger.info("Downloading taxonomy table for analysis=%s", acc)
+                    resp = session.get(tax_url, timeout=60)
+                    resp.raise_for_status()
+                    reader = csv.DictReader(
+                        io.StringIO(resp.text), delimiter="\t"
+                    )
+                    for row in reader:
+                        feature_id = row.get("#OTU ID") or row.get("OTU ID") or row.get("feature-id") or list(row.values())[0]
+                        lineage = row.get("taxonomy") or row.get("Taxon") or row.get("lineage") or ""
+                        ranks = [r.strip() for r in lineage.split(";")]
+                        tax_rows[feature_id] = {
+                            "feature_id": feature_id,
+                            "kingdom":  ranks[0] if len(ranks) > 0 else "",
+                            "phylum":   ranks[1] if len(ranks) > 1 else "",
+                            "class":    ranks[2] if len(ranks) > 2 else "",
+                            "order":    ranks[3] if len(ranks) > 3 else "",
+                            "family":   ranks[4] if len(ranks) > 4 else "",
+                            "genus":    ranks[5] if len(ranks) > 5 else "",
+                            "species":  ranks[6] if len(ranks) > 6 else "",
+                        }
+                    logger.info("Loaded taxonomy rows: %d", len(tax_rows))
+                except Exception as exc:
+                    logger.warning("Taxonomy download failed for %s: %s", acc, exc)
+
+            # Fetch sample metadata
+            try:
+                logger.info("Fetching sample metadata for sample=%s", sample_acc)
+                meta_resp = session.get(
+                    f"{self.api_base}/samples/{sample_acc}", timeout=30
+                )
+                meta_resp.raise_for_status()
+                attrs = meta_resp.json().get("data", {}).get("attributes", {})
+                metadata_rows.append({
+                    "sample_id": sample_acc,
+                    "biome": str(attrs.get("biome", self.biome)),
+                    "location": attrs.get("geo-loc-name", ""),
+                    "latitude": str(attrs.get("latitude", "")),
+                    "longitude": str(attrs.get("longitude", "")),
+                })
+            except Exception:
+                metadata_rows.append({"sample_id": sample_acc, "biome": self.biome,
+                                       "location": "", "latitude": "", "longitude": ""})
+            time.sleep(self.request_delay)
+
+        if not asv_rows:
+            raise IngestionError(
+                f"No OTU table data found for study {study_accession}. "
+                "The study may not have pre-computed analyses available, or the available "
+                "downloads may not expose TSV OTU/ASV tables compatible with FLORA.",
+                source=study_accession,
+            )
+
+        # Write asv_table.tsv (wide: samples x features)
+        all_features = sorted({f for counts in asv_rows.values() for f in counts})
+        asv_path = out / "asv_table.tsv"
+        with open(asv_path, "w", encoding="utf-8") as fh:
+            fh.write("sample_id\t" + "\t".join(all_features) + "\n")
+            for sample_id, counts in asv_rows.items():
+                row = [sample_id] + [counts.get(f, "0") for f in all_features]
+                fh.write("\t".join(row) + "\n")
+        logger.info("ASV table written: %s (%d samples x %d features)", asv_path, len(asv_rows), len(all_features))
+
+        # Write taxonomy.tsv
+        tax_path = out / "taxonomy.tsv"
+        tax_cols = ["feature_id", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+        with open(tax_path, "w", encoding="utf-8") as fh:
+            fh.write("\t".join(tax_cols) + "\n")
+            for row in tax_rows.values():
+                fh.write("\t".join(row.get(c, "") for c in tax_cols) + "\n")
+        logger.info("Taxonomy written: %s", tax_path)
+
+        # Write metadata.tsv
+        self._write_metadata(out, metadata_rows)
+
+        return {
+            "asv_table": asv_path,
+            "taxonomy": tax_path,
+            "metadata": out / "metadata.tsv",
+        }
+
     def list_studies(self, max_results: int = 20) -> list[dict]:
         """List public MGnify studies matching this downloader's biome.
 
@@ -418,127 +671,22 @@ class NCBISRADownloader:
     n_jobs: int = 4
     max_size: str = "50G"
     temp_dir: str | Path | None = None
-    allow_ena_fallback: bool = True
 
-    def _check_tools(self) -> list[str]:
-        """Return missing sra-tools executables."""
+    def _check_tools(self) -> None:
+        """Verify sra-tools are installed and accessible."""
         missing = []
         for tool in ("prefetch", "fasterq-dump"):
-            if shutil.which(tool) is None:
-                missing.append(tool)
-        return missing
-
-    def _fetch_ena_fastq_urls(self, accession: str, session: requests.Session) -> list[str]:
-        """Get FASTQ URLs for a run accession from ENA Portal API."""
-        url = "https://www.ebi.ac.uk/ena/portal/api/filereport"
-        params = {
-            "accession": accession,
-            "result": "read_run",
-            "fields": "run_accession,fastq_ftp",
-            "format": "tsv",
-        }
-        try:
-            resp = session.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-        except requests.RequestException as exc:
-            raise IngestionError(
-                f"Failed to query ENA for {accession}: {exc}",
-                source=accession,
-            ) from exc
-
-        lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
-        if len(lines) < 2:
-            return []
-
-        header = lines[0].split("\t")
-        if "fastq_ftp" not in header:
-            return []
-
-        idx = header.index("fastq_ftp")
-        urls: list[str] = []
-        for line in lines[1:]:
-            cols = line.split("\t")
-            if idx >= len(cols):
-                continue
-            for raw in cols[idx].split(";"):
-                raw = raw.strip()
-                if not raw:
-                    continue
-                if raw.startswith("ftp://"):
-                    urls.append("https://" + raw[len("ftp://"):])
-                elif raw.startswith("http://") or raw.startswith("https://"):
-                    urls.append(raw)
-                else:
-                    urls.append("https://" + raw)
-        return urls
-
-    def _download_via_ena(
-        self,
-        accessions: list[str],
-        fastq_dir: Path,
-        skip_existing: bool = True,
-    ) -> list[dict]:
-        """Download FASTQ files via ENA direct links (no sra-tools required)."""
-        session = _make_session()
-        manifest_rows: list[dict] = []
-
-        for acc in tqdm(accessions, desc="Downloading SRA (ENA fallback)"):
-            try:
-                urls = self._fetch_ena_fastq_urls(acc, session)
-            except IngestionError as exc:
-                logger.error("ENA lookup failed for %s: %s", acc, exc)
-                continue
-
-            if not urls:
-                logger.warning("No ENA FASTQ links found for %s", acc)
-                continue
-
-            downloaded: list[Path] = []
-            for url in urls:
-                fname = url.split("/")[-1].split("?")[0]
-                if not fname:
-                    logger.warning("Skipping malformed ENA URL for %s: %s", acc, url)
-                    continue
-                dest = fastq_dir / fname
-                if skip_existing and dest.exists() and dest.stat().st_size > 100:
-                    downloaded.append(dest)
-                    continue
-                try:
-                    _download_file(url, dest, session=session)
-                    downloaded.append(dest)
-                except IngestionError as exc:
-                    logger.error("ENA download failed for %s (%s): %s", acc, url, exc)
-
-            if not downloaded:
-                continue
-
-            r1: Path | None = None
-            r2: Path | None = None
-            for fp in downloaded:
-                name = fp.name
-                lower_name = name.lower()
-                if ("_1.fastq" in lower_name) or ("_r1" in lower_name) or ("_1.fq" in lower_name):
-                    r1 = fp
-                elif ("_2.fastq" in lower_name) or ("_r2" in lower_name) or ("_2.fq" in lower_name):
-                    r2 = fp
-
-            if r1 is None:
-                r1 = downloaded[0]
-            if r2 is None and len(downloaded) >= 2:
-                for fp in downloaded:
-                    if fp != r1:
-                        r2 = fp
-                        break
-
-            manifest_rows.append(
-                {
-                    "sample_id": acc,
-                    "forward": str(r1.resolve()),
-                    "reverse": str(r2.resolve()) if r2 else "",
-                }
+            result = subprocess.run(
+                ["which", tool], capture_output=True, text=True
             )
-
-        return manifest_rows
+            if result.returncode != 0:
+                missing.append(tool)
+        if missing:
+            raise IngestionError(
+                f"sra-tools not found: {missing}. "
+                "Install from https://github.com/ncbi/sra-tools",
+                context={"missing": missing},
+            )
 
     def _run(self, cmd: list[str], desc: str) -> subprocess.CompletedProcess:
         """Run a shell command with logging."""
@@ -573,37 +721,12 @@ class NCBISRADownloader:
         Raises
         ------
         IngestionError
-            If no supported download backend is available.
+            If sra-tools is not installed.
         """
-        missing_tools = self._check_tools()
+        self._check_tools()
         out = Path(output_dir)
         fastq_dir = out / "fastq"
         fastq_dir.mkdir(parents=True, exist_ok=True)
-
-        if missing_tools:
-            if not self.allow_ena_fallback:
-                raise IngestionError(
-                    f"sra-tools not found: {missing_tools}. "
-                    "Install from https://github.com/ncbi/sra-tools",
-                    context={"missing": missing_tools},
-                )
-
-            logger.warning(
-                "sra-tools missing (%s). Falling back to ENA direct FASTQ downloads.",
-                ", ".join(missing_tools),
-            )
-            manifest_rows = self._download_via_ena(
-                accessions=accessions,
-                fastq_dir=fastq_dir,
-                skip_existing=skip_existing,
-            )
-            manifest = _write_manifest(out, manifest_rows, paired_end=True)
-            logger.info(
-                "SRA fetch complete via ENA fallback: %d/%d accessions in manifest",
-                len(manifest_rows),
-                len(accessions),
-            )
-            return manifest
 
         sra_cache = Path(self.temp_dir) if self.temp_dir else out / ".sra_cache"
         sra_cache.mkdir(parents=True, exist_ok=True)
@@ -736,128 +859,183 @@ class NCBISRADownloader:
 # EMP downloader
 # ---------------------------------------------------------------------------
 
+# Earth Microbiome Project Release 1 — Zenodo archive (no auth required)
+# Thompson et al. 2017, Nature 551. https://doi.org/10.5281/zenodo.890000
+# Taxonomy is embedded in the BIOM observation metadata — no separate download needed.
+_EMP_ZENODO = "https://zenodo.org/record/890000/files"
+_EMP_FILES = {
+    # Smallest BIOM available (deblur 150bp, 167 MB) — taxonomy in obs metadata
+    "biom":     f"{_EMP_ZENODO}/emp_deblur_150bp.release1.biom?download=1",
+    # QC-filtered 2k subset metadata (1.6 MB) — recommended for quick-start
+    "metadata": f"{_EMP_ZENODO}/emp_qiime_mapping_subset_2k_20170912.tsv?download=1",
+}
+
+
 @dataclass
 class EMPDownloader:
-    """Download data from the Earth Microbiome Project via Qiita portal.
+    """Download data from the Earth Microbiome Project (Release 1).
+
+    Downloads the OTU table (BIOM), metadata, and taxonomy directly from
+    ``data.microbio.me``. No authentication is required.
+
+    The full EMP dataset contains 30,000+ samples. Use ``biome_filter`` and
+    ``max_samples`` to extract a manageable subset.
 
     Parameters
     ----------
-    api_base : str
-        Qiita portal base URL.
+    biome_filter : str or None
+        Case-insensitive substring to match against the ``empo_3`` or
+        ``env_biome`` metadata column (e.g. ``"forest"``). If None, all
+        samples are kept.
+
+    Examples
+    --------
+    >>> dl = EMPDownloader(biome_filter="forest")
+    >>> files = dl.fetch(output_dir="data/raw/emp", max_samples=200)
     """
 
-    api_base: str = _EMP_API
+    biome_filter: str | None = None
 
-    def fetch_study(
+    def fetch(
         self,
-        study_id: int,
         output_dir: str | Path,
-        data_type: str = "16S",
-    ) -> Path:
-        """Download BIOM and metadata for a Qiita/EMP study.
+        max_samples: int = 500,
+        skip_existing: bool = True,
+    ) -> dict[str, Path]:
+        """Download and prepare EMP data for FLORA.
+
+        Steps:
+        1. Download BIOM, metadata, and taxonomy from data.microbio.me.
+        2. Filter samples by ``biome_filter`` (optional).
+        3. Subset to ``max_samples`` samples.
+        4. Convert BIOM → wide TSV (``asv_table.tsv``).
+        5. Normalise taxonomy to FLORA schema (``taxonomy.tsv``).
 
         Parameters
         ----------
-        study_id : int
-            Qiita study ID (integer).
         output_dir : str or Path
-            Destination directory.
-        data_type : str
-            Data type filter (e.g. ``"16S"``).
+            Destination directory. Created if it does not exist.
+        max_samples : int
+            Maximum number of samples to include.
+        skip_existing : bool
+            If the destination files already exist, skip the download step.
 
         Returns
         -------
-        Path
-            Path to the output directory.
-
-        Raises
-        ------
-        IngestionError
-            If the study is not accessible or downloads fail.
+        dict
+            Keys: ``"asv_table"``, ``"taxonomy"``, ``"metadata"`` — Paths.
         """
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        session = _make_session()
-
-        study_url = f"{self.api_base}/api/v1/study/{study_id}"
         try:
-            resp = session.get(study_url, timeout=30)
-            resp.raise_for_status()
-            study_info = resp.json()
-        except requests.RequestException as exc:
+            import biom as biom_lib
+        except ImportError as exc:
             raise IngestionError(
-                f"Cannot access Qiita study {study_id}: {exc}",
-                source=str(study_id),
+                "biom-format is required for EMPDownloader. "
+                "Install with: conda install -c conda-forge biom-format",
             ) from exc
 
-        logger.info(
-            "EMP/Qiita study %d: %s",
-            study_id,
-            study_info.get("title", "Unknown"),
-        )
+        import pandas as pd
 
-        artifacts_url = f"{self.api_base}/api/v1/study/{study_id}/artifacts"
-        try:
-            resp2 = session.get(artifacts_url, timeout=30)
-            resp2.raise_for_status()
-            artifacts = resp2.json()
-        except Exception:
-            artifacts = {}
-
-        for art_id, art_info in artifacts.items() if isinstance(artifacts, dict) else []:
-            if art_info.get("type") == "BIOM":
-                biom_url = f"{self.api_base}/api/v1/artifact/{art_id}/filepaths"
-                try:
-                    resp3 = session.get(biom_url, timeout=30)
-                    resp3.raise_for_status()
-                    filepaths = resp3.json()
-                    for fp in filepaths:
-                        fname = fp.get("filepath", "").split("/")[-1]
-                        dl_url = f"{self.api_base}/download/{art_id}"
-                        dest = out / fname
-                        try:
-                            _download_file(dl_url, dest, session=session)
-                        except IngestionError as exc:
-                            logger.warning("Could not download artifact %s: %s", art_id, exc)
-                except Exception as exc:
-                    logger.warning("Could not process artifact %s: %s", art_id, exc)
-
-        meta_url = f"{self.api_base}/api/v1/study/{study_id}/samples/info"
-        meta_dest = out / "metadata.tsv"
-        try:
-            resp_meta = session.get(meta_url, timeout=30)
-            if resp_meta.ok:
-                with open(meta_dest, "wb") as fh:
-                    fh.write(resp_meta.content)
-                logger.info("Metadata saved: %s", meta_dest)
-        except Exception as exc:
-            logger.warning("Could not download metadata: %s", exc)
-
-        return out
-
-    def fetch_artifact(
-        self,
-        artifact_id: int,
-        output_dir: str | Path,
-    ) -> Path:
-        """Download a specific Qiita artifact by ID.
-
-        Parameters
-        ----------
-        artifact_id : int
-            Qiita artifact ID.
-        output_dir : str or Path
-            Destination directory.
-
-        Returns
-        -------
-        Path
-            Path to the downloaded file.
-        """
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
         session = _make_session()
 
-        dl_url = f"{self.api_base}/download/{artifact_id}"
-        dest = out / f"artifact_{artifact_id}.biom"
-        return _download_file(dl_url, dest, session=session)
+        raw_biom     = out / "emp_deblur_150bp.release1.biom"
+        raw_metadata = out / "emp_metadata_raw.tsv"
+
+        # 1. Download raw files (skip if already present)
+        for dest, url, label in [
+            (raw_biom,     _EMP_FILES["biom"],     "BIOM table (~167 MB)"),
+            (raw_metadata, _EMP_FILES["metadata"], "metadata subset-2k (~1.6 MB)"),
+        ]:
+            if skip_existing and dest.exists() and dest.stat().st_size > 1000:
+                logger.info("Skipping existing: %s", dest)
+            else:
+                logger.info("Downloading %s — %s", label, url)
+                _download_file(url, dest, session=session)
+
+        # 2. Load metadata and filter by biome
+        meta_df = pd.read_csv(raw_metadata, sep="\t", low_memory=False)
+        id_col = meta_df.columns[0]
+        meta_df = meta_df.rename(columns={id_col: "sample_id"})
+
+        if self.biome_filter:
+            filt = self.biome_filter.lower()
+            biome_cols = [
+                c for c in meta_df.columns
+                if any(k in c.lower() for k in ("biome", "empo", "env_biome", "env_feature"))
+            ]
+            if biome_cols:
+                mask = meta_df[biome_cols].apply(
+                    lambda col: col.astype(str).str.lower().str.contains(filt, na=False)
+                ).any(axis=1)
+                meta_df = meta_df[mask]
+                logger.info("Biome filter '%s': %d samples kept", self.biome_filter, len(meta_df))
+
+        meta_df = meta_df.head(max_samples)
+        selected_ids = set(meta_df["sample_id"].astype(str).tolist())
+
+        # 4. Load BIOM, filter to selected samples, convert to wide TSV
+        logger.info("Loading BIOM table (this may take a moment)...")
+        table = biom_lib.load_table(str(raw_biom))
+
+        table_ids = set(table.ids(axis="sample"))
+        keep_ids = sorted(selected_ids & table_ids)
+        if not keep_ids:
+            raise IngestionError(
+                f"No overlap between selected metadata samples and BIOM table "
+                f"({len(selected_ids)} metadata samples vs {len(table_ids)} BIOM samples). "
+                "Check that the metadata subset matches the BIOM file.",
+                source=str(raw_biom),
+            )
+
+        table_filtered = table.filter(keep_ids, axis="sample", inplace=False)
+        n_samples_kept, n_features = len(keep_ids), table_filtered.shape[0]  # type: ignore[union-attr]
+        logger.info("BIOM filtered: %d samples x %d features", n_samples_kept, n_features)
+
+        wide_df = table_filtered.to_dataframe(dense=True).T  # type: ignore[union-attr]
+        wide_df.index.name = "sample_id"
+        wide_df = wide_df.reset_index()
+
+        asv_path = out / "asv_table.tsv"
+        wide_df.to_csv(asv_path, sep="\t", index=False)
+        logger.info("ASV table written: %s (%d samples)", asv_path, len(wide_df))
+
+        # 5. Extract taxonomy from BIOM observation metadata
+        # EMP deblur BIOM stores Greengenes lineage as a list under 'taxonomy'
+        # e.g. ['k__Bacteria', 'p__Proteobacteria', 'c__Alphaproteobacteria', ...]
+        def _parse_lineage(ranks: list) -> dict:
+            keys = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
+            cleaned = [str(r).split("__", 1)[-1].strip() for r in ranks]
+            return {k: (cleaned[i] if i < len(cleaned) else "") for i, k in enumerate(keys)}
+
+        tax_cols = ["feature_id", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+        tax_rows = []
+        for _vals, obs_id, obs_meta in table_filtered.iter(axis="observation"):  # type: ignore[union-attr]
+            tax_list: list = []
+            if obs_meta:
+                raw_tax = obs_meta.get("taxonomy", obs_meta.get("Taxon", []))
+                if isinstance(raw_tax, list):
+                    tax_list = raw_tax
+                elif isinstance(raw_tax, str):
+                    tax_list = [r.strip() for r in raw_tax.split(";")]
+            parsed = _parse_lineage(tax_list)
+            parsed["feature_id"] = str(obs_id)
+            tax_rows.append(parsed)
+
+        tax_df = pd.DataFrame(tax_rows)[tax_cols] if tax_rows else pd.DataFrame(columns=tax_cols)
+
+        tax_path = out / "taxonomy.tsv"
+        tax_df.to_csv(tax_path, sep="\t", index=False)
+        logger.info("Taxonomy written: %s (%d features)", tax_path, len(tax_df))
+
+        # 6. Write normalised metadata
+        meta_final = meta_df[meta_df["sample_id"].isin(set(wide_df["sample_id"].astype(str)))]
+        meta_path  = out / "metadata.tsv"
+        meta_final.to_csv(meta_path, sep="\t", index=False)
+        logger.info("Metadata written: %s (%d samples)", meta_path, len(meta_final))
+
+        return {
+            "asv_table": asv_path,
+            "taxonomy":  tax_path,
+            "metadata":  meta_path,
+        }

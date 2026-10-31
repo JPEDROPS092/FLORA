@@ -16,6 +16,31 @@ import polars as pl
 
 logger = logging.getLogger("flora.viz.taxonomy")
 
+TAXONOMY_COLORS = px.colors.qualitative.Bold + px.colors.qualitative.Safe
+
+
+def _apply_taxonomy_layout(fig: go.Figure, height: int = 620) -> go.Figure:
+    fig.update_layout(
+        template="plotly_white",
+        height=height,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(size=14, color="#1f2933"),
+        title=dict(x=0.03, xanchor="left"),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            xanchor="left",
+            x=1.02,
+            bgcolor="rgba(255,255,255,0.85)",
+        ),
+        margin=dict(l=60, r=180, t=90, b=80),
+    )
+    fig.update_xaxes(showgrid=True, gridcolor="#d9e2ec", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#d9e2ec", zeroline=False)
+    return fig
+
 
 def plot_taxonomy_barplot(
     df: pl.DataFrame,
@@ -96,12 +121,14 @@ def plot_taxonomy_barplot(
         title=title or f"Taxonomic Composition by {level.capitalize()}",
         labels={"abundance": "Relative Abundance" if normalize else "Abundance", x_col: x_col},
         barmode="stack",
+        color_discrete_sequence=TAXONOMY_COLORS,
     )
     fig.update_layout(
-        xaxis_tickangle=-45,
+        xaxis_tickangle=-35,
         legend_title_text=level.capitalize(),
-        plot_bgcolor="white",
+        yaxis_tickformat=".0%",
     )
+    _apply_taxonomy_layout(fig, height=620)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -172,7 +199,7 @@ def plot_taxonomy_heatmap(
         z=Z,
         x=taxa_cols,
         y=sample_ids,
-        colorscale="YlOrRd",
+        colorscale="Tealgrn",
         colorbar=dict(title="Relative Abundance" if normalize else "Abundance"),
     ))
 
@@ -180,9 +207,12 @@ def plot_taxonomy_heatmap(
         title=title or f"Taxonomic Abundance Heatmap ({level})",
         xaxis_title=level.capitalize(),
         yaxis_title="Sample",
-        xaxis_tickangle=-45,
+        xaxis_tickangle=-35,
         height=max(400, len(sample_ids) * 15),
     )
+    _apply_taxonomy_layout(fig, height=max(480, len(sample_ids) * 15))
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=False)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)

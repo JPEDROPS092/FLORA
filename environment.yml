@@ -23,6 +23,7 @@ dependencies:
   # Bioinformatics
   - biom-format>=2.1
   - scikit-bio>=0.5
+  - sra-tools>=2.9
 
   # ML
   - scikit-learn>=1.4

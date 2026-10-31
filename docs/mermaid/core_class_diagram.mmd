@@ -1,0 +1,96 @@
+classDiagram
+    class FloraConfig {
+        +database
+        +pipeline
+        +ml
+        +logging
+        +storage
+    }
+
+    class FLORAPipeline {
+        +config : FloraConfig
+        +workdir : Path
+        +db : FloraDB
+        +ingest_metadata(path)
+        +ingest_asv_table(path, wide_format)
+        +ingest_taxonomy(path)
+        +compute_diversity(sampling_depth, metrics)
+        +get_feature_matrix(normalize, min_prevalence)
+        +close()
+    }
+
+    class FloraDB {
+        +connect(path, threads, memory_limit)
+        +initialize_schema()
+        +create_views()
+        +load_dataframe(table, df, if_exists)
+        +load_parquet(table, parquet_path)
+        +pivot_asv(normalize, min_prevalence)
+        +aggregate_by_taxon(level, group_by, metric)
+        +slice(train_filter, test_filter, features, target_column)
+        +table_info()
+        +query(sql)
+        +close()
+    }
+
+    class QueryResult {
+        +to_polars()
+        +to_pandas()
+        +to_arrow()
+        +to_parquet(path)
+    }
+
+    class MicrobiomeClassifier {
+        +fit(train_df, test_df, cv_folds, run_name)
+    }
+
+    class MicrobiomeRegressor {
+        +fit(train_df, test_df, cv_folds)
+    }
+
+    class MicrobiomeClusterer {
+        +fit(df)
+    }
+
+    class SHAPAnalyzer {
+        +explain(df)
+    }
+
+    class FLORAReport {
+        +add_metrics(title, metrics)
+        +add_table(title, df)
+        +add_plot(title, fig)
+        +save(path)
+    }
+
+    class FLORAState {
+        +config
+        +workdir
+        +pipeline
+    }
+
+    class MGnifyDownloader {
+        +fetch(study_accession, output_dir, max_samples)
+        +fetch_analyses(study_accession, output_dir, max_analyses)
+    }
+
+    class NCBISRADownloader {
+        +fetch(accessions, output_dir)
+    }
+
+    class EMPDownloader {
+        +fetch(output_dir, max_samples)
+    }
+
+    FLORAPipeline --> FloraConfig
+    FLORAPipeline --> FloraDB
+    FloraDB --> QueryResult
+    FLORAPipeline --> MicrobiomeClassifier
+    FLORAPipeline --> MicrobiomeRegressor
+    FLORAPipeline --> MicrobiomeClusterer
+    MicrobiomeClassifier --> SHAPAnalyzer
+    FLORAPipeline --> FLORAReport
+    FLORAState --> FLORAPipeline
+    FLORAPipeline --> MGnifyDownloader
+    FLORAPipeline --> NCBISRADownloader
+    FLORAPipeline --> EMPDownloader

@@ -9,6 +9,7 @@ import numpy as np
 import polars as pl
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     classification_report,
     confusion_matrix,
     f1_score,
@@ -53,6 +54,7 @@ def evaluate_classification(
 
     metrics: dict[str, Any] = {
         "accuracy": float(accuracy_score(yt, yp)),
+        "balanced_accuracy": float(balanced_accuracy_score(yt, yp)),
         "f1_macro": float(f1_score(yt, yp, average="macro", zero_division=0)),
         "f1_weighted": float(f1_score(yt, yp, average="weighted", zero_division=0)),
         "classification_report": classification_report(

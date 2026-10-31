@@ -8,20 +8,18 @@ A Python library for 16S rRNA amplicon microbiome analysis, combining QIIME2/DAD
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    A["QIIME2 / DADA2"] --> B["Export: BIOM / TSV"]
-    B --> C["DuckDB + Parquet\nCore Analytics Layer"]
-    C --> D["Feature Engineering\nSQL + Python/Polars"]
-    D --> E["ML Pipeline\nscikit-learn / XGBoost / SHAP"]
-    E --> F["Visualization + HTML Report"]
-
-    style A fill:#1a1a2e,stroke:#16213e,color:#e2e8f0
-    style B fill:#1a1a2e,stroke:#16213e,color:#e2e8f0
-    style C fill:#0f3460,stroke:#16213e,color:#e2e8f0
-    style D fill:#0f3460,stroke:#16213e,color:#e2e8f0
-    style E fill:#0f3460,stroke:#16213e,color:#e2e8f0
-    style F fill:#533483,stroke:#16213e,color:#e2e8f0
+```
+[QIIME2 / DADA2]
+      |
+[Export: BIOM / TSV]
+      |
+[DuckDB + Parquet — core analytics layer]
+      |
+[Feature Engineering SQL + Python/Polars]
+      |
+[ML Pipeline (sklearn / XGBoost / SHAP)]
+      |
+[Visualization + HTML Report]
 ```
 
 **Key design decisions:**
@@ -44,11 +42,6 @@ For development:
 ```bash
 git clone https://github.com/flora-bio/flora
 cd flora
-python3 -m venv venv
-# Linux/macOS:
-source venv/bin/activate
-# Windows:
-# venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
@@ -115,37 +108,6 @@ report.save("results/report.html")
 
 ---
 
-## Web Interface
-
-FLORA includes a browser-based dashboard for interactive analysis:
-
-```bash
-# Start the web interface
-flora ui
-
-# Custom host and port
-flora ui --host 0.0.0.0 --port 9000 --workdir results/
-```
-
-The server opens at `http://127.0.0.1:8765` and provides:
-
-- **Dashboard** — pipeline status, database stats, connection health
-- **Data Acquisition** — download from MGnify or NCBI SRA
-- **Feature Engineering** — CLR, TSS normalization, rarefaction, PCoA/UMAP
-- **Machine Learning** — classification, regression, clustering with cross-validation
-- **Visualizations** — interactive Plotly charts (taxonomy barplots, PCoA, alpha diversity)
-- **Reports** — generate self-contained HTML reports
-
-All endpoints are also available as a REST-like JSON API:
-
-```bash
-curl http://localhost:8765/api/status
-```
-
-See the [Web Interface documentation](docs/ui.md) for the full API reference.
-
----
-
 ## DuckDB Analytics Core
 
 FloraDB exposes SQL over your data without loading it into memory:
@@ -186,19 +148,6 @@ manifest = dl.fetch("MGYS00005116", output_dir="data/raw", max_samples=80)
 # NCBI SRA (requires sra-tools)
 sra = NCBISRADownloader(n_jobs=4)
 manifest = sra.fetch(["SRR12345678", "SRR12345679"], output_dir="data/raw")
-```
-
-Or via CLI with automatic DuckDB ingestion:
-
-```bash
-# Download and ingest into DuckDB
-flora download mgnify MGYS00005116 --outdir data/raw --to-duckdb
-
-# Download from SRA
-flora download sra SRR12345678 SRR12345679 --outdir data/raw --jobs 4 --to-duckdb
-
-# Ingest an existing download directory
-flora ingest data/raw --duckdb-path results/flora.duckdb
 ```
 
 ---
@@ -263,6 +212,24 @@ pytest tests/ -v --cov=flora --cov-report=html
 ```
 
 All tests use DuckDB in-memory. No external files or services required.
+
+---
+
+## Web Interface
+
+The current UI entrypoint remains:
+
+```bash
+flora ui --host 127.0.0.1 --port 8765 --workdir results/ --log-level INFO
+```
+
+FLORA now serves a single frontend:
+
+- Angular SPA built from `frontend/angular/` and served from `src/flora/ui/static/app/`
+
+If the Angular build is absent, `flora ui` returns an explicit build-missing page with instructions instead of silently falling back to the legacy embedded UI.
+
+See `docs/architecture.md` and `docs/development.md` for the migration plan and frontend integration strategy.
 
 ---
 

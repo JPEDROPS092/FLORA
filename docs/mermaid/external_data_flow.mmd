@@ -1,0 +1,48 @@
+flowchart LR
+    subgraph Externo
+        A[MGnify REST API]
+        B[NCBI SRA]
+        C[EMP portal / Qiita]
+    end
+
+    subgraph Conectores
+        D[MGnifyDownloader]
+        E[NCBISRADownloader]
+        F[EMPDownloader]
+    end
+
+    subgraph DiscoLocal
+        G[data/raw/fastq]
+        H[metadata.tsv]
+        I[manifest.tsv]
+        J[asv_table.tsv]
+        K[taxonomy.tsv]
+        L[cache parquet/]
+    end
+
+    subgraph Ingestao
+        M[ingest_metadata]
+        N[ingest_tsv_asv / ingest_biom]
+        O[ingest_taxonomy]
+    end
+
+    A --> D
+    B --> E
+    C --> F
+    D --> G
+    D --> H
+    D --> I
+    D --> J
+    D --> K
+    E --> G
+    E --> I
+    F --> H
+    F --> J
+    F --> K
+    H --> M
+    J --> N
+    K --> O
+    N --> L
+    M --> P[(DuckDB)]
+    N --> P
+    O --> P

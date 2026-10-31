@@ -1,110 +1,148 @@
 # Quick Start
 
-## Run the built-in example
+## Earth Microbiome Project data
 
-No external data required:
+Local files at `data/raw/emp/`:
+
+```
+data/raw/emp/
+├── asv_table.tsv        # 96 MB — deblur 150bp OTU table (wide: samples x ASVs)
+├── taxonomy.tsv         # 41 MB — Greengenes lineage per feature
+├── metadata.tsv         # 77 KB — 89 samples, columns include empo_3, env_biome, ph, latitude
+├── emp_deblur_150bp.release1.biom   # source BIOM — keep for re-processing
+└── emp_metadata_raw.tsv             # raw QIIME-format metadata
+```
+
+Source: Zenodo https://zenodo.org/record/890000 — Thompson et al. (2017), *Nature* 551.
+
+---
+
+## Full ML analysis (recommended starting point)
+
+Runs classification, SHAP, PCoA, alpha diversity, taxonomy plots and generates
+a self-contained HTML report. Classification target: `empo_3` (environmental
+material type — Plant surface / Soil / Animal proximal gut).
+
+```bash
+python examples/emp_analysis.py
+# → results/emp_report.html
+```
+
+---
+
+## Basic pipeline
 
 ```bash
 python examples/basic_pipeline.py
-```
-
-This generates synthetic microbiome data, runs the complete pipeline in-memory using DuckDB, trains a classifier, and writes an HTML report to `results/report.html`.
-
----
-
-## Minimal working example
-
-```python
-from flora.pipelines import FLORAPipeline
-from flora.ml import MicrobiomeClassifier
-from flora.reports import FLORAReport
-
-# Initialize pipeline with file-backed DuckDB
-pipeline = FLORAPipeline(workdir="results/")
-
-# Ingest pre-processed data
-pipeline.ingest_metadata("data/raw/metadata.tsv")
-pipeline.ingest_asv_table("data/raw/asv_table.tsv", wide_format=True)
-pipeline.ingest_taxonomy("data/raw/taxonomy.tsv")
-
-# Compute alpha and beta diversity
-diversity = pipeline.compute_diversity(sampling_depth=10000)
-
-# Build CLR-normalized feature matrix
-feature_matrix = pipeline.get_feature_matrix(normalize="clr", min_prevalence=0.1)
-
-# Split by biome label and train classifier
-db = pipeline.db
-train_df, test_df = db.slice(
-    train_filter="biome = 'Amazon'",
-    test_filter="biome = 'Cerrado'",
-    features="clr",
-    target_column="biome",
-)
-
-clf = MicrobiomeClassifier(model="random_forest", target_column="biome")
-result = clf.fit(train_df, test_df, cv_folds=5)
-print(f"Accuracy: {result.accuracy:.4f}  F1-macro: {result.f1_macro:.4f}")
-
-# Generate HTML report
-report = FLORAReport(title="Microbiome Analysis")
-report.add_metrics("Results", {
-    "Samples": len(feature_matrix),
-    "ASVs": len(feature_matrix.columns) - 1,
-    "Accuracy": f"{result.accuracy:.4f}",
-})
-report.save("results/report.html")
+# → results/flora_example_report.html
 ```
 
 ---
 
-## Download a public dataset first
+## CLI pipeline
 
-```python
-from flora.io import MGnifyDownloader
-
-dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Forest")
-manifest = dl.fetch("MGYS00005116", output_dir="data/raw", max_samples=80)
-print(manifest.head())
+```bash
+flora run config.yaml \
+  --metadata  data/raw/emp/metadata.tsv \
+  --asv-table data/raw/emp/asv_table.tsv \
+  --taxonomy  data/raw/emp/taxonomy.tsv
 ```
-
-Then use the downloaded files as input to `FLORAPipeline`.
 
 ---
 
 ## Web interface
 
-Start the interactive dashboard:
-
 ```bash
-flora ui
+flora ui --host 127.0.0.1 --port 8765 --workdir results/ --log-level INFO
+# → http://127.0.0.1:8765
+# Logs visible in terminal. /api/logs returns last 100 lines.
 ```
-
-Opens at `http://127.0.0.1:8765` with:
-
-- Dashboard showing pipeline status and database stats
-- Forms for data ingestion, downloads, and ML training
-- Interactive Plotly visualizations
-- One-click HTML report generation
-
-See the [Web Interface documentation](ui.md) for details.
 
 ---
 
-## CLI usage
+## Python API
+
+```python
+import polars as pl
+from sklearn.model_selection import train_test_split
+from flora.db.connection import FloraDB
+from flora.db.schema import initialize_schema
+from flora.db.ingestion import ingest_metadata, ingest_tsv_asv, ingest_taxonomy
+from flora.feature_engineering.normalization import clr_transform
+from flora.feature_engineering.selection import filter_by_prevalence
+from flora.ml.classification.classifier import MicrobiomeClassifier
+from flora.reports.html_report import FLORAReport
+
+db = FloraDB.connect("results/flora.duckdb")
+initialize_schema(db)
+ingest_metadata(db, "data/raw/emp/metadata.tsv", parquet_dir="results/parquet")
+ingest_tsv_asv(db, "data/raw/emp/asv_table.tsv", wide_format=True, parquet_dir="results/parquet")
+ingest_taxonomy(db, "data/raw/emp/taxonomy.tsv", parquet_dir="results/parquet")
+db.create_views()
+
+wide    = db.pivot_asv(normalize=None)
+clr     = clr_transform(wide)
+clr     = filter_by_prevalence(clr, min_prevalence=0.05)
+
+meta    = db.query("SELECT sample_id, empo_3 FROM samples").to_polars()
+labeled = clr.join(meta, on="sample_id", how="inner")
+df_pd   = labeled.to_pandas()
+train_pd, test_pd = train_test_split(df_pd, test_size=0.25,
+                                     stratify=df_pd["empo_3"], random_state=42)
+
+clf    = MicrobiomeClassifier(model="xgboost", target_column="empo_3", mlflow_tracking_uri=None)
+result = clf.fit(pl.from_pandas(train_pd), pl.from_pandas(test_pd), cv_folds=3)
+print(f"Accuracy: {result.accuracy:.4f}  F1-macro: {result.f1_macro:.4f}")
+
+report = FLORAReport(title="EMP Analysis")
+report.add_metrics("Results", {"Accuracy": result.accuracy, "F1-macro": result.f1_macro})
+report.save("results/report.html")
+```
+
+---
+
+## Download EMP data again
 
 ```bash
-# Start local web interface
-flora ui --host 127.0.0.1 --port 8765 --workdir results/
+flora download emp --outdir data/raw/emp --biome forest --max-samples 200
+# Files already present are skipped (skip_existing=True).
+```
 
-# Download from MGnify and ingest into DuckDB
-flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80 --to-duckdb
+---
 
-# Download from NCBI SRA
+## Other sources
+
+```bash
+# MGnify pre-computed analyses
+flora download mgnify MGYS00005116 --outdir data/raw --analyses --max-samples 20
+flora run config.yaml
+
+# NCBI SRA (requires: conda install -c bioconda sra-tools)
 flora download sra SRR12345678 SRR12345679 --outdir data/raw --jobs 4
+```
 
-# Ingest an existing download directory
-flora ingest data/raw --duckdb-path results/flora.duckdb
+### Process a specific MGnify study
+
+If you already have a study accession such as `MGYS00005292`, you can convert it directly into FLORA-ready files and print the next pipeline command:
+
+```bash
+python examples/process_mgnify_study.py MGYS00005292 --max-analyses 20 --print-run-command
+```
+
+This creates:
+
+- `data/raw/MGYS00005292/metadata.tsv`
+- `data/raw/MGYS00005292/asv_table.tsv`
+- `data/raw/MGYS00005292/taxonomy.tsv`
+
+Then run:
+
+```bash
+flora run config.yaml \
+  --workdir results/mgnify_MGYS00005292 \
+  --metadata data/raw/MGYS00005292/metadata.tsv \
+  --asv-table data/raw/MGYS00005292/asv_table.tsv \
+  --taxonomy data/raw/MGYS00005292/taxonomy.tsv
 ```
 
 ---

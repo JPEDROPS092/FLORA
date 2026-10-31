@@ -1,0 +1,70 @@
+classDiagram
+    class samples {
+        sample_id PK
+        biome
+        location
+        latitude
+        longitude
+        sequencing_depth
+    }
+
+    class sample_metadata {
+        sample_id FK
+        key PK
+        value
+    }
+
+    class asv {
+        sample_id FK
+        feature_id PK
+        abundance
+    }
+
+    class taxonomy {
+        feature_id PK
+        kingdom
+        phylum
+        class
+        order
+        family
+        genus
+        species
+        confidence
+    }
+
+    class diversity_alpha {
+        sample_id FK
+        metric PK
+        value
+        sampling_depth
+    }
+
+    class diversity_beta {
+        sample_a
+        sample_b
+        metric
+        distance
+    }
+
+    class dim_reduction {
+        sample_id FK
+        method
+        component
+        value
+    }
+
+    class pipeline_log {
+        run_id
+        step
+        status
+        started_at
+        finished_at
+        params
+        message
+    }
+
+    samples "1" --> "*" sample_metadata : possui
+    samples "1" --> "*" asv : observa
+    taxonomy "1" --> "*" asv : anota
+    samples "1" --> "*" diversity_alpha : resume
+    samples "1" --> "*" dim_reduction : projeta

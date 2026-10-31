@@ -38,8 +38,8 @@ pip install "flora-bio[hdbscan,imbalanced,qiime2]"
 ## Option 2 — conda environment
 
 ```bash
-git clone https://github.com/flora-bio/flora
-cd flora
+git clone https://github.com/JPEDROPS092/FLORA
+cd FLORA
 conda env create -f environment.yml
 conda activate flora
 ```
@@ -49,33 +49,12 @@ conda activate flora
 ## Option 3 — development install
 
 ```bash
-git clone https://github.com/flora-bio/flora
-cd flora
+git clone https://github.com/JPEDROPS092/FLORA
+cd FLORA
 pip install -e ".[dev]"
 ```
 
 The `dev` extra includes pytest, ruff, mypy, and mkdocs.
-
----
-
-## Frontend development (optional)
-
-To develop or rebuild the Angular web interface:
-
-```bash
-# Install Node.js >= 20 first, then:
-cd src/flora/front
-npm install
-npm run dev    # Development server at http://localhost:3000
-
-# Build for production
-cd ../..
-./scripts/build_frontend.sh
-```
-
-The built `dist/` directory is automatically included when building the Python wheel. Users who install via `pip install flora-bio` get the pre-built frontend without needing Node.js.
-
-If Node.js is not installed, the Python server falls back to the built-in HTML interface automatically.
 
 ---
 
@@ -107,10 +86,19 @@ If QIIME 2 is not installed, FLORA operates entirely on pre-processed BIOM / TSV
 
 ---
 
-## sra-tools setup (optional, for NCBI SRA downloads)
+## sra-tools setup
+
+`sra-tools` is included in `environment.yml` and is installed automatically when using the conda environment:
 
 ```bash
-conda install -c bioconda sra-tools
+conda env create -f environment.yml
+conda activate flora
 ```
 
-Required only if using `NCBISRADownloader`. The MGnify and EarthMicrobiome downloaders work without it.
+If installing via pip, add it manually:
+
+```bash
+conda install -c bioconda sra-tools>=2.9
+```
+
+`sra-tools` is a system binary (`prefetch`, `fasterq-dump`) and cannot be installed via pip. It is required only for `NCBISRADownloader`. The MGnify and EarthMicrobiome downloaders work without it.

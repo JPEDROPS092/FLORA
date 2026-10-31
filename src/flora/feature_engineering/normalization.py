@@ -186,6 +186,9 @@ def rarefy(
     X_int = X.astype(np.int64)
     sample_totals = X_int.sum(axis=1)
 
+    if len(sample_totals) == 0:
+        raise ValidationError("No samples available for rarefaction.")
+
     if depth is None:
         depth = suggest_rarefaction_depth(df)
         logger.info("Auto-selected rarefaction depth: %d", depth)
