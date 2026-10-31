@@ -530,6 +530,40 @@ report.save("results/report.html")
 
 ---
 
+## 9b. Web Server API
+
+`flora ui` exposes a REST API consumed by the browser interface. All endpoints return JSON.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/status` | DB connection info and row counts per table |
+| GET | `/api/logs?n=100` | Last N log lines from the server buffer |
+| GET | `/api/feature_matrix?normalize=clr&min_prevalence=0.05` | Feature matrix preview |
+| GET | `/api/viz/taxonomy?level=phylum&group_by=biome` | Plotly taxonomy barplot JSON |
+| GET | `/api/viz/pcoa?normalize=clr&color_by=biome` | Plotly PCoA plot JSON |
+| GET | `/api/viz/alpha?metric=shannon&group_by=biome` | Plotly alpha diversity plot JSON |
+| POST | `/api/ingest/metadata` | `{"path": "..."}` |
+| POST | `/api/ingest/asv` | `{"path": "...", "wide_format": true}` |
+| POST | `/api/ingest/taxonomy` | `{"path": "..."}` |
+| POST | `/api/diversity` | `{"sampling_depth": 10000, "metrics": ["shannon"]}` |
+| POST | `/api/ml/classify` | `{"model": "xgboost", "target_column": "biome", "train_filter": "...", "test_filter": "..."}` |
+| POST | `/api/ml/cluster` | `{"method": "kmeans", "n_clusters": 4}` |
+| POST | `/api/download/mgnify` | `{"study_accession": "MGYS00005116", "max_samples": 20}` |
+| POST | `/api/download/sra` | `{"accessions": ["SRR..."], "n_jobs": 4}` |
+| POST | `/api/download/emp` | `{"output_dir": "...", "biome_filter": "forest", "max_samples": 200}` |
+| POST | `/api/download/synthetic` | `{"output_dir": "...", "samples": 80, "features": 200}` |
+| POST | `/api/report` | `{"title": "...", "output_path": "results/report.html"}` |
+
+Server logs are visible in the terminal where `flora ui` runs. Log level is set via `--log-level`. The `/api/logs` endpoint returns the last 500 lines from the in-memory buffer.
+
+```bash
+# Start with DEBUG logs visible in terminal
+flora ui --workdir results/ --log-level DEBUG
+
+# Check logs via API
+curl http://127.0.0.1:8765/api/logs?n=50
+```
+
 ## 10. Pipeline Orchestration
 
 `FLORAPipeline` combines all modules into a single high-level interface.
@@ -567,9 +601,11 @@ Commands:
   run       Run a pipeline from a YAML config file
 
 flora ui [OPTIONS]
-  --host TEXT       Bind host (default: 127.0.0.1)
-  --port INTEGER    Bind port (default: 8765)
-  --workdir PATH    Working directory
+  --host TEXT                Bind host (default: 127.0.0.1)
+  --port INTEGER             Bind port (default: 8765)
+  --workdir PATH             Working directory
+  --log-level LEVEL          DEBUG | INFO | WARNING | ERROR (default: INFO)
+  --no-browser               Do not open browser automatically
 
 flora download mgnify ACCESSION [OPTIONS]
   --outdir PATH     Output directory
@@ -581,7 +617,11 @@ flora download sra RUN_ACCESSIONS... [OPTIONS]
   --jobs INTEGER    Parallel download jobs (default: 1)
 
 flora run CONFIG_PATH [OPTIONS]
-  --workdir PATH    Override workdir from config
+  --workdir PATH          Override workdir from config
+  --metadata PATH         Override metadata file (default: storage.raw_dir/metadata.tsv)
+  --asv-table PATH        Override ASV table file (default: storage.raw_dir/asv_table.tsv)
+  --taxonomy PATH         Override taxonomy file (default: storage.raw_dir/taxonomy.tsv)
+  --sampling-depth INT    Override rarefaction depth from config
 ```
 
 ---

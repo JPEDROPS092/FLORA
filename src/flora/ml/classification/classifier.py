@@ -67,6 +67,9 @@ class ClassificationResult:
     model: Any
     label_encoder: LabelEncoder
     feature_names: list[str] = field(default_factory=list)
+    y_true: np.ndarray | None = field(default=None)
+    y_pred: np.ndarray | None = field(default=None)
+    y_proba: np.ndarray | None = field(default=None)
 
 
 class MicrobiomeClassifier:
@@ -147,7 +150,6 @@ class MicrobiomeClassifier:
                 max_depth=params.get("max_depth", 6),
                 learning_rate=params.get("learning_rate", 0.1),
                 subsample=params.get("subsample", 0.8),
-                use_label_encoder=False,
                 eval_metric="logloss",
                 random_state=self.random_state,
                 n_jobs=self.n_jobs,
@@ -243,15 +245,16 @@ class MicrobiomeClassifier:
         test_f1 = float(f1_score(y_test, y_pred, average="macro", zero_division=0))
 
         roc_auc = None
+        y_proba_arr: np.ndarray | None = None
         if hasattr(estimator, "predict_proba"):
             try:
-                y_proba = estimator.predict_proba(X_test)
+                y_proba_arr = estimator.predict_proba(X_test)
                 n_classes = len(self._label_encoder.classes_)
                 if n_classes == 2:
-                    roc_auc = float(roc_auc_score(y_test, y_proba[:, 1]))
+                    roc_auc = float(roc_auc_score(y_test, y_proba_arr[:, 1]))
                 else:
                     roc_auc = float(
-                        roc_auc_score(y_test, y_proba, multi_class="ovr", average="macro")
+                        roc_auc_score(y_test, y_proba_arr, multi_class="ovr", average="macro")
                     )
             except Exception:
                 pass
@@ -270,6 +273,10 @@ class MicrobiomeClassifier:
             "f1_macro": cv_results["test_f1_macro"].tolist(),
         }
 
+        # Decode integer labels back to string labels for downstream use
+        y_true_decoded = self._label_encoder.inverse_transform(y_test)
+        y_pred_decoded = self._label_encoder.inverse_transform(y_pred)
+
         result = ClassificationResult(
             model_type=self.model_type,
             accuracy=test_accuracy,
@@ -281,6 +288,9 @@ class MicrobiomeClassifier:
             model=estimator,
             label_encoder=self._label_encoder,
             feature_names=feature_cols,
+            y_true=y_true_decoded,
+            y_pred=y_pred_decoded,
+            y_proba=y_proba_arr,
         )
 
         self._maybe_log_mlflow(result, run_name)

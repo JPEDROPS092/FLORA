@@ -1,0 +1,12 @@
+flowchart LR
+    A[Codigo fonte] --> B[pytest]
+    A --> C[ruff / mypy]
+    A --> D[logging estruturado]
+    D --> E[pipeline_log]
+    D --> F[/api/logs]
+    B --> G[Confiabilidade]
+    C --> G
+    E --> H[Rastreabilidade]
+    F --> H
+    G --> I[Release mais segura]
+    H --> I

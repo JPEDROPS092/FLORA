@@ -285,8 +285,8 @@ All tests use `FloraDB.connect(":memory:")` and synthetically generated DataFram
 pip install flora-bio
 
 # Development
-git clone https://github.com/flora-bio/flora
-cd flora
+git clone https://github.com/JPEDROPS092/FLORA
+cd FLORA
 pip install -e ".[dev]"
 
 # Conda

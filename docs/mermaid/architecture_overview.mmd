@@ -1,0 +1,16 @@
+flowchart TD
+    A[Dados externos\nMGnify / EMP / NCBI SRA] --> B[Downloaders em flora.io.downloaders]
+    B --> C[Arquivos locais\nFASTQ / BIOM / TSV / manifest.tsv / metadata.tsv]
+    C --> D[FLORAPipeline]
+    D --> E[Ingestao em flora.db.ingestion]
+    E --> F[(DuckDB local\nflora.duckdb)]
+    F --> G[Views analiticas\nv_asv_tss / v_asv_clr / v_taxonomy_full / v_diversity_wide]
+    G --> H[Feature engineering\nPolars + SQL]
+    H --> I[Diversidade alfa e beta]
+    H --> J[ML\nClassificacao / Regressao / Clustering]
+    J --> K[Interpretabilidade\nFeature importance / SHAP]
+    I --> L[Visualizacoes]
+    J --> L
+    K --> L
+    L --> M[FLORAReport HTML]
+    F --> N[UI local\nCLI + servidor HTTP + SPA Angular]

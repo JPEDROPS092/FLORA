@@ -1,0 +1,30 @@
+sequenceDiagram
+    actor U as Usuario
+    participant CLI as flora CLI
+    participant P as FLORAPipeline
+    participant DB as FloraDB / DuckDB
+    participant ING as db.ingestion
+    participant ML as Modulos ML
+    participant REP as FLORAReport
+
+    U->>CLI: flora run config.yaml
+    CLI->>P: inicializa pipeline
+    P->>DB: connect() + initialize_schema() + create_views()
+    CLI->>P: ingest_metadata()
+    P->>ING: ingest_metadata()
+    ING->>DB: load_dataframe(samples, sample_metadata)
+    CLI->>P: ingest_asv_table()
+    P->>ING: ingest_tsv_asv() ou ingest_biom()
+    ING->>DB: load_dataframe(asv)
+    CLI->>P: ingest_taxonomy()
+    P->>ING: ingest_taxonomy()
+    ING->>DB: load_dataframe(taxonomy)
+    CLI->>P: compute_diversity()
+    P->>DB: pivot_asv()
+    P->>DB: load_dataframe(diversity_alpha)
+    CLI->>P: get_feature_matrix(normalize="clr")
+    P->>DB: pivot_asv(normalize="clr")
+    CLI->>ML: fit(train_df, test_df)
+    ML-->>CLI: metricas + importancias + previsoes
+    CLI->>REP: add_metrics() / add_plot() / save()
+    REP-->>U: report.html

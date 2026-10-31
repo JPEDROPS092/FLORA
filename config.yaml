@@ -1,0 +1,33 @@
+database:
+  path: flora.duckdb   # relative to results_dir; use ':memory:' for ephemeral runs
+  threads: 4
+  memory_limit: "4GB"
+  read_only: false
+
+pipeline:
+  trunc_len_f: 240          # forward read truncation length (bp)
+  trunc_len_r: 200          # reverse read truncation length (bp)
+  trim_left_f: 19           # forward primer removal (bp)
+  trim_left_r: 20           # reverse primer removal (bp)
+  n_threads: 4              # threads for DADA2 denoising
+  taxonomy_confidence: 0.7  # minimum Naive Bayes confidence for classification
+  sampling_depth: 10000     # rarefaction depth
+
+ml:
+  test_size: 0.2            # fraction of data held out for testing
+  random_state: 42
+  cv_folds: 5
+  n_jobs: -1                # -1 uses all available CPU cores
+  optuna_trials: 50
+  mlflow_tracking_uri: "mlruns"
+
+logging:
+  level: INFO               # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  log_file: null            # set to a path to write logs to file, e.g. results/flora.log
+  rich_output: true
+
+storage:
+  raw_dir: data/raw
+  parquet_dir: data/parquet
+  results_dir: results
+  classifiers_dir: data/classifiers

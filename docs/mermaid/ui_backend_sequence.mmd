@@ -1,0 +1,28 @@
+sequenceDiagram
+    actor U as Usuario
+    participant FE as Frontend Angular
+    participant API as servidor HTTP FLORA
+    participant H as handlers/*
+    participant ST as FLORAState
+    participant P as FLORAPipeline
+    participant DB as DuckDB
+
+    U->>FE: abre interface local
+    FE->>API: GET /api/status
+    API->>H: status.get_status(...)
+    H->>ST: consulta estado atual
+    ST->>P: acesso ao pipeline
+    P->>DB: table_info()
+    DB-->>P: resumo das tabelas
+    P-->>H: payload JSON
+    H-->>API: resposta
+    API-->>FE: status do sistema
+    U->>FE: solicita grafico ou ingestao
+    FE->>API: GET/POST /api/...
+    API->>H: handler especifico
+    H->>P: executa caso de uso
+    P->>DB: consulta ou escrita
+    DB-->>P: resultado
+    P-->>H: payload
+    H-->>API: JSON
+    API-->>FE: atualiza tela

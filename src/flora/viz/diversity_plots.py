@@ -11,6 +11,31 @@ import polars as pl
 
 logger = logging.getLogger("flora.viz.diversity")
 
+FLORA_COLORS = ["#1b4332", "#2d6a4f", "#40916c", "#74c69d", "#d68c45", "#bc4749"]
+
+
+def _apply_diversity_layout(fig: go.Figure, height: int = 560) -> go.Figure:
+    fig.update_layout(
+        template="plotly_white",
+        height=height,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(size=14, color="#1f2933"),
+        title=dict(x=0.03, xanchor="left"),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1.0,
+            bgcolor="rgba(255,255,255,0.8)",
+        ),
+        margin=dict(l=60, r=30, t=90, b=70),
+    )
+    fig.update_xaxes(showgrid=True, gridcolor="#d9e2ec", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#d9e2ec", zeroline=False)
+    return fig
+
 
 def plot_pcoa(
     pcoa_df: pl.DataFrame,
@@ -88,10 +113,11 @@ def plot_pcoa(
             hover_name="sample_id",
             title=title or f"PCoA Plot ({method})",
             labels={x_col: f"PC{pc_x}", y_col: f"PC{pc_y}"},
+            color_discrete_sequence=FLORA_COLORS,
         )
 
-    fig.update_traces(marker=dict(size=8, opacity=0.8))
-    fig.update_layout(plot_bgcolor="white")
+    fig.update_traces(marker=dict(size=10, opacity=0.85, line=dict(width=0.8, color="white")))
+    _apply_diversity_layout(fig, height=620 if not three_d else 700)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -172,8 +198,8 @@ def plot_rarefaction_curves(
         title=title or "Rarefaction Curves",
         xaxis_title="Sequencing Depth",
         yaxis_title="Observed ASV Richness",
-        plot_bgcolor="white",
     )
+    _apply_diversity_layout(fig, height=620)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -229,8 +255,14 @@ def plot_alpha_diversity(
         points="all",
         title=title or f"Alpha Diversity: {metric.replace('_', ' ').title()}",
         labels={"value": metric.replace("_", " ").title()},
+        color_discrete_sequence=FLORA_COLORS,
     )
-    fig.update_layout(plot_bgcolor="white")
+    fig.update_traces(
+        marker=dict(size=7, opacity=0.75, line=dict(width=0.5, color="white")),
+        jitter=0.28,
+        pointpos=0,
+    )
+    _apply_diversity_layout(fig, height=620)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -307,6 +339,9 @@ def plot_beta_diversity_heatmap(
         height=max(500, n * 12),
         width=max(600, n * 12),
     )
+    _apply_diversity_layout(fig, height=max(500, n * 12))
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=False)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)

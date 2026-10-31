@@ -73,10 +73,6 @@ class FloraDB:
 
     def _connect(self) -> None:
         try:
-            if self._path != ":memory:":
-                parent = Path(self._path).parent
-                if parent and not parent.exists():
-                    parent.mkdir(parents=True, exist_ok=True)
             self._conn = duckdb.connect(
                 database=self._path,
                 read_only=self._read_only,
@@ -419,11 +415,26 @@ class FloraDB:
         if agg_func is None:
             raise ValueError(f"Invalid metric '{metric}'. Choose from mean, sum, median")
 
+        # Standard columns stored directly in the samples table
+        _SAMPLES_COLS = {"biome", "location", "latitude", "longitude", "sequencing_depth"}
+
         group_cols = f"t.{level}"
         select_extra = ""
+        join_meta = ""
         if group_by:
-            group_cols = f"t.{level}, s.{group_by}"
-            select_extra = f", s.{group_by}"
+            if group_by in _SAMPLES_COLS:
+                group_cols = f"t.{level}, s.{group_by}"
+                select_extra = f", s.{group_by}"
+            else:
+                # Extra metadata is in the sample_metadata key-value table
+                join_meta = f"""
+                LEFT JOIN (
+                    SELECT sample_id, value AS {group_by}
+                    FROM sample_metadata
+                    WHERE key = '{group_by}'
+                ) grp ON a.sample_id = grp.sample_id"""
+                group_cols = f"t.{level}, grp.{group_by}"
+                select_extra = f", grp.{group_by}"
 
         sql = f"""
         SELECT t.{level}{select_extra},
@@ -432,6 +443,7 @@ class FloraDB:
         FROM asv a
         JOIN taxonomy t USING(feature_id)
         JOIN samples s USING(sample_id)
+        {join_meta}
         WHERE t.{level} IS NOT NULL
         GROUP BY {group_cols}
         ORDER BY {metric}_abundance DESC
@@ -554,12 +566,11 @@ class FloraDB:
             "v_diversity_wide": """
                 SELECT
                     sample_id,
-                    AVG(CASE WHEN metric = 'shannon' THEN value END) AS shannon,
-                    AVG(CASE WHEN metric = 'observed_features' THEN value END)
-                        AS observed_features,
-                    AVG(CASE WHEN metric = 'chao1' THEN value END) AS chao1,
-                    AVG(CASE WHEN metric = 'simpson' THEN value END) AS simpson,
-                    AVG(CASE WHEN metric = 'faith_pd' THEN value END) AS faith_pd
+                    MAX(CASE WHEN metric = 'shannon'           THEN value END) AS shannon,
+                    MAX(CASE WHEN metric = 'observed_features' THEN value END) AS observed_features,
+                    MAX(CASE WHEN metric = 'chao1'             THEN value END) AS chao1,
+                    MAX(CASE WHEN metric = 'simpson'           THEN value END) AS simpson,
+                    MAX(CASE WHEN metric = 'pielou_e'          THEN value END) AS pielou_e
                 FROM diversity_alpha
                 GROUP BY sample_id
             """,
@@ -622,6 +633,20 @@ class QueryResult:
     def __init__(self, relation: Any) -> None:
         self._rel = relation
 
+    def _arrow_table(self) -> pa.Table:
+        """Materialize the result as a PyArrow table.
+
+        DuckDB may return either a ``pyarrow.Table`` or a
+        ``pyarrow.RecordBatchReader`` depending on the version. This helper
+        normalizes both cases and preserves empty-result schemas.
+        """
+        arrow_obj = self._rel.arrow()
+        if isinstance(arrow_obj, pa.Table):
+            return arrow_obj
+        if isinstance(arrow_obj, pa.RecordBatchReader):
+            return arrow_obj.read_all()
+        return pa.Table.from_batches(list(arrow_obj))
+
     def to_df(self) -> "pl.DataFrame":
         """Convert result to a Polars DataFrame.
 
@@ -629,7 +654,7 @@ class QueryResult:
         -------
         polars.DataFrame
         """
-        return pl.from_arrow(self._rel.to_arrow_table())
+        return pl.from_arrow(self._arrow_table())
 
     def to_polars(self) -> pl.DataFrame:
         """Alias for to_df().
@@ -656,7 +681,7 @@ class QueryResult:
         -------
         pyarrow.Table
         """
-        return self._rel.to_arrow_table()
+        return self._arrow_table()
 
     def to_parquet(self, path: str | Path) -> None:
         """Write result directly to a Parquet file.
@@ -670,5 +695,5 @@ class QueryResult:
         dest.parent.mkdir(parents=True, exist_ok=True)
         import pyarrow.parquet as pq
 
-        pq.write_table(self._rel.to_arrow_table(), dest)
+        pq.write_table(self._arrow_table(), dest)
         logger.debug("Query result written to %s", dest)

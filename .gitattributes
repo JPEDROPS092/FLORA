@@ -1,0 +1,2 @@
+data/raw/emp/asv_table.tsv filter=lfs diff=lfs merge=lfs -text
+data/raw/emp/emp_deblur_150bp.release1.biom filter=lfs diff=lfs merge=lfs -text
