@@ -1,0 +1,13 @@
+flowchart TD
+    A[Codigo fonte em src/flora] --> B[pyproject.toml]
+    B --> C[Hatchling build backend]
+    C --> D[Wheel / sdist]
+    D --> E[Instalacao local com pip install -e .]
+    D --> F[Publicacao futura no PyPI]
+    A --> G[Testes com pytest]
+    A --> H[Documentacao tecnica]
+    G --> C
+    H --> F
+    F --> I[Usuario final instala flora-bio]
+    I --> J[CLI flora]
+    I --> K[Uso programatico via import flora]

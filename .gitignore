@@ -20,6 +20,10 @@ wheels/
 *.egg
 
 .env
+.env.*
+!.env.example
+!.env.*.example
+.aws/
 .venv
 env/
 venv/
@@ -31,6 +35,8 @@ ENV/
 
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .mypy_cache/
 .ruff_cache/
@@ -47,10 +53,30 @@ logs/
 docs/_build/
 site/
 
+# Downloaded/generated datasets; keep the small root metadata examples tracked.
+data/raw/emp/
+data/raw/synthetic/
+data/raw/mgnify/
+data/raw/sra/
 data/raw/fastq/
 data/raw/*.fastq.gz
 data/cache/
 
+# LaTeX build intermediates (keep .tex, final PDFs and documentation figures).
+docs/**/*.aux
+docs/**/*.fdb_latexmk
+docs/**/*.fls
+docs/**/*.out
+docs/**/*.synctex.gz
+docs/**/*.toc
+docs/**/*.lof
+docs/**/*.lot
+
 results/
 *.qza
 *.qzv
+
+# Frontend dependencies and caches. Keep the packaged SPA for `flora ui`.
+node_modules/
+coverage/
+.angular/

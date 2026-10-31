@@ -9,9 +9,7 @@ def _styles() -> str:
   *, *::before, *::after { box-sizing: border-box; }
   :root {
     --bg: #f4efe5;
-    --bg-strong: #efe4cf;
     --panel: rgba(255, 253, 248, 0.94);
-    --panel-strong: #fffdf8;
     --text: #1f2937;
     --muted: #5b6472;
     --border: rgba(31, 41, 55, 0.12);
@@ -19,7 +17,6 @@ def _styles() -> str:
     --forest: #285943;
     --rust: #dc6b2f;
     --gold: #c7932d;
-    --danger: #b42318;
     --radius: 20px;
     --shadow: 0 20px 60px rgba(31, 41, 55, 0.10);
   }
@@ -33,11 +30,7 @@ def _styles() -> str:
       radial-gradient(circle at right 20%, rgba(15,118,110,0.18), transparent 24%),
       linear-gradient(160deg, #f6f0e6 0%, #efe5d4 40%, #f9f5ee 100%);
   }
-  .shell {
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
-    min-height: 100vh;
-  }
+  .shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
   .sidebar {
     position: sticky;
     top: 0;
@@ -84,19 +77,9 @@ def _styles() -> str:
     background: #9ca3af;
     box-shadow: 0 0 0 5px rgba(156,163,175,0.12);
   }
-  .status-dot.live {
-    background: #4ade80;
-    box-shadow: 0 0 0 5px rgba(74,222,128,0.16);
-  }
-  .status-dot.off {
-    background: #fb7185;
-    box-shadow: 0 0 0 5px rgba(251,113,133,0.16);
-  }
-  .nav {
-    display: grid;
-    gap: 8px;
-    margin-top: 18px;
-  }
+  .status-dot.live { background: #4ade80; box-shadow: 0 0 0 5px rgba(74,222,128,0.16); }
+  .status-dot.off { background: #fb7185; box-shadow: 0 0 0 5px rgba(251,113,133,0.16); }
+  .nav { display: grid; gap: 8px; margin-top: 18px; }
   .nav a {
     color: rgba(248,244,236,0.82);
     text-decoration: none;
@@ -123,18 +106,9 @@ def _styles() -> str:
     color: rgba(248,244,236,0.72);
     line-height: 1.5;
   }
-  .content {
-    padding: 28px;
-  }
-  .section {
-    margin-bottom: 22px;
-  }
-  .hero {
-    display: grid;
-    grid-template-columns: 1.35fr 0.95fr;
-    gap: 18px;
-    margin-bottom: 18px;
-  }
+  .content { padding: 28px; }
+  .section { margin-bottom: 22px; }
+  .hero { display: grid; grid-template-columns: 1.35fr 0.95fr; gap: 18px; margin-bottom: 18px; }
   .card {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -171,17 +145,8 @@ def _styles() -> str:
     line-height: 0.96;
     letter-spacing: -0.05em;
   }
-  .hero p {
-    color: var(--muted);
-    line-height: 1.65;
-    max-width: 62ch;
-  }
-  .tag-row, .quick-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 18px;
-  }
+  .hero p { color: var(--muted); line-height: 1.65; max-width: 62ch; }
+  .tag-row, .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
   .tag {
     display: inline-flex;
     align-items: center;
@@ -193,15 +158,8 @@ def _styles() -> str:
     font-weight: 600;
     font-size: 0.92rem;
   }
-  .hero-side {
-    padding: 24px;
-    display: grid;
-    gap: 14px;
-  }
-  .checklist {
-    display: grid;
-    gap: 10px;
-  }
+  .hero-side { padding: 24px; display: grid; gap: 14px; }
+  .checklist { display: grid; gap: 10px; }
   .check-item {
     display: flex;
     align-items: center;
@@ -222,18 +180,9 @@ def _styles() -> str:
     color: var(--muted);
     flex: none;
   }
-  .check-item.done .check-mark {
-    background: rgba(15,118,110,0.12);
-    color: var(--teal);
-  }
-  .metrics-grid, .feature-grid, .plot-grid, .control-grid {
-    display: grid;
-    gap: 16px;
-  }
-  .metrics-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    margin-bottom: 18px;
-  }
+  .check-item.done .check-mark { background: rgba(15,118,110,0.12); color: var(--teal); }
+  .metrics-grid, .feature-grid, .plot-grid, .control-grid { display: grid; gap: 16px; }
+  .metrics-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 18px; }
   .metric {
     padding: 18px;
     border-radius: 18px;
@@ -266,47 +215,39 @@ def _styles() -> str:
     font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
     letter-spacing: -0.04em;
   }
-  .section-title p {
-    margin: 4px 0 0;
+  .section-title p { margin: 4px 0 0; color: var(--muted); }
+  .feature-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 18px; }
+  .feature-card, .control-card, .plot-card { padding: 22px; }
+  .feature-card strong { display: block; font-size: 1.06rem; margin-bottom: 10px; }
+  .feature-card p { margin: 0; color: var(--muted); line-height: 1.65; }
+  .control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 18px; }
+  .tab-shell {
+    padding: 10px;
+    border-radius: var(--radius);
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(31,41,55,0.08);
+  }
+  .tab-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .tab-btn {
+    border: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 12px 18px;
+    font: inherit;
+    font-weight: 700;
+    transition: 160ms ease;
+    background: rgba(31,41,55,0.06);
     color: var(--muted);
   }
-  .feature-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-bottom: 18px;
+  .tab-btn.active {
+    background: linear-gradient(135deg, var(--forest), var(--teal));
+    color: #fff;
   }
-  .feature-card {
-    padding: 22px;
-  }
-  .feature-card strong {
-    display: block;
-    font-size: 1.06rem;
-    margin-bottom: 10px;
-  }
-  .feature-card p {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.65;
-  }
-  .control-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-bottom: 18px;
-  }
-  .control-card {
-    padding: 22px;
-  }
-  .control-card h4 {
-    margin: 0 0 14px;
-    font-size: 1.06rem;
-  }
-  .form-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  .form-row.one {
-    grid-template-columns: 1fr;
-  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .control-card h4 { margin: 0 0 14px; font-size: 1.06rem; }
+  .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .form-row.one { grid-template-columns: 1fr; }
   label {
     display: block;
     margin-bottom: 6px;
@@ -329,10 +270,7 @@ def _styles() -> str:
     border-color: rgba(15,118,110,0.45);
     box-shadow: 0 0 0 4px rgba(15,118,110,0.10);
   }
-  textarea {
-    min-height: 110px;
-    resize: vertical;
-  }
+  textarea { min-height: 110px; resize: vertical; }
   button {
     border: 0;
     cursor: pointer;
@@ -342,50 +280,15 @@ def _styles() -> str:
     font-weight: 700;
     transition: 160ms ease;
   }
-  .btn-primary {
-    background: linear-gradient(135deg, var(--teal), #169487);
-    color: #fff;
-  }
-  .btn-secondary {
-    background: rgba(31,41,55,0.08);
-    color: var(--text);
-  }
-  .btn-accent {
-    background: linear-gradient(135deg, #d97706, var(--rust));
-    color: #fff;
-  }
-  button:hover {
-    transform: translateY(-1px);
-    filter: saturate(1.06);
-  }
-  button:disabled {
-    opacity: 0.6;
-    cursor: wait;
-    transform: none;
-  }
-  .plot-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .plot-card {
-    padding: 18px;
-  }
-  .plot-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
-    gap: 14px;
-    margin-bottom: 14px;
-  }
-  .plot-head h4 {
-    margin: 0;
-    font-size: 1.05rem;
-  }
-  .plot-head p {
-    margin: 6px 0 0;
-    color: var(--muted);
-    font-size: 0.92rem;
-    line-height: 1.55;
-  }
+  .btn-primary { background: linear-gradient(135deg, var(--teal), #169487); color: #fff; }
+  .btn-secondary { background: rgba(31,41,55,0.08); color: var(--text); }
+  .btn-accent { background: linear-gradient(135deg, #d97706, var(--rust)); color: #fff; }
+  button:hover { transform: translateY(-1px); filter: saturate(1.06); }
+  button:disabled { opacity: 0.6; cursor: wait; transform: none; }
+  .plot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plot-head { display: flex; justify-content: space-between; align-items: start; gap: 14px; margin-bottom: 14px; }
+  .plot-head h4 { margin: 0; font-size: 1.05rem; }
+  .plot-head p { margin: 6px 0 0; color: var(--muted); font-size: 0.92rem; line-height: 1.55; }
   .plot-area {
     min-height: 440px;
     border-radius: 18px;
@@ -393,15 +296,8 @@ def _styles() -> str:
     border: 1px solid rgba(31,41,55,0.08);
     background: rgba(255,255,255,0.64);
   }
-  .panel-output {
-    margin-top: 12px;
-  }
-  .notice {
-    border-radius: 16px;
-    padding: 14px 16px;
-    line-height: 1.55;
-    border: 1px solid transparent;
-  }
+  .panel-output { margin-top: 12px; }
+  .notice { border-radius: 16px; padding: 14px 16px; line-height: 1.55; border: 1px solid transparent; }
   .notice.ok { background: rgba(15,118,110,0.10); border-color: rgba(15,118,110,0.16); color: #115e59; }
   .notice.err { background: rgba(180,35,24,0.08); border-color: rgba(180,35,24,0.12); color: #8c2d1f; }
   .notice.info { background: rgba(199,147,45,0.14); border-color: rgba(199,147,45,0.18); color: #7c5b12; }
@@ -415,9 +311,7 @@ def _styles() -> str:
     white-space: pre-wrap;
     overflow: auto;
   }
-  .log-box {
-    max-height: 220px;
-  }
+  .log-box { max-height: 220px; }
   .spinner {
     width: 16px;
     height: 16px;
@@ -453,7 +347,7 @@ def _hero() -> str:
     <p>
       Interface moderna para análise de dados de sequenciamento cobrindo os três pilares exigidos
       em microbioma: <strong>diversidade</strong>, <strong>composição</strong> e <strong>estrutura</strong>.
-      O foco aqui é transformar a pipeline em uma ferramenta visual pronta para exploração e narrativa de resultado.
+      O foco aqui é transformar a pipeline em uma ferramenta visual completa, navegável e pronta para exploração.
     </p>
     <div class="tag-row">
       <span class="tag">Shannon / Chao1</span>
@@ -515,96 +409,301 @@ def _guides() -> str:
 """
 
 
-def _controls() -> str:
+def _workspace() -> str:
     return """
-<section class="section" id="data">
+<section class="section" id="workspace">
   <div class="section-title">
     <div>
-      <h3>Dados e execução</h3>
-      <p>Carregue tabelas, gere dados sintéticos e dispare as análises base da interface.</p>
+      <h3>Workspace operacional</h3>
+      <p>Abas separadas para ingestão, execução analítica e inspeção da matriz de features.</p>
     </div>
   </div>
-  <div class="control-grid">
-    <div class="control-card card">
-      <h4>Ingestão</h4>
-      <div class="form-row one">
-        <div>
-          <label>Metadata path</label>
-          <input id="meta-path" type="text" placeholder="data/raw/metadata.tsv">
-        </div>
-      </div>
-      <div class="form-row">
-        <div>
-          <label>Sample ID column</label>
-          <input id="meta-sample-col" type="text" value="sample_id">
-        </div>
-        <div>
-          <label>ASV table path</label>
-          <input id="asv-path" type="text" placeholder="data/raw/asv_table.tsv">
-        </div>
-      </div>
-      <div class="form-row">
-        <div>
-          <label>ASV format</label>
-          <select id="asv-wide">
-            <option value="true">Wide: samples x features</option>
-            <option value="false">Long: sample_id / feature_id / abundance</option>
-          </select>
-        </div>
-        <div>
-          <label>Taxonomy path</label>
-          <input id="tax-path" type="text" placeholder="data/raw/taxonomy.tsv">
-        </div>
-      </div>
-      <div class="quick-actions">
-        <button class="btn-primary" onclick="ingestAll(this)">Carregar dataset</button>
-        <button class="btn-secondary" onclick="ingestMetadata(this)">Só metadata</button>
-        <button class="btn-secondary" onclick="ingestTaxonomy(this)">Só taxonomy</button>
-      </div>
-      <div class="panel-output" id="ingest-output"></div>
+  <div class="card tab-shell">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab-group="workspace" data-tab-target="workspace-ingest">Ingestão</button>
+      <button class="tab-btn" data-tab-group="workspace" data-tab-target="workspace-analysis">Execução</button>
+      <button class="tab-btn" data-tab-group="workspace" data-tab-target="workspace-matrix">Matriz e filtros</button>
     </div>
-    <div class="control-card card">
-      <h4>Quick start e análise</h4>
-      <div class="form-row">
-        <div>
-          <label>Synthetic output dir</label>
-          <input id="syn-outdir" type="text" value="results/raw/synthetic">
+    <div id="workspace-ingest" class="tab-panel active">
+      <div class="control-grid">
+        <div class="control-card card">
+          <h4>Carregamento de tabelas</h4>
+          <div class="form-row one">
+            <div>
+              <label>Metadata path</label>
+              <input id="meta-path" type="text" placeholder="data/raw/metadata.tsv">
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Sample ID column</label>
+              <input id="meta-sample-col" type="text" value="sample_id">
+            </div>
+            <div>
+              <label>ASV table path</label>
+              <input id="asv-path" type="text" placeholder="data/raw/asv_table.tsv">
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>ASV format</label>
+              <select id="asv-wide">
+                <option value="true">Wide: samples x features</option>
+                <option value="false">Long: sample_id / feature_id / abundance</option>
+              </select>
+            </div>
+            <div>
+              <label>Taxonomy path</label>
+              <input id="tax-path" type="text" placeholder="data/raw/taxonomy.tsv">
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn-primary" onclick="ingestAll(this)">Carregar dataset completo</button>
+            <button class="btn-secondary" onclick="ingestMetadata(this)">Só metadata</button>
+            <button class="btn-secondary" onclick="ingestASV(this)">Só ASV</button>
+            <button class="btn-secondary" onclick="ingestTaxonomy(this)">Só taxonomy</button>
+          </div>
+          <div class="panel-output" id="ingest-output"></div>
         </div>
-        <div>
-          <label>Samples</label>
-          <input id="syn-samples" type="number" value="80" min="12">
+        <div class="control-card card">
+          <h4>Parâmetros globais</h4>
+          <div class="form-row">
+            <div>
+              <label>Group by</label>
+              <input id="global-group" type="text" value="biome" placeholder="biome">
+            </div>
+            <div>
+              <label>Normalization</label>
+              <select id="global-normalize">
+                <option value="tss">TSS</option>
+                <option value="clr">CLR</option>
+                <option value="none">Raw</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Sampling depth</label>
+              <input id="div-depth" type="number" value="1000" min="100">
+            </div>
+            <div>
+              <label>Min prevalence</label>
+              <input id="matrix-prev" type="number" value="0.05" min="0" max="1" step="0.01">
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn-primary" onclick="refreshStatus()">Sincronizar status</button>
+            <button class="btn-secondary" onclick="refreshLogs()">Atualizar logs</button>
+          </div>
+          <div class="panel-output" id="workspace-output"></div>
         </div>
       </div>
-      <div class="form-row">
-        <div>
-          <label>Features</label>
-          <input id="syn-features" type="number" value="200" min="20">
+    </div>
+    <div id="workspace-analysis" class="tab-panel">
+      <div class="control-grid">
+        <div class="control-card card">
+          <h4>Execução rápida</h4>
+          <div class="form-row">
+            <div>
+              <label>Synthetic output dir</label>
+              <input id="syn-outdir" type="text" value="results/raw/synthetic">
+            </div>
+            <div>
+              <label>Samples</label>
+              <input id="syn-samples" type="number" value="80" min="12">
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Features</label>
+              <input id="syn-features" type="number" value="200" min="20">
+            </div>
+            <div>
+              <label>Seed</label>
+              <input id="syn-seed" type="number" value="42" min="1">
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn-accent" onclick="downloadSynthetic(this)">Gerar dataset sintético</button>
+            <button class="btn-primary" onclick="computeDiversity(this)">Calcular diversidade</button>
+            <button class="btn-secondary" onclick="runPublicationSuite(this)">Rodar suíte recomendada</button>
+          </div>
+          <div class="panel-output" id="analysis-output"></div>
         </div>
-        <div>
-          <label>Sampling depth</label>
-          <input id="div-depth" type="number" value="1000" min="100">
+        <div class="control-card card">
+          <h4>Fluxo recomendado</h4>
+          <div class="feature-grid" style="grid-template-columns:1fr;">
+            <article class="feature-card card">
+              <strong>1. Ingestão</strong>
+              <p>Carregue metadata, ASV e taxonomy ou use um dataset baixado na central logo abaixo.</p>
+            </article>
+            <article class="feature-card card">
+              <strong>2. Diversidade e estrutura</strong>
+              <p>Calcule diversidade alfa, carregue PCoA, beta heatmap e verifique separação ecológica.</p>
+            </article>
+            <article class="feature-card card">
+              <strong>3. Composição e relação</strong>
+              <p>Explore barplots, heatmaps, Krona, árvore e rede para fechar a interpretação biológica.</p>
+            </article>
+          </div>
         </div>
       </div>
-      <div class="form-row">
-        <div>
-          <label>Group by</label>
-          <input id="global-group" type="text" value="biome" placeholder="biome">
+    </div>
+    <div id="workspace-matrix" class="tab-panel">
+      <div class="control-grid">
+        <div class="control-card card">
+          <h4>Feature matrix</h4>
+          <div class="form-row">
+            <div>
+              <label>Normalization</label>
+              <select id="matrix-normalize">
+                <option value="tss">TSS</option>
+                <option value="clr">CLR</option>
+                <option value="none">Raw</option>
+              </select>
+            </div>
+            <div>
+              <label>Min prevalence</label>
+              <input id="matrix-prev-alt" type="number" value="0.05" min="0" max="1" step="0.01">
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn-primary" onclick="previewMatrix(this)">Gerar preview da matriz</button>
+          </div>
+          <div class="panel-output" id="matrix-output"></div>
         </div>
-        <div>
-          <label>Normalization</label>
-          <select id="global-normalize">
-            <option value="tss">TSS</option>
-            <option value="clr">CLR</option>
-            <option value="none">Raw</option>
-          </select>
+        <div class="control-card card">
+          <h4>Configuração para gráficos</h4>
+          <div class="form-row">
+            <div>
+              <label>Color / group field</label>
+              <input id="global-group-alt" type="text" value="biome" placeholder="biome">
+            </div>
+            <div>
+              <label>PCoA normalization</label>
+              <select id="global-normalize-alt">
+                <option value="tss">TSS</option>
+                <option value="clr">CLR</option>
+                <option value="none">Raw</option>
+              </select>
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn-secondary" onclick="syncGlobalControls()">Aplicar aos gráficos</button>
+          </div>
+          <div class="panel-output" id="matrix-config-output"></div>
         </div>
       </div>
-      <div class="quick-actions">
-        <button class="btn-accent" onclick="downloadSynthetic(this)">Gerar dataset sintético</button>
-        <button class="btn-primary" onclick="computeDiversity(this)">Calcular diversidade</button>
-        <button class="btn-secondary" onclick="previewMatrix(this)">Ver matriz</button>
+    </div>
+  </div>
+</section>
+"""
+
+
+def _downloads() -> str:
+    return """
+<section class="section" id="downloads">
+  <div class="section-title">
+    <div>
+      <h3>Dataset Center</h3>
+      <p>Baixe datasets públicos e sintéticos sem sair da ferramenta.</p>
+    </div>
+  </div>
+  <div class="card tab-shell">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab-group="downloads" data-tab-target="download-synthetic">Synthetic</button>
+      <button class="tab-btn" data-tab-group="downloads" data-tab-target="download-emp">EMP</button>
+      <button class="tab-btn" data-tab-group="downloads" data-tab-target="download-mgnify">MGnify</button>
+      <button class="tab-btn" data-tab-group="downloads" data-tab-target="download-sra">NCBI SRA</button>
+    </div>
+    <div id="download-synthetic" class="tab-panel active">
+      <div class="control-card card">
+        <h4>Dataset sintético local</h4>
+        <p style="color:var(--muted); margin:0 0 14px;">Ideal para validar a interface e a pipeline inteira sem depender de rede.</p>
+        <div class="quick-actions">
+          <button class="btn-accent" onclick="downloadSynthetic(this)">Gerar e preencher paths</button>
+        </div>
+        <div class="panel-output" id="download-synthetic-output"></div>
       </div>
-      <div class="panel-output" id="analysis-output"></div>
+    </div>
+    <div id="download-emp" class="tab-panel">
+      <div class="control-card card">
+        <h4>Earth Microbiome Project</h4>
+        <div class="form-row">
+          <div>
+            <label>Output dir</label>
+            <input id="emp-outdir" type="text" value="results/raw/emp">
+          </div>
+          <div>
+            <label>Max samples</label>
+            <input id="emp-maxsamples" type="number" value="200" min="10">
+          </div>
+        </div>
+        <div class="form-row one">
+          <div>
+            <label>Biome filter</label>
+            <input id="emp-biome" type="text" placeholder="forest, soil, marine">
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="btn-primary" onclick="downloadEMP(this)">Baixar EMP</button>
+        </div>
+        <div class="panel-output" id="download-emp-output"></div>
+      </div>
+    </div>
+    <div id="download-mgnify" class="tab-panel">
+      <div class="control-card card">
+        <h4>MGnify</h4>
+        <div class="form-row">
+          <div>
+            <label>Study accession</label>
+            <input id="mg-study" type="text" placeholder="MGYS00005116">
+          </div>
+          <div>
+            <label>Max samples</label>
+            <input id="mg-maxsamples" type="number" value="20" min="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label>Biome filter</label>
+            <input id="mg-biome" type="text" value="root:Environmental:Terrestrial:Forest">
+          </div>
+          <div>
+            <label>Output dir</label>
+            <input id="mg-outdir" type="text" value="results/raw/mgnify">
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="btn-primary" onclick="downloadMGnify(this)">Baixar MGnify</button>
+        </div>
+        <div class="panel-output" id="download-mgnify-output"></div>
+      </div>
+    </div>
+    <div id="download-sra" class="tab-panel">
+      <div class="control-card card">
+        <h4>NCBI SRA</h4>
+        <div class="form-row">
+          <div>
+            <label>Output dir</label>
+            <input id="sra-outdir" type="text" value="results/raw/sra">
+          </div>
+          <div>
+            <label>Jobs</label>
+            <input id="sra-jobs" type="number" value="4" min="1">
+          </div>
+        </div>
+        <div class="form-row one">
+          <div>
+            <label>Accessions</label>
+            <textarea id="sra-accessions" placeholder="SRR12345678&#10;SRR12345679"></textarea>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="btn-primary" onclick="downloadSRA(this)">Baixar SRA</button>
+        </div>
+        <div class="panel-output" id="download-sra-output"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -776,12 +875,25 @@ const API = '';
 const initialPlotText = '<div class="notice info">Carregue um dataset e dispare os gráficos para iniciar a exploração.</div>';
 
 function qs(id) { return document.getElementById(id); }
-function groupValue() { return (qs('global-group').value || '').trim(); }
+function getValue(...ids) {
+  for (const id of ids) {
+    const el = qs(id);
+    if (el && String(el.value || '').trim()) return String(el.value).trim();
+  }
+  return '';
+}
+function getNumber(ids, fallback) {
+  const value = parseFloat(getValue(...ids));
+  return Number.isFinite(value) ? value : fallback;
+}
+function groupValue() { return getValue('global-group-alt', 'global-group'); }
 function normalizeValue() {
-  const value = qs('global-normalize').value;
+  const value = getValue('global-normalize-alt', 'matrix-normalize', 'global-normalize') || 'tss';
   return value === 'none' ? 'none' : value;
 }
-function metricValue() { return 'shannon'; }
+function prevalenceValue() {
+  return getNumber(['matrix-prev-alt', 'matrix-prev'], 0.05);
+}
 
 function setLoading(btn, loading, label='Processando') {
   if (!btn) return;
@@ -883,6 +995,20 @@ async function refreshStatus() {
   }
 }
 
+function adoptDatasetPaths(data) {
+  if (data.metadata && qs('meta-path')) qs('meta-path').value = data.metadata;
+  if (data.asv_table && qs('asv-path')) qs('asv-path').value = data.asv_table;
+  if (data.taxonomy && qs('tax-path')) qs('tax-path').value = data.taxonomy;
+}
+
+function syncGlobalControls() {
+  const group = getValue('global-group-alt');
+  const norm = getValue('global-normalize-alt');
+  if (group && qs('global-group')) qs('global-group').value = group;
+  if (norm && qs('global-normalize')) qs('global-normalize').value = norm;
+  setPanel('matrix-config-output', notice('ok', 'Configurações globais sincronizadas com os gráficos.'));
+}
+
 async function ingestMetadata(btn) {
   setLoading(btn, true);
   const data = await apiFetch('/api/ingest/metadata', 'POST', {
@@ -907,9 +1033,7 @@ async function ingestASV(btn) {
 
 async function ingestTaxonomy(btn) {
   setLoading(btn, true);
-  const data = await apiFetch('/api/ingest/taxonomy', 'POST', {
-    path: qs('tax-path').value,
-  });
+  const data = await apiFetch('/api/ingest/taxonomy', 'POST', { path: qs('tax-path').value });
   renderResponse('ingest-output', data, d => notice('ok', `Taxonomia carregada: <strong>${d.taxonomy_rows}</strong> linhas.`));
   setLoading(btn, false);
   refreshStatus();
@@ -935,9 +1059,7 @@ async function ingestAll(btn) {
     setLoading(btn, false);
     return;
   }
-  const tax = await apiFetch('/api/ingest/taxonomy', 'POST', {
-    path: qs('tax-path').value,
-  });
+  const tax = await apiFetch('/api/ingest/taxonomy', 'POST', { path: qs('tax-path').value });
   renderResponse('ingest-output', tax, d => notice('ok', `Dataset carregado. Metadata=${meta.samples_ingested}, ASV=${asv.observations_ingested}, Taxonomy=${d.taxonomy_rows}.`));
   setLoading(btn, false);
   refreshStatus();
@@ -949,13 +1071,48 @@ async function downloadSynthetic(btn) {
     output_dir: qs('syn-outdir').value,
     samples: parseInt(qs('syn-samples').value, 10),
     features: parseInt(qs('syn-features').value, 10),
+    seed: parseInt(qs('syn-seed').value, 10),
   });
-  if (data.success) {
-    qs('meta-path').value = data.metadata;
-    qs('asv-path').value = data.asv_table;
-    qs('tax-path').value = data.taxonomy;
-  }
-  renderResponse('analysis-output', data, d => notice('ok', `Dataset sintético pronto em <strong>${d.metadata.replace('/metadata.tsv', '')}</strong>. Caminhos foram preenchidos automaticamente.`));
+  if (data.success) adoptDatasetPaths(data);
+  const message = d => notice('ok', `Dataset sintético pronto em <strong>${d.metadata.replace('/metadata.tsv', '')}</strong>. Paths preenchidos automaticamente.`);
+  renderResponse('analysis-output', data, message);
+  renderResponse('download-synthetic-output', data, message);
+  setLoading(btn, false);
+}
+
+async function downloadEMP(btn) {
+  setLoading(btn, true);
+  const data = await apiFetch('/api/download/emp', 'POST', {
+    output_dir: qs('emp-outdir').value,
+    biome_filter: qs('emp-biome').value,
+    max_samples: parseInt(qs('emp-maxsamples').value, 10),
+  });
+  if (data.success) adoptDatasetPaths(data);
+  renderResponse('download-emp-output', data, d => notice('ok', `EMP baixado e preparado. Metadata, ASV e taxonomy já podem ser ingeridos.`));
+  setLoading(btn, false);
+}
+
+async function downloadMGnify(btn) {
+  setLoading(btn, true);
+  const data = await apiFetch('/api/download/mgnify', 'POST', {
+    study_accession: qs('mg-study').value,
+    biome: qs('mg-biome').value,
+    output_dir: qs('mg-outdir').value,
+    max_samples: parseInt(qs('mg-maxsamples').value, 10),
+  });
+  renderResponse('download-mgnify-output', data, d => notice('ok', `Download MGnify iniciado/concluído. Manifest: <strong>${d.manifest}</strong>.`));
+  setLoading(btn, false);
+}
+
+async function downloadSRA(btn) {
+  setLoading(btn, true);
+  const accessions = qs('sra-accessions').value.split('\\n').map(v => v.trim()).filter(Boolean);
+  const data = await apiFetch('/api/download/sra', 'POST', {
+    accessions,
+    output_dir: qs('sra-outdir').value,
+    n_jobs: parseInt(qs('sra-jobs').value, 10),
+  });
+  renderResponse('download-sra-output', data, d => notice('ok', `Download SRA iniciado/concluído. Manifest: <strong>${d.manifest}</strong>.`));
   setLoading(btn, false);
 }
 
@@ -974,8 +1131,11 @@ async function computeDiversity(btn) {
 async function previewMatrix(btn) {
   setLoading(btn, true);
   const norm = normalizeValue();
-  const data = await apiFetch(`/api/feature_matrix?normalize=${norm}&min_prevalence=0.05`);
-  renderResponse('analysis-output', data, d => notice('info', `Matriz: <strong>${d.n_samples}</strong> amostras x <strong>${d.n_features}</strong> features (${d.normalize}).`));
+  const prev = prevalenceValue();
+  const data = await apiFetch(`/api/feature_matrix?normalize=${norm}&min_prevalence=${prev}`);
+  const formatter = d => notice('info', `Matriz: <strong>${d.n_samples}</strong> amostras x <strong>${d.n_features}</strong> features (${d.normalize}).`);
+  renderResponse('matrix-output', data, formatter);
+  renderResponse('workspace-output', data, formatter);
   setLoading(btn, false);
 }
 
@@ -989,18 +1149,15 @@ async function runClassification(btn) {
     test_filter: qs('clf-test').value,
     normalize: normalizeValue() === 'none' ? 'asv' : normalizeValue(),
   });
-  renderResponse('ml-output', data, d => {
-    let html = `
-      <div class="metrics-grid">
-        <div class="metric"><div class="label">Accuracy</div><div class="value">${(d.accuracy * 100).toFixed(1)}%</div></div>
-        <div class="metric"><div class="label">F1 macro</div><div class="value">${(d.f1_macro * 100).toFixed(1)}%</div></div>
-        <div class="metric"><div class="label">ROC-AUC</div><div class="value">${d.roc_auc ? (d.roc_auc * 100).toFixed(1) + '%' : '—'}</div></div>
-        <div class="metric"><div class="label">CV accuracy</div><div class="value">${(d.cv_accuracy_mean * 100).toFixed(1)}%</div></div>
-      </div>
-      <div class="mono-box">${d.classification_report || ''}</div>
-    `;
-    return html;
-  });
+  renderResponse('ml-output', data, d => `
+    <div class="metrics-grid">
+      <div class="metric"><div class="label">Accuracy</div><div class="value">${(d.accuracy * 100).toFixed(1)}%</div></div>
+      <div class="metric"><div class="label">F1 macro</div><div class="value">${(d.f1_macro * 100).toFixed(1)}%</div></div>
+      <div class="metric"><div class="label">ROC-AUC</div><div class="value">${d.roc_auc ? (d.roc_auc * 100).toFixed(1) + '%' : '—'}</div></div>
+      <div class="metric"><div class="label">CV accuracy</div><div class="value">${(d.cv_accuracy_mean * 100).toFixed(1)}%</div></div>
+    </div>
+    <div class="mono-box">${d.classification_report || ''}</div>
+  `);
   setLoading(btn, false);
 }
 
@@ -1040,7 +1197,7 @@ async function loadPCoA(btn=null) {
 
 async function loadAlpha(btn=null) {
   setLoading(btn, true);
-  const data = await apiFetch(plotQuery('/api/viz/alpha', { metric: metricValue(), group_by: groupValue() }));
+  const data = await apiFetch(plotQuery('/api/viz/alpha', { metric: 'shannon', group_by: groupValue() }));
   renderPlot('plot-alpha', data);
   setLoading(btn, false);
 }
@@ -1064,6 +1221,7 @@ async function loadBetaHeatmap(btn=null) {
   const data = await apiFetch(plotQuery('/api/viz/beta_heatmap', { normalize: normalizeValue(), metric: 'bray_curtis', max_samples: 60 }));
   renderPlot('plot-beta-heatmap', data);
   setLoading(btn, false);
+  refreshStatus();
 }
 
 async function loadKrona(btn=null) {
@@ -1082,12 +1240,7 @@ async function loadTree(btn=null) {
 
 async function loadNetwork(btn=null) {
   setLoading(btn, true);
-  const data = await apiFetch(plotQuery('/api/viz/network', {
-    level: 'genus',
-    normalize: 'tss',
-    top_n: 18,
-    threshold: 0.35
-  }));
+  const data = await apiFetch(plotQuery('/api/viz/network', { level: 'genus', top_n: 18, threshold: 0.35 }));
   renderPlot('plot-network', data);
   setLoading(btn, false);
 }
@@ -1113,16 +1266,8 @@ async function runPublicationSuite(btn) {
 }
 
 function primePlotAreas() {
-  [
-    'plot-pcoa',
-    'plot-alpha',
-    'plot-taxonomy-bar',
-    'plot-taxonomy-heatmap',
-    'plot-beta-heatmap',
-    'plot-krona',
-    'plot-tree',
-    'plot-network',
-  ].forEach(id => setPanel(id, initialPlotText));
+  ['plot-pcoa','plot-alpha','plot-taxonomy-bar','plot-taxonomy-heatmap','plot-beta-heatmap','plot-krona','plot-tree','plot-network']
+    .forEach(id => setPanel(id, initialPlotText));
 }
 
 document.querySelectorAll('.nav a').forEach(link => {
@@ -1130,9 +1275,21 @@ document.querySelectorAll('.nav a').forEach(link => {
     event.preventDefault();
     document.querySelectorAll('.nav a').forEach(item => item.classList.remove('active'));
     link.classList.add('active');
-    const target = link.getAttribute('href');
-    const el = document.querySelector(target);
+    const el = document.querySelector(link.getAttribute('href'));
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const group = btn.dataset.tabGroup;
+    const target = btn.dataset.tabTarget;
+    const prefix = group === 'downloads' ? 'download-' : 'workspace-';
+    document.querySelectorAll(`.tab-btn[data-tab-group="${group}"]`).forEach(item => item.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll(`.tab-panel[id^="${prefix}"]`).forEach(panel => panel.classList.remove('active'));
+    const panel = qs(target);
+    if (panel) panel.classList.add('active');
   });
 });
 
@@ -1172,7 +1329,8 @@ def build_index_html() -> str:
       <nav class="nav">
         <a href="#overview" class="active">Overview</a>
         <a href="#analysis">Análise microbioma</a>
-        <a href="#data">Dados e execução</a>
+        <a href="#workspace">Workspace</a>
+        <a href="#downloads">Downloads</a>
         <a href="#visuals">Visualization Studio</a>
         <a href="#reporting">Relatório e ML</a>
       </nav>
@@ -1185,7 +1343,8 @@ def build_index_html() -> str:
       {_hero()}
       {_metrics()}
       {_guides()}
-      {_controls()}
+      {_workspace()}
+      {_downloads()}
       {_visuals()}
       {_reporting()}
     </main>

@@ -30,9 +30,13 @@ plugins:
 
 nav:
   - Home: index.md
+  - Architecture: architecture.md
   - Installation: installation.md
   - Quick Start: quickstart.md
   - User Guide: user_guide.md
+  - Development: development.md
+  - Contributing: contributing.md
+  - Troubleshooting: troubleshooting.md
   - Datasets: datasets.md
   - Methods: methods.md
   - Article: article.md

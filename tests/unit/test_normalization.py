@@ -87,6 +87,15 @@ def test_suggest_rarefaction_depth():
     assert depth > 0
 
 
+def test_rarefy_rejects_empty_input():
+    df = pl.DataFrame(
+        {"sample_id": [], "F1": []},
+        schema={"sample_id": pl.String, "F1": pl.Float64},
+    )
+    with pytest.raises(ValidationError, match="No samples available for rarefaction"):
+        rarefy(df, depth=10)
+
+
 def test_rarefaction_curve_returns_expected_columns():
     df = make_count_df(n_samples=5, n_features=15)
     curve = rarefaction_curve(df, n_iterations=3)

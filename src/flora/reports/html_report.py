@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,16 +27,23 @@ _TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ title }}</title>
 <style>
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
-  header { background: #1a6b3c; color: white; padding: 24px 40px; }
-  header h1 { margin: 0; font-size: 2em; }
-  header p { margin: 4px 0 0; opacity: 0.85; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
-  .section { background: white; border-radius: 8px; padding: 24px; margin-bottom: 28px;
-             box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-  .section h2 { margin-top: 0; color: #1a6b3c; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px; }
+  :root { color-scheme: light; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f1e8; margin: 0; padding: 0; color: #1f2937; }
+  header { background: linear-gradient(135deg, #1f5137, #0f766e); color: white; padding: 28px 40px; }
+  header h1 { margin: 0; font-size: 2.2em; letter-spacing: -0.04em; }
+  header p { margin: 6px 0 0; opacity: 0.88; }
+  .topbar { max-width: 1200px; margin: 0 auto; }
+  .toc { max-width: 1200px; margin: 18px auto 0; padding: 0 24px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .toc a { text-decoration: none; color: #285943; background: rgba(255,255,255,0.9); border: 1px solid rgba(31,41,55,0.12); border-radius: 999px; padding: 8px 14px; font-size: 0.92em; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .summary-banner { display: grid; gap: 16px; grid-template-columns: 1.3fr 1fr; margin-bottom: 24px; }
+  .hero-card, .notice-card { background: rgba(255, 253, 248, 0.96); border-radius: 18px; padding: 22px 24px; border: 1px solid rgba(31,41,55,0.10); box-shadow: 0 8px 32px rgba(31,41,55,0.08); }
+  .hero-card h2, .notice-card h3 { margin: 0 0 8px; color: #1f5137; }
+  .hero-card p, .notice-card p, .notice-card li { color: #4b5563; line-height: 1.6; }
+  .section { background: rgba(255, 253, 248, 0.98); border-radius: 18px; padding: 24px; margin-bottom: 24px; border: 1px solid rgba(31,41,55,0.10); box-shadow: 0 8px 32px rgba(31,41,55,0.08); }
+  .section h2 { margin-top: 0; color: #1f5137; border-bottom: 2px solid rgba(31,41,55,0.10); padding-bottom: 10px; }
   .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
-  .metric-card { background: #f0f7f3; border-radius: 6px; padding: 16px; text-align: center; }
+  .metric-card { background: #f0f7f3; border-radius: 14px; padding: 16px; text-align: center; border: 1px solid rgba(15,118,110,0.10); }
   .metric-card .value { font-size: 2em; font-weight: bold; color: #1a6b3c; }
   .metric-card .label { color: #666; font-size: 0.9em; margin-top: 4px; }
   table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
@@ -43,18 +51,53 @@ _TEMPLATE = """<!DOCTYPE html>
   td { padding: 8px 14px; border-bottom: 1px solid #eee; }
   tr:hover td { background: #f0f7f3; }
   .text-block { color: #333; line-height: 1.6; white-space: pre-wrap; font-family: monospace;
-                background: #f5f5f5; padding: 12px; border-radius: 4px; }
+                background: #f5f5f5; padding: 12px; border-radius: 12px; }
+  .empty-state { padding: 16px; border-radius: 14px; background: rgba(220,107,47,0.10); color: #8a3c13; }
   footer { text-align: center; color: #888; padding: 24px; font-size: 0.85em; }
   .plotly-chart { width: 100%; }
+  ul { margin: 0; padding-left: 20px; }
+  @media (max-width: 900px) {
+    .summary-banner { grid-template-columns: 1fr; }
+  }
+  @media print {
+    body { background: white; }
+    .toc { display: none; }
+    .section, .hero-card, .notice-card { box-shadow: none; border: 1px solid #d1d5db; break-inside: avoid; }
+  }
 </style>
 <script>{{ plotly_js | safe }}</script>
 </head>
 <body>
 <header>
-  <h1>{{ title }}</h1>
-  <p>Generated {{ timestamp }} | FLORA v{{ version }}</p>
+  <div class="topbar">
+    <h1>{{ title }}</h1>
+    <p>Generated {{ timestamp }} | FLORA v{{ version }}</p>
+  </div>
 </header>
+{% if sections %}
+<nav class="toc">
+  {% for section in sections %}
+  <a href="#{{ section.id }}">{{ section.title }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
 <div class="container">
+  {% if summary %}
+  <section class="summary-banner">
+    <div class="hero-card">
+      <h2>Analysis Summary</h2>
+      <p>{{ summary.overview }}</p>
+    </div>
+    <div class="notice-card">
+      <h3>Export Notes</h3>
+      <ul>
+        {% for item in summary.notes %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+  {% endif %}
 
 {% for section in sections %}
 <div class="section" id="{{ section.id }}">
@@ -71,6 +114,7 @@ _TEMPLATE = """<!DOCTYPE html>
   </div>
 
   {% elif section.type == "table" %}
+  {% if section.rows %}
   <table>
     <thead><tr>{% for col in section.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
     <tbody>
@@ -79,6 +123,9 @@ _TEMPLATE = """<!DOCTYPE html>
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <div class="empty-state">No rows available for this section.</div>
+  {% endif %}
 
   {% elif section.type == "text" %}
   <div class="text-block">{{ section.data }}</div>
@@ -156,7 +203,19 @@ class FLORAReport:
     ) -> None:
         self.title = title
         self.version = version
+        self.summary_overview = ""
+        self.summary_notes: list[str] = []
         self._sections: list[ReportSection] = []
+
+    def set_summary(
+        self,
+        overview: str,
+        notes: list[str] | None = None,
+    ) -> "FLORAReport":
+        """Set the report summary banner content."""
+        self.summary_overview = overview
+        self.summary_notes = notes or []
+        return self
 
     def add_metrics(
         self,
@@ -304,8 +363,6 @@ class FLORAReport:
         Path
             Resolved path to the saved report.
         """
-        from datetime import datetime
-
         dest = Path(path)
         dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -329,6 +386,10 @@ class FLORAReport:
             version=self.version,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
             sections=section_dicts,
+            summary={
+                "overview": self.summary_overview,
+                "notes": self.summary_notes,
+            } if self.summary_overview or self.summary_notes else None,
             plotly_js=get_plotlyjs(),
         )
 

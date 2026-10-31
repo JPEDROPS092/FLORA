@@ -23,6 +23,7 @@ A Python library for 16S rRNA amplicon microbiome analysis, combining QIIME2/DAD
 ```
 
 **Key design decisions:**
+
 - DuckDB is the central query engine between ingestion and ML. All analytical joins, aggregations, and feature matrix generation happen via SQL.
 - Polars handles high-performance tabular transformations.
 - Parquet is the intermediate storage format. DuckDB reads Parquet directly without loading everything into memory.
@@ -214,13 +215,31 @@ All tests use DuckDB in-memory. No external files or services required.
 
 ---
 
+## Web Interface
+
+The current UI entrypoint remains:
+
+```bash
+flora ui --host 127.0.0.1 --port 8765 --workdir results/ --log-level INFO
+```
+
+FLORA now serves a single frontend:
+
+- Angular SPA built from `frontend/angular/` and served from `src/flora/ui/static/app/`
+
+If the Angular build is absent, `flora ui` returns an explicit build-missing page with instructions instead of silently falling back to the legacy embedded UI.
+
+See `docs/architecture.md` and `docs/development.md` for the migration plan and frontend integration strategy.
+
+---
+
 ## Supported Public Datasets
 
-| Dataset | Source | Biome | Samples |
-|---------|--------|-------|---------|
-| MGYS00005116 | MGnify | Amazonian Forest | ~80 |
-| SRP151124 | NCBI SRA | Brazilian Tropical Soil | ~60 |
-| ERP009703 | MGnify | Amazonian Rhizosphere | ~120 |
+| Dataset      | Source   | Biome                   | Samples |
+| ------------ | -------- | ----------------------- | ------- |
+| MGYS00005116 | MGnify   | Amazonian Forest        | ~80     |
+| SRP151124    | NCBI SRA | Brazilian Tropical Soil | ~60     |
+| ERP009703    | MGnify   | Amazonian Rhizosphere   | ~120    |
 
 ---
 

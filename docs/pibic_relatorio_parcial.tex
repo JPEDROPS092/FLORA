@@ -17,6 +17,7 @@
 \usepackage{longtable}
 \usepackage{amsmath}
 \usepackage{xcolor}
+\usepackage{listings}
 
 \geometry{left=3cm,right=2cm,top=3cm,bottom=2cm}
 
@@ -37,6 +38,27 @@
 
 \titleformat{\section}{\normalfont\Large\bfseries}{\thesection.}{0.5em}{}
 \titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection.}{0.5em}{}
+\titleformat{\subsubsection}{\normalfont\normalsize\bfseries}{\thesubsubsection.}{0.5em}{}
+
+\definecolor{mermaidbg}{RGB}{246,248,250}
+\definecolor{mermaidrule}{RGB}{210,214,220}
+\definecolor{floraGreen}{RGB}{16,111,75}
+
+\lstdefinestyle{mermaid}{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{mermaidbg},
+    frame=single,
+    rulecolor=\color{mermaidrule},
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    breaklines=true,
+    xleftmargin=0.5em,
+    xrightmargin=0.5em,
+    aboveskip=1.0em,
+    belowskip=1.0em,
+    captionpos=b
+}
 
 \newcommand{\reportfigure}[3]{
     \begin{figure}[H]
@@ -90,9 +112,9 @@
 \end{titlepage}
 
 \begin{abstract}
-Este relatorio apresenta os resultados parciais do projeto FLORA (\textit{Friendly Local Open Resource for Analysis}), uma biblioteca em Python voltada para analise ponta a ponta de dados de microbioma baseados em amplicons do gene rRNA 16S. No periodo avaliado, o projeto evoluiu de uma proposta inicialmente centrada em interface para uma arquitetura de biblioteca cientifica robusta, organizada em camadas de ingestao, armazenamento analitico, engenharia de atributos, aprendizado de maquina, visualizacao e geracao automatizada de relatorios. Como resultado, foram consolidados um nucleo analitico baseado em DuckDB e Parquet, modulos de normalizacao composicional com transformacao CLR, rotinas de calculo de diversidade alfa e beta, modelos supervisionados com \textit{scikit-learn}/XGBoost e uma pipeline de relatorios interativos e documentacao cientifica. Em avaliacao experimental com dados do Earth Microbiome Project (EMP), a pipeline processou 89 amostras, preservou 1.183 atributos apos filtragem de prevalencia e obteve acuracia de 0{,}8636, F1-macro de 0{,}6381 e ROC-AUC de 0{,}9510 na classificacao de categorias ambientais. Os resultados indicam maturidade suficiente para a etapa seguinte, focada em usabilidade, ampliacao metodologica e validacao em novas bases publicas.
+Este relatorio apresenta o estado parcial do projeto FLORA (\textit{Friendly Local Open Resource for Analysis}), uma biblioteca cientifica em Python desenvolvida para analise ponta a ponta de dados de microbioma baseados em amplicons 16S rRNA. No periodo avaliado, o projeto deixou de ser apenas uma proposta de interface local e foi consolidado como uma base de software modular, com responsabilidades separadas em configuracao, ingestao, persistencia analitica em DuckDB, engenharia de atributos com Polars, diversidade alfa e beta, aprendizado de maquina, visualizacao, relatorios HTML e interface web local. A arquitetura implementada no repositorio organiza o fluxo entre fontes externas de dados publicos, armazenamento local em arquivos TSV/BIOM/Parquet, banco DuckDB e modulos de inferencia estatistica e preditiva, o que reduz acoplamento entre etapas e melhora reprodutibilidade. O projeto ja oferece download de bases publicas por conectores para MGnify, EMP e NCBI SRA, ingestao padronizada de \texttt{metadata.tsv}, \texttt{asv\_table.tsv}, \texttt{taxonomy.tsv} e BIOM, bem como geracao de matrizes normalizadas por \textit{raw}, TSS e CLR para modelagem com \textit{scikit-learn} e XGBoost. Do ponto de vista de engenharia, o sistema encontra-se pronto para empacotamento como distribuicao Python sob o nome \texttt{flora-bio}, com \textit{build backend} baseado em Hatchling, comando de entrada \texttt{flora} e organizacao compatível com publicacao futura em PyPI e integracao com documentacao tecnica. Em avaliacao experimental com subconjunto do Earth Microbiome Project, a pipeline processou 89 amostras, preservou 1.183 atributos apos filtragem de prevalencia e alcancou acuracia de 0{,}8636, F1-macro de 0{,}6381 e ROC-AUC de 0{,}9510 em tarefa de classificacao ambiental. Esses resultados indicam que o FLORA ja ultrapassou a fase de prototipo e se aproxima de um produto cientifico publicavel, reutilizavel e extensivel.
 \vspace{0.4cm}\\
-\textbf{Palavras-chave:} microbioma, rRNA 16S, bioinformatica, machine learning, DuckDB, composicionalidade.
+\textbf{Palavras-chave:} microbioma, 16S rRNA, DuckDB, bioinformatica, machine learning, software cientifico.
 \end{abstract}
 
 \newpage
@@ -101,87 +123,664 @@ Este relatorio apresenta os resultados parciais do projeto FLORA (\textit{Friend
 
 \section{Introducao}
 
-A analise de comunidades microbianas independentes de cultivo se consolidou como uma das principais abordagens para investigacao de ambientes naturais, sistemas hospedeiros e processos ecologicos. No contexto de microbiomas, o sequenciamento de amplicons do gene rRNA 16S permanece como uma estrategia amplamente adotada por apresentar custo relativamente reduzido, protocolos padronizados e vasta base comparativa na literatura. Ferramentas como QIIME 2 \cite{bolyen2019} e DADA2 \cite{callahan2016} elevaram o rigor da area ao permitir inferencia de variantes de sequencia de alta resolucao.
+A analise de microbiomas baseada em sequenciamento de amplicons 16S rRNA continua sendo uma estrategia central para caracterizacao de comunidades microbianas em ambientes naturais, hospedeiros e sistemas experimentais. A literatura consolidou ferramentas de alta relevancia para o processamento primario desses dados, como QIIME 2 \cite{bolyen2019} e DADA2 \cite{callahan2016}. Entretanto, a etapa posterior ao processamento biologico ainda costuma ser fragmentada: o pesquisador precisa combinar manualmente arquivos de abundancia, tabelas taxonomicas, metadados, rotinas de normalizacao, analise de diversidade, algoritmos de aprendizado de maquina e ferramentas de visualizacao.
 
-Apesar desse avanco, ainda persiste um gargalo importante entre o processamento primario dos dados e a construcao de modelos interpretaveis de aprendizado de maquina. Em geral, o pesquisador precisa integrar manualmente diferentes formatos de entrada, bancos de dados, bibliotecas de transformacao estatistica, pacotes de visualizacao e modelos preditivos. Esse acoplamento manual aumenta a complexidade do fluxo de trabalho, dificulta reproducibilidade e compromete a adocao por usuarios com menor familiaridade em programacao cientifica.
+Esse acoplamento manual cria quatro dificuldades recorrentes. Primeiro, aumenta o custo operacional de cada novo experimento. Segundo, dificulta a reproducao analitica por diferentes membros de um grupo de pesquisa. Terceiro, enfraquece o rastreamento do que foi feito em cada etapa. Quarto, torna mais dificil transformar um pipeline experimental em biblioteca cientifica reutilizavel.
 
-Outro ponto critico e a natureza composicional dos dados de abundancia microbiana. Matrizes de ASVs representam distribuicoes relativas, nao medidas absolutas independentes, de modo que abordagens estatisticas convencionais podem introduzir correlacoes espurias e interpretacoes enviesadas. A literatura recomenda transformacoes log-ratio, como CLR, para reduzir esse problema \cite{gloor2017}, mas tais procedimentos frequentemente permanecem ausentes ou opcionais em pipelines aplicados.
+O projeto FLORA foi concebido para enfrentar esse problema por meio de uma arquitetura local, aberta e modular. Em vez de tratar a analise como uma sucessao de scripts independentes, o FLORA organiza o fluxo em camadas coerentes: conectores para dados externos, ingestao validada, armazenamento analitico embutido, engenharia de atributos, modelagem estatistica, visualizacao e geracao automatizada de relatorios. O foco do projeto no periodo atual deixou de ser apenas uma interface amigavel e passou a ser a consolidacao da biblioteca como infraestrutura cientifica.
 
-Nesse contexto, o projeto \textbf{FLORA} foi concebido como uma infraestrutura local, aberta e integrada para analise de microbiomas. A proposta combina armazenamento analitico embutido, transformacoes composicionais, machine learning e geracao de relatorios em uma unica base de codigo, tornando o pipeline mais reproduzivel, auditavel e acessivel.
+Outro ponto central do trabalho e a natureza composicional dos dados de abundancia microbiana. Matrizes de ASVs representam distribuicoes relativas, nao contagens absolutas independentes, de forma que o uso direto de abundancias brutas pode introduzir correlacoes espurias. A literatura recomenda o uso de transformacoes do tipo log-ratio, especialmente CLR, para reduzir esse problema \cite{gloor2017}. O FLORA incorpora esse principio na propria camada analitica, permitindo gerar matrizes normalizadas de forma padronizada e reprodutivel.
 
 \section{Objetivos}
 
 \subsection{Objetivo Geral}
 
-Desenvolver uma biblioteca e plataforma local em Python para analise ponta a ponta de dados de amplicons 16S rRNA, integrando ingestao, armazenamento analitico, transformacoes composicionais, aprendizado de maquina e geracao automatizada de relatorios.
+Desenvolver uma biblioteca e plataforma local em Python para analise ponta a ponta de dados de microbioma por amplicons 16S rRNA, integrando aquisicao de dados, armazenamento analitico, transformacoes composicionais, aprendizado de maquina, visualizacao e geracao automatizada de relatorios.
 
 \subsection{Objetivos Especificos}
 
 \begin{itemize}[leftmargin=1.5cm]
-    \item desenvolver uma interface de uso amigavel, em CLI e camada web local, sobre um nucleo cientifico reutilizavel;
-    \item implementar uma arquitetura de armazenamento analitico local capaz de operar com dados maiores que a memoria RAM;
-    \item incorporar tecnicas adequadas para dados composicionais, especialmente a transformacao CLR, como etapa padrao para modelagem;
-    \item integrar processamento de sequencias e estruturas de dados oriundas de QIIME 2/DADA2;
-    \item disponibilizar modulos de visualizacao, relatorios e interpretabilidade de modelos.
+    \item consolidar o FLORA como biblioteca modular, e nao apenas como interface de demonstracao;
+    \item integrar o fluxo entre dados externos publicos, armazenamento local e banco analitico embutido;
+    \item estruturar a persistencia em DuckDB com esquema reprodutivel para amostras, ASVs, taxonomia, diversidade e log de pipeline;
+    \item implementar engenharia de atributos adequada para dados composicionais, com suporte a TSS e CLR;
+    \item disponibilizar componentes de classificacao, regressao, clustering e interpretabilidade;
+    \item produzir documentacao tecnica suficiente para publicacao futura da biblioteca e uso por outros pesquisadores.
 \end{itemize}
 
 \section{Metodologia}
 
-O desenvolvimento foi estruturado em modulos independentes, seguindo principios de engenharia de software cientifico e validacao incremental.
+\subsection{Visao geral da arquitetura}
 
-\subsection{Arquitetura de Dados}
+O desenvolvimento atual do FLORA foi organizado em pacotes Python com responsabilidades bem definidas, refletindo a estrutura do repositorio \texttt{src/flora/}. A biblioteca ja contem modulos para \texttt{config}, \texttt{core}, \texttt{db}, \texttt{io}, \texttt{diversity}, \texttt{feature\_engineering}, \texttt{ml}, \texttt{reports}, \texttt{viz}, \texttt{pipelines} e \texttt{ui}. Essa divisao nao e meramente cosmetica: ela reduz o acoplamento entre regras de negocio, persistencia, conectores externos e camada de apresentacao.
 
-Foi adotado o \textbf{DuckDB} \cite{raasveldt2019} como motor analitico local. A escolha se deve ao suporte eficiente a formato colunar, consultas SQL in-process e boa interoperabilidade com Arrow e Parquet. Essa camada concentra o estado do pipeline em tabelas normalizadas de amostras, ASVs, taxonomia e metricas derivadas, reduzindo dependencia de arquivos temporarios CSV e melhorando reproducibilidade.
+Do ponto de vista operacional, o objeto \texttt{FLORAPipeline} atua como orquestrador de alto nivel, enquanto \texttt{FloraDB} concentra o acesso ao DuckDB e os conectores em \texttt{flora.io.downloaders} concentram a comunicacao com bases externas. A Figura em Mermaid abaixo resume esse desenho.
 
-\subsection{Engenharia de Atributos}
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid de alto nivel da arquitetura do FLORA.},label={lst:mermaid_arquitetura}]
+flowchart TD
+    A[Dados externos\nMGnify / EMP / NCBI SRA] --> B[Downloaders em flora.io.downloaders]
+    B --> C[Arquivos locais\nFASTQ / BIOM / TSV / manifest.tsv / metadata.tsv]
+    C --> D[FLORAPipeline]
+    D --> E[Ingestao em flora.db.ingestion]
+    E --> F[(DuckDB local\nflora.duckdb)]
+    F --> G[Views analiticas\nv_asv_tss / v_asv_clr / v_taxonomy_full / v_diversity_wide]
+    G --> H[Feature engineering\nPolars + SQL]
+    H --> I[Diversidade alfa e beta]
+    H --> J[ML\nClassificacao / Regressao / Clustering]
+    J --> K[Interpretabilidade\nFeature importance / SHAP]
+    I --> L[Visualizacoes]
+    J --> L
+    K --> L
+    L --> M[FLORAReport HTML]
+    F --> N[UI local\nCLI + servidor HTTP + SPA Angular]
+\end{lstlisting}
 
-As transformacoes tabulares foram implementadas com \textbf{Polars}, priorizando operacoes vetorizadas e boa escalabilidade em matrizes de alta dimensionalidade. A normalizacao CLR passou a ser a forma padrao de gerar matrizes para aprendizado supervisionado. Tambem foram incorporadas rotinas para filtragem por prevalencia, diversidade alfa (Shannon, Chao1, Simpson) e diversidade beta com distancia Bray-Curtis.
+O diagrama \ref{lst:mermaid_arquitetura} evidencia uma decisao de engenharia importante: o banco local e a camada central de articulacao entre ingestao, transformacao, visualizacao e aprendizado de maquina. Em vez de cada etapa escrever arquivos temporarios em formatos distintos, o projeto concentra o estado analitico em um modelo persistente e consultavel.
 
-\subsection{Modelagem e Avaliacao}
+\subsection{Diagrama de classes do nucleo do sistema}
 
-No modulo de aprendizado de maquina foram estabilizadas classes para classificacao, regressao e clustering, com uso de \texttt{scikit-learn} e \texttt{XGBoost}. O desenho experimental passou a incorporar comparacao entre \textit{baseline} majoritario, Random Forest, SVM e XGBoost, sob diferentes normalizacoes (\textit{raw}, TSS e CLR). Alem de acuracia, o trabalho passou a considerar F1-macro, \textit{balanced accuracy} e ROC-AUC, o que melhora a leitura do desempenho em cenarios com desbalanceamento entre classes.
+O nucleo do software pode ser descrito por meio de poucas classes de alta responsabilidade. O principal ponto de entrada programatico e \texttt{FLORAPipeline}, que inicializa configuracao, workdir, logging e conexao com o banco. A classe \texttt{FloraDB} encapsula a conexao DuckDB e expande essa conexao com metodos de analise. Os objetos de ML, relatarios e interface local funcionam como consumidores dessa base.
 
-\subsection{Hipotese Experimental}
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid de classes do nucleo do FLORA.},label={lst:mermaid_classes}]
+classDiagram
+    class FloraConfig {
+        +database
+        +pipeline
+        +ml
+        +logging
+        +storage
+    }
 
-A hipotese central do trabalho foi explicitada da seguinte forma: \textit{a normalizacao composicional CLR melhora a separacao entre classes ambientais e o desempenho preditivo em relacao a abundancias brutas, mantendo coerencia biologica nos atributos mais discriminantes}. Essa formulacao desloca o FLORA de uma prova de conceito apenas tecnica para um estudo comparativo com valor cientifico verificavel.
+    class FLORAPipeline {
+        +config : FloraConfig
+        +workdir : Path
+        +db : FloraDB
+        +ingest_metadata(path)
+        +ingest_asv_table(path, wide_format)
+        +ingest_taxonomy(path)
+        +compute_diversity(sampling_depth, metrics)
+        +get_feature_matrix(normalize, min_prevalence)
+        +close()
+    }
 
-\subsection{Ligacao entre pipeline biologico e modelagem}
+    class FloraDB {
+        +connect(path, threads, memory_limit)
+        +initialize_schema()
+        +create_views()
+        +load_dataframe(table, df, if_exists)
+        +load_parquet(table, parquet_path)
+        +pivot_asv(normalize, min_prevalence)
+        +aggregate_by_taxon(level, group_by, metric)
+        +slice(train_filter, test_filter, features, target_column)
+        +table_info()
+        +query(sql)
+        +close()
+    }
 
-Para fins de interpretacao metodologica, o pipeline foi compreendido em duas camadas articuladas. A primeira e biologica: controle de qualidade dos reads, remocao de primers, \textit{denoising} por DADA2, geracao de ASVs, remocao de quimeras e classificacao taxonomica. A segunda e computacional: ingestao em DuckDB, transformacao composicional, filtragem por prevalencia, diversidade, treinamento supervisionado e interpretacao das features. O valor cientifico do FLORA depende exatamente dessa continuidade entre preparo biologico e inferencia estatistica.
+    class QueryResult {
+        +to_polars()
+        +to_pandas()
+        +to_arrow()
+        +to_parquet(path)
+    }
 
-\subsection{Documentacao e Visualizacao}
+    class MicrobiomeClassifier {
+        +fit(train_df, test_df, cv_folds, run_name)
+    }
 
-O projeto passou a gerar relatorios HTML autocontidos com visualizacoes interativas. Paralelamente, foram produzidos artefatos estaticos em PNG e documentos em Markdown para uso direto em relatorios institucionais e apresentacoes. Esse passo conecta a camada computacional ao produto academico esperado em PIBIC.
+    class MicrobiomeRegressor {
+        +fit(train_df, test_df, cv_folds)
+    }
+
+    class MicrobiomeClusterer {
+        +fit(df)
+    }
+
+    class SHAPAnalyzer {
+        +explain(df)
+    }
+
+    class FLORAReport {
+        +add_metrics(title, metrics)
+        +add_table(title, df)
+        +add_plot(title, fig)
+        +save(path)
+    }
+
+    class FLORAState {
+        +config
+        +workdir
+        +pipeline
+    }
+
+    class MGnifyDownloader {
+        +fetch(study_accession, output_dir, max_samples)
+        +fetch_analyses(study_accession, output_dir, max_analyses)
+    }
+
+    class NCBISRADownloader {
+        +fetch(accessions, output_dir)
+    }
+
+    class EMPDownloader {
+        +fetch(output_dir, max_samples)
+    }
+
+    FLORAPipeline --> FloraConfig
+    FLORAPipeline --> FloraDB
+    FloraDB --> QueryResult
+    FLORAPipeline --> MicrobiomeClassifier
+    FLORAPipeline --> MicrobiomeRegressor
+    FLORAPipeline --> MicrobiomeClusterer
+    MicrobiomeClassifier --> SHAPAnalyzer
+    FLORAPipeline --> FLORAReport
+    FLORAState --> FLORAPipeline
+    FLORAPipeline --> MGnifyDownloader
+    FLORAPipeline --> NCBISRADownloader
+    FLORAPipeline --> EMPDownloader
+\end{lstlisting}
+
+Esse diagrama esta diretamente alinhado a classes reais do repositorio, encontradas em arquivos como \texttt{src/flora/pipelines/main\_pipeline.py}, \texttt{src/flora/db/connection.py}, \texttt{src/flora/ml/classification/classifier.py}, \texttt{src/flora/reports/html\_report.py} e \texttt{src/flora/io/downloaders.py}. Isso e importante porque o relatorio passa a documentar a implementacao existente, e nao apenas uma arquitetura idealizada.
+
+\subsection{Conexao com dados externos e armazenamento local}
+
+Uma contribuicao importante do projeto no periodo foi a consolidacao da camada de conectores para dados publicos. O arquivo \texttt{src/flora/io/downloaders.py} implementa tres pontos de entrada:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \textbf{MGnifyDownloader}: acessa a API REST publica do EMBL-EBI, busca amostras, \textit{runs}, arquivos FASTQ e tambem pode baixar analises precomputadas;
+    \item \textbf{NCBISRADownloader}: integra o ecossistema do NCBI SRA para baixar experimentos por accession;
+    \item \textbf{EMPDownloader}: organiza o acesso a dados do Earth Microbiome Project.
+\end{itemize}
+
+Esses conectores nao entregam dados diretamente ao modelo. Eles primeiro constroem um estado local reprodutivel em disco, tipicamente sob \texttt{data/raw/} ou outro diretório configurado pelo usuario. O FLORA escreve \texttt{manifest.tsv}, \texttt{metadata.tsv}, arquivos \texttt{fastq/}, tabelas \texttt{asv\_table.tsv} e \texttt{taxonomy.tsv} quando aplicavel. Depois disso, a ingestao converte os dados para DataFrames e os persiste no banco analitico.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid do fluxo entre fontes externas, arquivos locais e ingestao.},label={lst:mermaid_download}]
+flowchart LR
+    subgraph Externo
+        A[MGnify REST API]
+        B[NCBI SRA]
+        C[EMP portal / Qiita]
+    end
+
+    subgraph Conectores
+        D[MGnifyDownloader]
+        E[NCBISRADownloader]
+        F[EMPDownloader]
+    end
+
+    subgraph DiscoLocal
+        G[data/raw/fastq]
+        H[metadata.tsv]
+        I[manifest.tsv]
+        J[asv_table.tsv]
+        K[taxonomy.tsv]
+        L[cache parquet/]
+    end
+
+    subgraph Ingestao
+        M[ingest_metadata]
+        N[ingest_tsv_asv / ingest_biom]
+        O[ingest_taxonomy]
+    end
+
+    A --> D
+    B --> E
+    C --> F
+    D --> G
+    D --> H
+    D --> I
+    D --> J
+    D --> K
+    E --> G
+    E --> I
+    F --> H
+    F --> J
+    F --> K
+    H --> M
+    J --> N
+    K --> O
+    N --> L
+    M --> P[(DuckDB)]
+    N --> P
+    O --> P
+\end{lstlisting}
+
+Esse fluxo e relevante para o objetivo da pesquisa porque o FLORA nao depende apenas de dados sinteticos ou de um formato unico de entrada. Ele permite baixar, organizar, validar e ingerir dados reais, aproximando a biblioteca de um uso efetivo por pesquisadores de microbioma.
+
+\subsection{Banco local DuckDB}
+
+\subsubsection{Motivacao para uso do DuckDB}
+
+O DuckDB \cite{raasveldt2019} foi adotado como motor analitico central do FLORA porque oferece operacao \textit{in-process}, boa performance para consultas colunares, suporte a SQL analitico e interoperabilidade com Arrow e Parquet. Na pratica, isso significa que o pipeline pode manipular grandes matrizes de abundancia e combinacoes entre taxonomia e metadados sem depender de um servidor de banco externo. Para o contexto de um projeto PIBIC, isso e estrategico: o sistema continua local, leve e reproduzivel.
+
+No codigo, a classe \texttt{FloraDB} configura a conexao, ajusta \texttt{threads} e \texttt{memory\_limit}, executa DDL, carrega DataFrames Polars e oferece metodos de consulta e transformacao. O banco pode ser efemero em \texttt{:memory:} para testes ou persistente em arquivo, tipicamente \texttt{results/flora.duckdb}, para execucao real.
+
+\subsubsection{Esquema relacional implementado}
+
+O esquema do banco esta definido em \texttt{src/flora/db/schema.py}. O desenho segue uma estrutura proxima a \textit{star schema}, com tabelas centrais de fatos e dimensoes analiticas. A Tabela \ref{tab:duckdb_tables} resume o papel de cada tabela.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}p{7.8cm}}
+    \caption{Documentacao das tabelas locais do DuckDB utilizadas no FLORA.}
+    \label{tab:duckdb_tables}\\
+    \toprule
+    \textbf{Tabela} & \textbf{Tipo} & \textbf{Descricao e campos principais} \\
+    \midrule
+    \endfirsthead
+    \toprule
+    \textbf{Tabela} & \textbf{Tipo} & \textbf{Descricao e campos principais} \\
+    \midrule
+    \endhead
+    \texttt{samples} & dimensao & Uma linha por amostra biologica. Guarda \texttt{sample\_id}, \texttt{biome}, \texttt{location}, \texttt{latitude}, \texttt{longitude} e \texttt{sequencing\_depth}. \\
+    \texttt{sample\_metadata} & extensao de metadados & Armazena pares \texttt{(sample\_id, key, value)} para colunas extras nao previstas no nucleo da tabela \texttt{samples}. Permite flexibilidade sem perder normalizacao. \\
+    \texttt{asv} & fato principal & Uma linha por observacao \texttt{(sample\_id, feature\_id)} com campo \texttt{abundance}. E a tabela mais importante para transformacoes, pivots e agregacoes taxonomicas. \\
+    \texttt{taxonomy} & dimensao taxonomica & Mapeia \texttt{feature\_id} para \texttt{kingdom}, \texttt{phylum}, \texttt{class}, \texttt{order}, \texttt{family}, \texttt{genus}, \texttt{species} e \texttt{confidence}. \\
+    \texttt{diversity\_alpha} & resultado derivado & Guarda metricas por amostra em formato longo: \texttt{sample\_id}, \texttt{metric}, \texttt{value}, \texttt{sampling\_depth}. \\
+    \texttt{diversity\_beta} & resultado derivado & Guarda distancias pareadas entre amostras com chaves \texttt{sample\_a}, \texttt{sample\_b}, \texttt{metric} e \texttt{distance}. \\
+    \texttt{dim\_reduction} & resultado derivado & Estrutura prevista para armazenar componentes de reducao de dimensionalidade por amostra, metodo e componente. \\
+    \texttt{pipeline\_log} & auditoria & Registra \texttt{run\_id}, etapa, status, tempos de inicio e fim, parametros e mensagens, permitindo rastreabilidade do pipeline. \\
+    \bottomrule
+\end{longtable}
+
+Além das tabelas, o FLORA cria \textit{views} padrao em \texttt{FloraDB.create\_views()}. Entre elas estao \texttt{v\_asv\_tss}, \texttt{v\_asv\_clr}, \texttt{v\_taxonomy\_full} e \texttt{v\_diversity\_wide}. Essas \textit{views} funcionam como uma camada analitica intermediaria: deixam prontas consultas recorrentes sem duplicar dados fisicamente.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid do esquema logico do banco DuckDB do FLORA.},label={lst:mermaid_duckdb}]
+classDiagram
+    class samples {
+        sample_id PK
+        biome
+        location
+        latitude
+        longitude
+        sequencing_depth
+    }
+
+    class sample_metadata {
+        sample_id FK
+        key PK
+        value
+    }
+
+    class asv {
+        sample_id FK
+        feature_id PK
+        abundance
+    }
+
+    class taxonomy {
+        feature_id PK
+        kingdom
+        phylum
+        class
+        order
+        family
+        genus
+        species
+        confidence
+    }
+
+    class diversity_alpha {
+        sample_id FK
+        metric PK
+        value
+        sampling_depth
+    }
+
+    class diversity_beta {
+        sample_a
+        sample_b
+        metric
+        distance
+    }
+
+    class dim_reduction {
+        sample_id FK
+        method
+        component
+        value
+    }
+
+    class pipeline_log {
+        run_id
+        step
+        status
+        started_at
+        finished_at
+        params
+        message
+    }
+
+    samples "1" --> "*" sample_metadata : possui
+    samples "1" --> "*" asv : observa
+    taxonomy "1" --> "*" asv : anota
+    samples "1" --> "*" diversity_alpha : resume
+    samples "1" --> "*" dim_reduction : projeta
+\end{lstlisting}
+
+\subsubsection{Como o DuckDB se conecta com o resto do sistema}
+
+No FLORA, o banco nao e apenas um repositório passivo. Ele fornece operacoes analiticas que simplificam diretamente as etapas posteriores do pipeline:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{pivot\_asv()} gera matrizes amostra $\times$ feature com suporte nativo a \textit{raw}, TSS e CLR;
+    \item \texttt{aggregate\_by\_taxon()} junta \texttt{asv}, \texttt{taxonomy} e \texttt{samples} para sumarizacoes biologicas;
+    \item \texttt{slice()} produz subconjuntos treino/teste com filtros SQL;
+    \item \texttt{query()} e \texttt{QueryResult} permitem exportacao para Polars, Pandas, Arrow e Parquet.
+\end{itemize}
+
+Em outras palavras, o banco local e tambem uma API analitica. Isso elimina a necessidade de reimplementar a mesma logica em diferentes scripts e torna a arquitetura muito mais consistente.
+
+\subsection{Engenharia de atributos, diversidade e aprendizado de maquina}
+
+As transformacoes tabulares sao implementadas principalmente com Polars, enquanto as operacoes relacionais e de agregacao ficam no DuckDB. Essa combinacao se mostrou adequada para dados de microbioma porque une a expressividade de SQL com a eficiencia vetorizada de um DataFrame colunar moderno.
+
+Na camada de atributos, o sistema suporta:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item abundancias brutas;
+    \item TSS (\textit{Total Sum Scaling});
+    \item CLR (\textit{Centered Log-Ratio});
+    \item filtragem por prevalencia;
+    \item reducao de dimensionalidade e diversidade.
+\end{itemize}
+
+Na camada de modelagem, o projeto ja implementa classes dedicadas para:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{MicrobiomeClassifier}, com suporte a Random Forest, SVM e XGBoost;
+    \item \texttt{MicrobiomeRegressor};
+    \item \texttt{MicrobiomeClusterer};
+    \item \texttt{HyperparameterTuner};
+    \item \texttt{SHAPAnalyzer}.
+\end{itemize}
+
+Essa organizacao fortalece a ideia de biblioteca. Em vez de o usuario escrever um notebook monolitico, ele passa a montar o fluxo com componentes especializados, todos consumindo um mesmo formato de matriz gerado a partir do banco local.
+
+\subsection{Interface local, servidor HTTP e relatorios}
+
+Embora o foco do periodo tenha migrado para a consolidacao da biblioteca, a camada de interface local permaneceu como parte importante da arquitetura. O comando de entrada \texttt{flora} e definido em \texttt{pyproject.toml} por meio do \textit{entry point} \texttt{flora = flora.ui.cli:main}. A CLI atual ja expoe comandos para:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item iniciar a interface web local com \texttt{flora ui};
+    \item executar uma pipeline configurada com \texttt{flora run};
+    \item baixar datasets publicos com \texttt{flora download mgnify}, \texttt{sra}, \texttt{emp} e \texttt{synthetic}.
+\end{itemize}
+
+Na camada HTTP, \texttt{src/flora/ui/server.py} organiza o despacho das rotas e integra o estado da interface por meio de \texttt{FLORAState}. O frontend compilado da SPA Angular e servido a partir de \texttt{src/flora/ui/static/app/}, mantendo a operacao local sem necessidade de infraestrutura web externa. Isso reforca o conceito original do projeto: uma plataforma \textit{friendly}, local e aberta.
+
+Os relatarios sao produzidos por \texttt{FLORAReport}, em \texttt{src/flora/reports/html\_report.py}. Esse componente monta um HTML autocontido com metricas, tabelas e graficos Plotly. Assim, o produto final da analise nao e apenas um banco ou um notebook, mas um artefato compartilhavel e auditavel.
+
+\subsection{Sequencia operacional de uma execucao completa}
+
+Do ponto de vista de engenharia de software, uma das contribuicoes mais relevantes do FLORA e tornar explicita a sequencia operacional de uma corrida analitica. Em um cenario tradicional, essas etapas ficam espalhadas em scripts, notebooks e chamadas manuais. No FLORA, a execucao segue um encadeamento previsivel, iniciado pelo usuario via CLI ou interface local.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid de sequencia para uma corrida completa do FLORA.},label={lst:mermaid_sequence}]
+sequenceDiagram
+    actor U as Usuario
+    participant CLI as flora CLI
+    participant P as FLORAPipeline
+    participant DB as FloraDB / DuckDB
+    participant ING as db.ingestion
+    participant ML as Modulos ML
+    participant REP as FLORAReport
+
+    U->>CLI: flora run config.yaml
+    CLI->>P: inicializa pipeline
+    P->>DB: connect() + initialize_schema() + create_views()
+    CLI->>P: ingest_metadata()
+    P->>ING: ingest_metadata()
+    ING->>DB: load_dataframe(samples, sample_metadata)
+    CLI->>P: ingest_asv_table()
+    P->>ING: ingest_tsv_asv() ou ingest_biom()
+    ING->>DB: load_dataframe(asv)
+    CLI->>P: ingest_taxonomy()
+    P->>ING: ingest_taxonomy()
+    ING->>DB: load_dataframe(taxonomy)
+    CLI->>P: compute_diversity()
+    P->>DB: pivot_asv()
+    P->>DB: load_dataframe(diversity_alpha)
+    CLI->>P: get_feature_matrix(normalize="clr")
+    P->>DB: pivot_asv(normalize="clr")
+    CLI->>ML: fit(train_df, test_df)
+    ML-->>CLI: metricas + importancias + previsoes
+    CLI->>REP: add_metrics() / add_plot() / save()
+    REP-->>U: report.html
+\end{lstlisting}
+
+O diagrama \ref{lst:mermaid_sequence} mostra que o FLORA nao e apenas uma colecao de utilitarios: ele define uma linha de montagem analitica que pode ser auditada, repetida e documentada. Esse nivel de explicitacao e particularmente importante em software cientifico, onde reproducibilidade tem valor metodologico.
+
+\subsection{Mapa de modulos do software}
+
+O repositorio atual permite descrever o sistema em camadas funcionais. A Tabela \ref{tab:modulos_flora} resume os modulos centrais e seus papeis.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{3.1cm} >{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{6.8cm}}
+    \caption{Mapa resumido dos modulos de software do FLORA.}
+    \label{tab:modulos_flora}\\
+    \toprule
+    \textbf{Modulo} & \textbf{Arquivos principais} & \textbf{Responsabilidade} \\
+    \midrule
+    \endfirsthead
+    \toprule
+    \textbf{Modulo} & \textbf{Arquivos principais} & \textbf{Responsabilidade} \\
+    \midrule
+    \endhead
+    \texttt{config} & \texttt{settings.py} & Define configuracao tipada por Pydantic para banco, pipeline, ML, logging e armazenamento. \\
+    \texttt{core} & \texttt{exceptions.py}, \texttt{logging.py} & Centraliza excecoes de dominio e configuracao de logging. \\
+    \texttt{db} & \texttt{connection.py}, \texttt{schema.py}, \texttt{ingestion.py} & Implementa banco DuckDB, esquema, ingestao, \textit{views} e consultas analiticas. \\
+    \texttt{io} & \texttt{downloaders.py}, \texttt{validators.py} & Conecta o sistema a fontes externas e faz validacoes de entrada. \\
+    \texttt{diversity} & \texttt{alpha.py}, \texttt{beta.py} & Calcula diversidade alfa e beta. \\
+    \texttt{feature\_engineering} & \texttt{normalization.py}, \texttt{selection.py}, \texttt{reduction.py}, \texttt{encoding.py} & Implementa normalizacao, selecao de atributos, codificacao e reducao de dimensionalidade. \\
+    \texttt{ml} & \texttt{classification/}, \texttt{regression/}, \texttt{clustering/}, \texttt{evaluation/}, \texttt{optimization/}, \texttt{explainability/} & Reune algoritmos de modelagem, metricas, tuning e interpretabilidade. \\
+    \texttt{reports} & \texttt{html\_report.py} & Gera relatarios HTML autocontidos. \\
+    \texttt{viz} & \texttt{taxonomy\_plots.py}, \texttt{diversity\_plots.py}, \texttt{ml\_plots.py} & Produz artefatos visuais para diversidade, taxonomia e desempenho de modelos. \\
+    \texttt{pipelines} & \texttt{main\_pipeline.py} & Orquestra o fluxo ponta a ponta. \\
+    \texttt{ui} & \texttt{cli.py}, \texttt{server.py}, \texttt{frontend.py}, \texttt{handlers/} & Exponhe a biblioteca como CLI, API HTTP local e frontend web. \\
+    \bottomrule
+\end{longtable}
+
+Essa modularizacao facilita manutencao e extensao. Por exemplo, novos conectores podem ser adicionados em \texttt{io}, sem alterar a camada de ML; novas estrategias de normalizacao podem ser adicionadas em \texttt{feature\_engineering}, sem modificar o servidor HTTP.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid das camadas de software do FLORA.},label={lst:mermaid_layers}]
+flowchart TB
+    A[Presentation Layer\ncli / server / handlers / SPA] --> B[Application Layer\nFLORAPipeline]
+    B --> C[Analytics Layer\nFloraDB / SQL / Views]
+    B --> D[Domain Services\ndiversity / feature_engineering / ml / reports / viz]
+    B --> E[External Adapters\ndownloaders / filesystem / config]
+    C --> F[(DuckDB)]
+    E --> G[APIs externas e arquivos locais]
+\end{lstlisting}
+
+\subsection{Contratos da interface CLI e da API local}
+
+Outro ponto importante para documentar o software e o contrato externo que ele expoe ao usuario. O FLORA fornece dois contratos principais: a CLI e a API HTTP local servida pela interface web.
+
+\subsubsection{CLI}
+
+A CLI, definida em \texttt{src/flora/ui/cli.py}, oferece atualmente tres familias de comandos:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{flora ui}: sobe o servidor local e a interface web;
+    \item \texttt{flora run}: executa a pipeline completa a partir de um arquivo de configuracao;
+    \item \texttt{flora download}: baixa datasets publicos, com subcomandos para \texttt{mgnify}, \texttt{sra}, \texttt{emp} e \texttt{synthetic}.
+\end{itemize}
+
+Essa escolha de design e relevante porque evita que o usuario precise conhecer a estrutura interna do codigo. O software se torna consumivel como ferramenta, e nao apenas como repositório.
+
+\subsubsection{API HTTP local}
+
+Na camada HTTP, o servidor organiza rotas GET e POST para ingestao, visualizacao, relatorios e estado da aplicacao. A Tabela \ref{tab:api_flora} resume os principais endpoints definidos atualmente.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{2.2cm} >{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{7.4cm}}
+    \caption{Principais endpoints da API local do FLORA.}
+    \label{tab:api_flora}\\
+    \toprule
+    \textbf{Metodo} & \textbf{Endpoint} & \textbf{Funcao} \\
+    \midrule
+    \endfirsthead
+    \toprule
+    \textbf{Metodo} & \textbf{Endpoint} & \textbf{Funcao} \\
+    \midrule
+    \endhead
+    GET & \texttt{/api/status} & Retorna estado do sistema, workdir, modo do frontend e informacao resumida das tabelas. \\
+    GET & \texttt{/api/logs} & Retorna buffer de logs para inspeção pela interface. \\
+    GET & \texttt{/api/feature\_matrix} & Exponhe a matriz de atributos gerada pelo backend. \\
+    GET & \texttt{/api/viz/taxonomy} & Agrega abundancias por nivel taxonomico. \\
+    GET & \texttt{/api/viz/pcoa} & Retorna dados para PCoA e analise beta. \\
+    GET & \texttt{/api/viz/alpha} & Exponhe metricas de diversidade alfa por grupo. \\
+    GET & \texttt{/api/viz/taxonomy\_heatmap} & Retorna estrutura para heatmap taxonomico. \\
+    GET & \texttt{/api/viz/beta\_heatmap} & Retorna matriz de distancias beta. \\
+    GET & \texttt{/api/viz/krona} & Prepara dados hierarquicos para visualizacao estilo Krona. \\
+    GET & \texttt{/api/viz/tree} & Exponhe estrutura de arvore taxonomica. \\
+    GET & \texttt{/api/viz/network} & Exponhe relacoes para grafos de coocorrencia ou estrutura taxonomica. \\
+    POST & \texttt{/api/ingest/metadata} & Ingestao de metadados. \\
+    POST & \texttt{/api/ingest/asv} & Ingestao de tabela ASV. \\
+    POST & \texttt{/api/ingest/taxonomy} & Ingestao de taxonomia. \\
+    POST & \texttt{/api/diversity} & Dispara calculo de diversidade. \\
+    POST & \texttt{/api/ml/classify} & Dispara classificacao supervisionada. \\
+    POST & \texttt{/api/ml/cluster} & Dispara clustering. \\
+    POST & \texttt{/api/download/mgnify} & Aciona downloader de MGnify. \\
+    POST & \texttt{/api/download/sra} & Aciona downloader de SRA. \\
+    POST & \texttt{/api/download/emp} & Aciona downloader de EMP. \\
+    POST & \texttt{/api/download/synthetic} & Gera dados sinteticos. \\
+    POST & \texttt{/api/report} & Gera relatorio analitico. \\
+    \bottomrule
+\end{longtable}
+
+Esse conjunto de endpoints e suficiente para sustentar uma interface web local desacoplada do nucleo cientifico. Em outras palavras, a UI consome contratos JSON, enquanto a logica de negocio permanece no backend Python.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid da interacao entre frontend SPA e backend local.},label={lst:mermaid_ui_backend}]
+sequenceDiagram
+    actor U as Usuario
+    participant FE as Frontend Angular
+    participant API as servidor HTTP FLORA
+    participant H as handlers/*
+    participant ST as FLORAState
+    participant P as FLORAPipeline
+    participant DB as DuckDB
+
+    U->>FE: abre interface local
+    FE->>API: GET /api/status
+    API->>H: status.get_status(...)
+    H->>ST: consulta estado atual
+    ST->>P: acesso ao pipeline
+    P->>DB: table_info()
+    DB-->>P: resumo das tabelas
+    P-->>H: payload JSON
+    H-->>API: resposta
+    API-->>FE: status do sistema
+    U->>FE: solicita grafico ou ingestao
+    FE->>API: GET/POST /api/...
+    API->>H: handler especifico
+    H->>P: executa caso de uso
+    P->>DB: consulta ou escrita
+    DB-->>P: resultado
+    P-->>H: payload
+    H-->>API: JSON
+    API-->>FE: atualiza tela
+\end{lstlisting}
+
+\subsection{Empacotamento da biblioteca e estrategia de publicacao}
+
+Um aspecto central para a maturidade do projeto e a preparacao para publicacao como biblioteca reutilizavel. O arquivo \texttt{pyproject.toml} ja define:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item nome do projeto: \texttt{flora-bio};
+    \item versao atual: \texttt{0.1.0};
+    \item \textit{build backend}: \texttt{hatchling.build};
+    \item dependencias obrigatorias e extras opcionais;
+    \item \textit{entry point} de CLI;
+    \item metadados de homepage, documentacao, repositorio e issues.
+\end{itemize}
+
+Isso significa que o repositorio ja nao esta organizado apenas para uso local do desenvolvedor. Ele foi estruturado para gerar uma distribuicao wheel/sdist, instalar via \texttt{pip}, manter extras para ambientes opcionais e, posteriormente, ser publicado em um indice de pacotes como PyPI. Em termos de engenharia de software, isso muda o status do projeto: o FLORA passa a ser pensado como produto distribuivel.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid do ciclo de empacotamento e publicacao da biblioteca.},label={lst:mermaid_publish}]
+flowchart TD
+    A[Codigo fonte em src/flora] --> B[pyproject.toml]
+    B --> C[Hatchling build backend]
+    C --> D[Wheel / sdist]
+    D --> E[Instalacao local com pip install -e .]
+    D --> F[Publicacao futura no PyPI]
+    A --> G[Testes com pytest]
+    A --> H[Documentacao tecnica]
+    G --> C
+    H --> F
+    F --> I[Usuario final instala flora-bio]
+    I --> J[CLI flora]
+    I --> K[Uso programatico via import flora]
+\end{lstlisting}
+
+No contexto do relatorio parcial, ainda e mais adequado afirmar que a biblioteca esta \textbf{preparada para publicacao} do que afirmar que ja esta publicada. Mesmo assim, a infraestrutura necessaria para esse passo ja existe e foi efetivamente implementada.
+
+\subsection{Nota sobre os diagramas Mermaid}
+
+Os diagramas Mermaid deste documento foram incluidos em formato textual diretamente no fonte \LaTeX, o que facilita sua manutencao junto ao codigo e a reutilizacao em README, MkDocs, documentacao web e apresentacoes. Em uma etapa posterior, esses mesmos blocos podem ser renderizados como figuras SVG ou PNG para incorporacao visual direta ao PDF final.
+
+\subsection{Qualidade de software, testes e observabilidade}
+
+Uma biblioteca cientifica nao deve ser avaliada apenas pela existencia de algoritmos. Ela precisa oferecer previsibilidade operacional. Nesse aspecto, o FLORA avancou em quatro direcoes.
+
+Primeiro, o projeto possui uma estrutura formal de testes em \texttt{tests/}, incluindo casos unitarios e de integracao para componentes como frontend, servidor HTTP, camada de HTTP utilitaria e bootstrap da UI. Segundo, a camada de excecoes em \texttt{src/flora/core/exceptions.py} padroniza erros de pipeline, validacao, banco, ingestao e ML, reduzindo falhas opacas. Terceiro, a tabela \texttt{pipeline\_log} e o buffer de logs do servidor adicionam rastreabilidade operacional. Quarto, o proprio \texttt{pyproject.toml} define execucao padronizada de testes com \texttt{pytest} e cobertura.
+
+Do ponto de vista de software cientifico, essa preocupacao e essencial. Sem logs, testes e contratos claros, o pipeline pode ate funcionar em um computador de desenvolvimento, mas nao se sustenta como ferramenta reutilizavel. Ao incluir auditoria de execucao e testes automatizados, o FLORA se aproxima de uma base de software mais robusta para pesquisa.
+
+\begin{lstlisting}[style=mermaid,caption={Diagrama Mermaid da camada de qualidade de software do FLORA.},label={lst:mermaid_quality}]
+flowchart LR
+    A[Codigo fonte] --> B[pytest]
+    A --> C[ruff / mypy]
+    A --> D[logging estruturado]
+    D --> E[pipeline_log]
+    D --> F[/api/logs]
+    B --> G[Confiabilidade]
+    C --> G
+    E --> H[Rastreabilidade]
+    F --> H
+    G --> I[Release mais segura]
+    H --> I
+\end{lstlisting}
+
+\subsection{Implicacoes cientificas da arquitetura de software}
+
+Do ponto de vista academico, detalhar a arquitetura do software nao e um desvio do problema biologico; e parte do proprio resultado cientifico. O FLORA propoe que uma analise de microbioma possa ser reproduzida em uma cadeia fechada de transformacoes observaveis, indo do download do dado bruto ao relatorio final. Isso tem pelo menos quatro implicacoes.
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item melhora reproducibilidade, porque reduz etapas manuais e estados ocultos;
+    \item melhora auditabilidade, porque os dados e resultados ficam concentrados em um banco local e em logs de pipeline;
+    \item melhora extensibilidade, porque novos modelos e novos conectores podem ser acoplados sem reescrever o sistema inteiro;
+    \item melhora transferibilidade, porque o software fica apto a ser instalado por terceiros como biblioteca Python.
+\end{itemize}
+
+Em um projeto PIBIC com foco em software cientifico, essa transicao de \textit{script de pesquisa} para \textit{biblioteca reproduzivel} constitui, por si so, um resultado relevante.
 
 \section{Resultados Parciais e Discussao}
 
-No periodo avaliado, houve uma redefinicao arquitetural importante. A proposta inicial dava maior peso a uma interface grafica, mas a experiencia de desenvolvimento mostrou que a sustentabilidade do projeto dependia da consolidacao previa de um nucleo cientifico robusto. A partir disso, o FLORA passou a ser organizado como biblioteca modular, sobre a qual interfaces e automacoes podem ser construidas com menor risco tecnico.
+No periodo avaliado, houve uma redefinicao arquitetural importante. A proposta inicial dava maior peso a uma interface grafica, mas a experiencia de desenvolvimento mostrou que a sustentabilidade do projeto dependia da consolidacao previa de um nucleo cientifico robusto. A partir disso, o FLORA passou a ser organizado como biblioteca modular, sobre a qual interfaces, relatorios e automatizacoes podem ser construidos com menor risco tecnico.
 
 Os principais avancos consolidados foram:
 
 \begin{itemize}[leftmargin=1.5cm]
-    \item \textbf{camada DuckDB estabilizada:} unificacao do pipeline em banco analitico local e persistencia de tabelas biologicas e metricas derivadas;
-    \item \textbf{ingestao de dados reais do EMP:} incorporacao de caminho robusto de ingestao por BIOM filtrado por metadados, reduzindo custo computacional e aumentando estabilidade;
-    \item \textbf{pipeline composicional:} geracao automatica de matriz CLR com filtragem por prevalencia para alimentar modulos de ML;
-    \item \textbf{visualizacao e relatorios:} geracao de relatorio HTML, markdown analitico e figuras estaticas prontas para relatorio academico;
-    \item \textbf{suite de testes funcional:} a bateria de testes executou integralmente com 73 testes aprovados sem falhas funcionais.
+    \item \textbf{camada DuckDB estabilizada:} esquema relacional local com 8 tabelas e 6 indices, mais \textit{views} analiticas para TSS, CLR, diversidade e taxonomia;
+    \item \textbf{conectores de dados publicos:} suporte a MGnify, EMP e NCBI SRA com escrita local de manifestos e metadados;
+    \item \textbf{pipeline composicional:} geracao automatica de matrizes normalizadas por \textit{raw}, TSS e CLR com filtragem por prevalencia;
+    \item \textbf{camada de ML funcional:} classificacao, regressao, clustering, tuning e interpretabilidade;
+    \item \textbf{relatorios e interface local:} producao de HTML autocontido, API HTTP local e frontend SPA;
+    \item \textbf{preparacao para distribuicao:} estrutura de pacote compatível com \texttt{pip}, Hatchling e futura publicacao.
 \end{itemize}
 
 \subsection{Sintese do que foi efetivamente desenvolvido}
 
-Considerando o estado atual do repositorio e das pipelines executadas no periodo, o FLORA ja entrega um conjunto coerente de componentes cientificos e operacionais:
+Considerando o estado atual do repositorio, o FLORA ja entrega um conjunto coerente de componentes cientificos e operacionais:
 
 \begin{itemize}[leftmargin=1.5cm]
-    \item \textbf{ingestao microbiologica estruturada:} leitura de \texttt{metadata.tsv}, \texttt{taxonomy.tsv}, tabelas de ASV em TSV e BIOM, com persistencia em DuckDB;
-    \item \textbf{camada analitica local:} consultas em DuckDB, exportacao tabular e estrutura apropriada para analise \textit{out-of-core};
-    \item \textbf{engenharia de atributos:} matrizes largas por amostra, filtro por prevalencia, transformacoes \textit{raw}, TSS e CLR;
-    \item \textbf{diversidade microbiana:} calculo de Shannon, Chao1, Simpson, Bray-Curtis e PCoA;
-    \item \textbf{aprendizado de maquina:} treinamento e avaliacao com \textit{baseline} majoritario, Random Forest, SVM e XGBoost;
-    \item \textbf{interpretabilidade:} importancia de atributos, SHAP e mapeamento taxonomico das features mais discriminantes;
-    \item \textbf{relatorios:} geracao automatica de artefatos em HTML, Markdown e imagens estaticas para documentacao cientifica.
+    \item ingestao de \texttt{metadata.tsv}, \texttt{taxonomy.tsv}, TSVs de ASV em formato largo ou longo e arquivos BIOM;
+    \item banco analitico local em DuckDB com suporte a Parquet, Arrow e DataFrames Polars;
+    \item matrizes para ML produzidas por SQL e exportadas em formato tabular;
+    \item diversidade alfa e beta, incluindo Shannon, Chao1, Simpson, Bray-Curtis e PCoA;
+    \item modelos supervisionados e nao supervisionados para exploracao dos dados;
+    \item relatorio HTML autocontido com metricas e graficos;
+    \item CLI unica para download, execucao da pipeline e interface local.
 \end{itemize}
 
-Esse conjunto mostra que o projeto ja ultrapassou a fase de prototipo conceitual. O nucleo do trabalho hoje nao e apenas construir interface, mas consolidar uma infraestrutura local reproduzivel para microbioma, com foco simultaneo em ingestao, modelagem e interpretacao.
+Esse conjunto mostra que o projeto ja ultrapassou a fase de prototipo conceitual. O nucleo do trabalho hoje nao e apenas construir interface, mas consolidar uma infraestrutura local reproduzivel para microbioma, com foco simultaneo em ingestao, modelagem, persistencia e interpretacao.
 
 \subsection{Experimento com Earth Microbiome Project}
 
@@ -209,11 +808,11 @@ Foi executada uma pipeline completa com dados locais do Earth Microbiome Project
     \end{tabular}
 \end{table}
 
-Os resultados sugerem que a estrutura do dado possui sinal suficiente para discriminacao entre categorias ambientais selecionadas. O ROC-AUC elevado mostra bom poder discriminativo global. Em contrapartida, o F1-macro mais moderado indica que o desbalanceamento entre classes ainda afeta a distribuicao de erros, especialmente nas categorias com menos amostras. Esse comportamento era esperado e reforca a necessidade de interpretar a qualidade preditiva para alem da acuracia agregada.
+Os resultados sugerem que a estrutura do dado possui sinal suficiente para discriminacao entre categorias ambientais selecionadas. O ROC-AUC elevado indica boa capacidade discriminativa global. O F1-macro mais moderado, por sua vez, sugere que o desbalanceamento entre classes ainda afeta a distribuicao dos erros. Esse padrao e compativel com o tipo de tarefa e reforca a necessidade de usar metricas para alem da acuracia agregada.
 
 \subsection{Comparacao metodologica}
 
-Um avanco importante do periodo foi a introducao de comparacao entre configuracoes metodologicas distintas. No benchmark atual, \texttt{CLR + XGBoost} apresentou o melhor equilibrio entre acuracia, \textit{balanced accuracy} e F1-macro. Em paralelo, \texttt{TSS + Random Forest} tambem apresentou desempenho elevado, enquanto o \textit{baseline} majoritario confirmou que a tarefa nao pode ser analisada apenas pela frequencia da classe dominante. Esse resultado constitui evidencia inicial de que a camada composicional agrega valor real ao pipeline.
+Um avanco importante do periodo foi a introducao de comparacao entre configuracoes metodologicas distintas. No benchmark atual, \texttt{CLR + XGBoost} apresentou o melhor equilibrio entre acuracia, \textit{balanced accuracy}, F1-macro e ROC-AUC. Em paralelo, \texttt{TSS + Random Forest} tambem apresentou desempenho elevado, enquanto o \textit{baseline} majoritario confirmou que a tarefa nao pode ser analisada apenas pela frequencia da classe dominante.
 
 \begin{table}[H]
     \centering
@@ -234,11 +833,11 @@ Um avanco importante do periodo foi a introducao de comparacao entre configuraco
     \end{tabular}
 \end{table}
 
-Os dados da Tabela \ref{tab:benchmark_emp} mostram que o ganho metodologico da normalizacao nao deve ser lido apenas pela acuracia. Quando o problema e desbalanceado, como neste subconjunto do EMP, metricas como F1-macro e \textit{balanced accuracy} descrevem melhor se o modelo esta tratando adequadamente as classes minoritarias. Nesse sentido, a configuracao \texttt{CLR + XGBoost} foi a mais favoravel.
+Os dados da Tabela \ref{tab:benchmark_emp} mostram que o ganho metodologico da normalizacao nao deve ser lido apenas pela acuracia. Em problemas desbalanceados, metricas como F1-macro e \textit{balanced accuracy} descrevem melhor se o modelo esta tratando adequadamente as classes minoritarias. Nesse sentido, a configuracao \texttt{CLR + XGBoost} foi a mais favoravel entre as avaliadas.
 
-\subsection{Relacao entre ML e biologia}
+\subsection{Relacao entre ML e interpretacao biologica}
 
-Outro avanco importante foi a reconexao entre atributos discriminantes e grupos taxonomicos plausiveis. Entre os filos mais frequentes nas top features apareceram Proteobacteria, Planctomycetes, Firmicutes e Bacteroidetes. Isso fortalece a interpretacao do modelo, pois o resultado deixa de ser apenas numerico e passa a ser biologicamente discutivel em termos de assinaturas microbianas e contexto ecologico.
+Outro avanco importante foi a reconexao entre atributos discriminantes e grupos taxonomicos plausiveis. Entre os filos mais frequentes nas top features apareceram Proteobacteria, Planctomycetes, Firmicutes e Bacteroidetes. Isso fortalece a interpretacao do modelo, pois o resultado deixa de ser apenas numerico e passa a ser discutivel em termos de assinaturas microbianas e contexto ecologico.
 
 \begin{table}[H]
     \centering
@@ -258,17 +857,17 @@ Outro avanco importante foi a reconexao entre atributos discriminantes e grupos 
     \end{tabular}
 \end{table}
 
-Essa ponte entre atributo computacional e filo taxonomico e central para a argumentacao cientifica do trabalho. Em vez de produzir apenas um classificador com boa metrica, o FLORA permite perguntar quais grupos microbianos estao sustentando a separacao entre ambientes e se esses grupos sao ecologicamente plausiveis.
+Essa ponte entre atributo computacional e filo taxonomico e central para a argumentacao cientifica do trabalho. Em vez de produzir apenas um classificador com boa metrica, o FLORA permite perguntar quais grupos microbianos sustentam a separacao entre ambientes e se esses grupos sao ecologicamente plausiveis.
 
-\subsection{Interpretacao dos Graficos}
+\subsection{Interpretacao dos graficos}
 
 As figuras geradas cumprem papeis complementares no relatorio:
 
 \begin{itemize}[leftmargin=1.5cm]
     \item \textbf{PCoA Bray-Curtis:} mostra estruturacao global e separacao composicional entre grupos ambientais;
     \item \textbf{Shannon e Chao1:} quantificam diversidade local sob perspectivas complementares de uniformidade e riqueza;
-    \item \textbf{barplot taxonomico e heatmap taxonomico:} conectam separacao estatistica a assinaturas biologicas observaveis;
-    \item \textbf{ROC e matriz de confusao:} permitem auditar desempenho do classificador sob metodos distintos;
+    \item \textbf{barplot e heatmap taxonomico:} conectam separacao estatistica a assinaturas biologicas observaveis;
+    \item \textbf{ROC e matriz de confusao:} permitem auditar desempenho do classificador;
     \item \textbf{importancia de features e SHAP:} indicam quais ASVs sustentam as decisoes do modelo.
 \end{itemize}
 
@@ -306,43 +905,58 @@ As figuras da pipeline principal ja existem como artefatos prontos em \texttt{do
 
 \reportfigure{docs/assets/emp/feature_importance.png}{Importancia das features mais discriminantes no modelo supervisionado.}{fig:importance_emp}
 
-Esses resultados fortalecem a ideia de que o FLORA ja ultrapassou a fase de prototipagem conceitual e passou a oferecer uma base operacional para estudos aplicados em microbioma.
-
 \subsection{Limitacoes}
 
 Apesar dos avancos, algumas limitacoes precisam ser reconhecidas explicitamente:
 
 \begin{itemize}[leftmargin=1.5cm]
-    \item a secao biologica ainda precisa detalhar com maior rigor primers, regiao-alvo e parametros de \textit{denoising};
-    \item a validacao principal ainda esta concentrada no EMP, o que exige ampliacao para mais datasets reais;
-    \item a etapa de SHAP ainda depende de estabilizacao do ambiente computacional;
-    \item o benchmark ampliado ainda tem custo computacional relevante, exigindo refinamento operacional e checkpoints.
+    \item a secao biologica ainda pode detalhar com maior rigor primers, regiao-alvo e parametros de \textit{denoising};
+    \item a validacao principal ainda esta concentrada no EMP e deve ser ampliada para mais datasets reais;
+    \item a camada de SHAP ainda demanda estabilizacao ambiental em alguns cenarios;
+    \item a documentacao final para publicacao em PyPI, Read the Docs e artigo cientifico ainda precisa ser integrada em uma versao estavel.
 \end{itemize}
+
+\section{Maturidade do Produto de Software}
+
+Do ponto de vista de engenharia, o FLORA ja apresenta caracteristicas tipicas de um produto cientifico serio:
+
+\begin{itemize}[leftmargin=1.5cm]
+    \item empacotamento padronizado via \texttt{pyproject.toml};
+    \item separacao razoavel entre nucleo analitico e camada de interface;
+    \item testes automatizados em \texttt{tests/};
+    \item estrutura de documentacao em \texttt{docs/};
+    \item suporte a uso por CLI, API local e frontend web;
+    \item banco analitico local capaz de sustentar reproducao do estado do experimento.
+\end{itemize}
+
+Em termos de ciclo de vida, o projeto se encontra em uma fase intermediaria: ja existe um artefato utilizavel por desenvolvedores e pesquisadores com familiaridade tecnica, mas ainda resta consolidar interfaces, validacao externa e documentacao de usuario para ampliar a adocao.
 
 \section{Cronograma e Proximos Passos}
 
 Para o proximo periodo, o projeto deve concentrar esforcos em quatro frentes:
 
 \begin{itemize}[leftmargin=1.5cm]
-    \item ampliar o repertorio estatistico com metodos de abundancia diferencial;
-    \item refinar a camada de interpretabilidade e resolver incompatibilidades ambientais em dependencias como SHAP;
-    \item consolidar a interface de usuario local e o empacotamento para uso por nao programadores;
-    \item elevar cobertura de testes e validacao cruzada em novos datasets publicos.
+    \item ampliar a validacao em novos datasets publicos alem do EMP;
+    \item fortalecer a documentacao voltada a instalacao, uso e publicacao do pacote;
+    \item estabilizar a camada de interpretabilidade e refinar a integracao frontend-backend;
+    \item elevar a robustez estatistica e a cobertura de testes para o ciclo de release.
 \end{itemize}
 
 \subsection{Plano de acao imediato}
 
-\textbf{Semana 1:} definir formalmente a hipotese do trabalho e consolidar os experimentos comparando com e sem CLR.
+\textbf{Semana 1:} consolidar a versao textual final da arquitetura, banco local e estrategia de publicacao no relatorio e na documentacao tecnica.
 
-\textbf{Semana 2:} incorporar \textit{baseline} de ML, rodar validacao cruzada repetida e consolidar tabela comparativa central.
+\textbf{Semana 2:} ampliar benchmark em novos conjuntos publicos e consolidar tabelas comparativas centrais.
 
-\textbf{Semana 3:} escrever a secao de comparacao, melhorar a discussao dos resultados e fortalecer a ligacao entre sinal de ML e plausibilidade biologica.
+\textbf{Semana 3:} preparar versao candidata de distribuicao da biblioteca, revisar dependencias opcionais e fortalecer a experiencia de instalacao.
 
 \section{Conclusao Parcial}
 
-O desenvolvimento do FLORA no periodo analisado resultou em avancos tecnicos consistentes e alinhados aos objetivos de uma iniciacao cientifica em software cientifico. A mudanca de foco, da interface para a consolidacao da biblioteca, mostrou-se correta do ponto de vista metodologico. O projeto ja oferece ingestao de dados reais, armazenamento analitico robusto, transformacoes composicionais, modelagem supervisionada, visualizacao e relatorios reproduziveis.
+O desenvolvimento do FLORA no periodo analisado resultou em avancos tecnicos consistentes e alinhados aos objetivos de uma iniciacao cientifica em software cientifico. A mudanca de foco, da interface para a consolidacao da biblioteca, mostrou-se correta do ponto de vista metodologico. O projeto ja oferece aquisicao de dados publicos, ingestao de dados reais, armazenamento analitico robusto, transformacoes composicionais, modelagem supervisionada, visualizacao, interface local e relatorios reproduziveis.
 
-Como resultado, o FLORA se posiciona nao apenas como um prototipo de interface, mas como uma infraestrutura computacional em evolucao para analise de microbiomas. O que falta agora nao e mais apenas desenvolvimento tecnico, mas evidencia comparativa suficiente para provar cientificamente o valor do que foi construido. A etapa seguinte consiste em expandir confiabilidade estatistica, cobertura experimental e usabilidade, aproximando o projeto de um produto cientifico publicavel e reutilizavel.
+Como resultado, o FLORA se posiciona nao apenas como um prototipo de interface, mas como uma infraestrutura computacional em evolucao para analise de microbiomas. A documentacao apresentada neste relatorio, incluindo os diagramas Mermaid de arquitetura, classes, fluxo de dados externos, banco DuckDB e empacotamento, mostra que a biblioteca ja possui um desenho tecnico coerente o suficiente para sustentar crescimento, manutencao e futura publicacao.
+
+O passo seguinte nao e mais apenas programar novas funcionalidades. E demonstrar, com validacao experimental mais ampla e documentacao madura, que o software construido pode ser reutilizado por outros pesquisadores como ferramenta cientifica confiavel, aberta e local.
 
 \newpage
 \renewcommand{\refname}{Referencias Bibliograficas}
