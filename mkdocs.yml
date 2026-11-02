@@ -45,6 +45,9 @@ nav:
   - Experimental Evaluation: experimental_evaluation.md
   - EMP Analysis: emp_report.md
   - Graph Guide: graph_guide.md
+  - ADRs:
+      - ADR 0001 — PrimeNG design system: adr/0001-design-system-primeng.md
+  - Audit (issue #2): audit.md
 
 markdown_extensions:
   - pymdownx.highlight:

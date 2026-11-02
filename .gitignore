@@ -58,3 +58,9 @@ results/
 frontend/angular/node_modules/
 frontend/angular/coverage/
 frontend/angular/.angular/
+# Angular frontend - build artifacts and dependencies
+src/flora/front/node_modules/
+src/flora/front/.angular/
+src/flora/front/dist/app/
+
+# The built dist/ may be committed for wheel packaging (see hatch artifacts)
