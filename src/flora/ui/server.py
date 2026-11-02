@@ -57,6 +57,7 @@ GET_ROUTES = {
     "/api/report/preview": report.preview_report,
     "/api/llm/config": llm.get_config,
     "/api/llm/models": llm.list_models,
+    "/api/llm/models/pull": llm.pull_status,
     "/api/viz/taxonomy": viz.viz_taxonomy,
     "/api/viz/pcoa": viz.viz_pcoa,
     "/api/viz/alpha": viz.viz_alpha,
@@ -82,6 +83,8 @@ POST_ROUTES = {
     "/api/llm/config": llm.save_config,
     "/api/llm/test": llm.test_connection,
     "/api/llm/chat": llm.chat,
+    "/api/llm/models/pull": llm.pull_start,
+    "/api/llm/models/pull/cancel": llm.pull_cancel,
 }
 
 

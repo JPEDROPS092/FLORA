@@ -7,7 +7,8 @@ from typing import Any
 from pydantic import ValidationError
 
 from flora.llm import PRESETS, LlmError, LlmSettings, OpenAICompatClient, SettingsStore
-from flora.llm.native import NativeClient
+from flora.llm import download
+from flora.llm.native import NativeClient, models_dir
 from flora.ui.http import UiHttpError, json_success
 
 _ALLOWED_ROLES = {"system", "user", "assistant"}
@@ -84,3 +85,28 @@ def chat(state, body: dict[str, Any]) -> dict[str, Any]:
     except LlmError as exc:
         raise UiHttpError(str(exc), status=502, code="llm_error") from exc
     return json_success(data=result)
+
+
+def pull_start(state, body: dict[str, Any]) -> dict[str, Any]:
+    """Start downloading a GGUF file from Hugging Face into the models directory."""
+    body = body or {}
+    try:
+        job = download.start(models_dir(state.workdir), body.get("repo", ""), body.get("file", ""), body.get("revision") or "main")
+    except LlmError as exc:
+        raise UiHttpError(str(exc), code="invalid_download") from exc
+    return json_success(data={"job": job.public()})
+
+
+def pull_status(state, params: dict[str, list[str]] | None = None) -> dict[str, Any]:
+    job_id = ((params or {}).get("id") or [""])[0]
+    try:
+        return json_success(data={"job": download.get(job_id).public()})
+    except LlmError as exc:
+        raise UiHttpError(str(exc), status=404, code="not_found") from exc
+
+
+def pull_cancel(state, body: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return json_success(data={"job": download.cancel((body or {}).get("id", "")).public()})
+    except LlmError as exc:
+        raise UiHttpError(str(exc), status=404, code="not_found") from exc

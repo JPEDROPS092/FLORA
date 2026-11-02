@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { FloraRepository } from '../data/flora.repository';
 import { LANG, t } from '../i18n/i18n';
 import { PROVIDERS } from './llm.catalog';
-import { ChatMessage, ChatResult, LlmSettings, LlmStatus } from './llm.models';
+import { ChatMessage, ChatResult, LlmSettings, LlmStatus, PullJob } from './llm.models';
 
 const KEY = 'flora.llm';
 const DEFAULTS: LlmSettings = {
@@ -83,6 +83,40 @@ export class LlmService {
       this.status.set('error');
       this.statusMessage.set(this.explain(err, s));
     }
+  }
+
+  // ---- GGUF download (backend only) -------------------------------------
+  readonly pull = signal<PullJob | null>(null);
+  private pullTimer: ReturnType<typeof setInterval> | null = null;
+
+  async startPull(repo: string, file: string): Promise<void> {
+    const res = await this.post<{ job: Record<string, unknown> }>('/api/llm/models/pull', { repo, file });
+    this.pull.set(this.toJob(res.job));
+    this.pullTimer ??= setInterval(() => void this.pollPull(), 1000);
+  }
+
+  async cancelPull(): Promise<void> {
+    const id = this.pull()?.id;
+    if (id) await this.post('/api/llm/models/pull/cancel', { id });
+  }
+
+  private async pollPull(): Promise<void> {
+    const id = this.pull()?.id;
+    if (!id) return;
+    try {
+      const res = await firstValueFrom(this.http.get<{ job: Record<string, unknown> }>(`${this.repo.source.apiBaseUrl}/api/llm/models/pull`, { params: { id } }));
+      const job = this.toJob(res.job);
+      this.pull.set(job);
+      if (job.status !== 'queued' && job.status !== 'downloading') {
+        if (this.pullTimer) { clearInterval(this.pullTimer); this.pullTimer = null; }
+        if (job.status === 'done') void this.test();
+      }
+    } catch { /* keep polling; the job may be momentarily unavailable */ }
+  }
+
+  private toJob(r: Record<string, unknown>): PullJob {
+    return { id: String(r['id']), repo: String(r['repo']), file: String(r['file']), status: r['status'] as PullJob['status'],
+      bytesDone: Number(r['bytes_done'] ?? 0), bytesTotal: Number(r['bytes_total'] ?? 0), percent: Number(r['percent'] ?? 0), error: String(r['error'] ?? '') };
   }
 
   // ---- chat --------------------------------------------------------------

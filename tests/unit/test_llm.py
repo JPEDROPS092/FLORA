@@ -190,3 +190,85 @@ def test_native_rejects_paths_and_missing_backend(native, monkeypatch):
     monkeypatch.setitem(sys.modules, "llama_cpp", None)  # simulate "not installed"
     out = handlers.test_connection(native, {})
     assert out["success"] is False and "flora[local]" in out["error"]
+
+
+class _FakeHub(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        if self.path.endswith("/good.gguf"):
+            body = b"GGUF" + b"\0" * 600_000
+        elif self.path.endswith("/fake.gguf"):
+            body = b"NOPE" + b"\0" * 100
+        elif self.path.endswith("/slow.gguf"):
+            body = b"GGUF" + b"\0" * 8_000_000
+        else:
+            self.send_response(403)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        try:
+            for i in range(0, len(body), 65536):
+                self.wfile.write(body[i : i + 65536])
+                if self.path.endswith("/slow.gguf"):
+                    import time
+
+                    time.sleep(0.01)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+@pytest.fixture()
+def hub(tmp_path, monkeypatch):
+    from flora.llm import download
+
+    httpd = HTTPServer(("127.0.0.1", 0), _FakeHub)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    monkeypatch.setenv("FLORA_HF_ENDPOINT", f"http://127.0.0.1:{httpd.server_port}")
+    monkeypatch.delenv("FLORA_MODELS_DIR", raising=False)
+    download._jobs.clear()
+    yield SimpleNamespace(workdir=tmp_path)
+    httpd.shutdown()
+
+
+def _wait(state, job_id, done=("done", "error", "cancelled")):
+    import time
+
+    for _ in range(200):
+        job = handlers.pull_status(state, {"id": [job_id]})["job"]
+        if job["status"] in done:
+            return job
+        time.sleep(0.05)
+    raise AssertionError("download did not finish")
+
+
+def test_pull_downloads_validates_and_lists(hub):
+    job = handlers.pull_start(hub, {"repo": "Qwen/Qwen3-4B-GGUF", "file": "good.gguf"})["job"]
+    final = _wait(hub, job["id"])
+    assert final["status"] == "done" and final["bytes_done"] == final["bytes_total"] > 0
+    assert (hub.workdir / "models" / "good.gguf").is_file()
+    assert not list((hub.workdir / "models").glob("*.part"))
+    handlers.save_config(hub, {"provider": "native", "model": "good.gguf"})
+    assert handlers.list_models(hub)["models"] == ["good.gguf"]
+
+
+def test_pull_rejects_bad_names_and_bad_files(hub):
+    for body in ({"repo": "x", "file": "a.gguf"}, {"repo": "a/b", "file": "../a.gguf"}, {"repo": "a/b", "file": "a/b.gguf"}, {"repo": "a/b", "file": "m.bin"}):
+        with pytest.raises(UiHttpError):
+            handlers.pull_start(hub, body)
+    assert _wait(hub, handlers.pull_start(hub, {"repo": "a/b", "file": "fake.gguf"})["job"]["id"])["status"] == "error"
+    assert not list((hub.workdir / "models").glob("fake.gguf*"))
+    denied = _wait(hub, handlers.pull_start(hub, {"repo": "a/b", "file": "gated.gguf"})["job"]["id"])
+    assert denied["status"] == "error" and "HF_TOKEN" in denied["error"]
+
+
+def test_pull_cancel_and_single_job(hub):
+    job = handlers.pull_start(hub, {"repo": "a/b", "file": "slow.gguf"})["job"]
+    with pytest.raises(UiHttpError, match="already running"):
+        handlers.pull_start(hub, {"repo": "a/b", "file": "good.gguf"})
+    handlers.pull_cancel(hub, {"id": job["id"]})
+    assert _wait(hub, job["id"])["status"] == "cancelled"
+    assert not list((hub.workdir / "models").glob("slow.gguf*"))

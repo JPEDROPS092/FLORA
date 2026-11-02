@@ -40,4 +40,12 @@ export interface LocalModel {
   sizeGb: number;
   role: string;
   fit: 'excellent' | 'good' | 'limited';
+  /** Suggested Hugging Face GGUF; the download itself validates it. */
+  hf?: { repo: string; file: string };
+}
+
+export interface PullJob {
+  id: string; repo: string; file: string;
+  status: 'queued' | 'downloading' | 'done' | 'error' | 'cancelled';
+  bytesDone: number; bytesTotal: number; percent: number; error: string;
 }

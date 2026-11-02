@@ -6,6 +6,7 @@ import { MessageService, PrimeTemplate } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { ProgressBarModule } from 'primeng/progressbar';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -22,7 +23,7 @@ import { MascotComponent } from '../../shared/mascot.component';
 @Component({
   selector: 'flora-ai-models',
   standalone: true,
-  imports: [TPipe, DecimalPipe, FormsModule, ReactiveFormsModule, PrimeTemplate, TooltipModule, ButtonModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TagModule, ToggleSwitchModule, MascotComponent],
+  imports: [TPipe, DecimalPipe, FormsModule, ReactiveFormsModule, PrimeTemplate, TooltipModule, ButtonModule, InputNumberModule, InputTextModule, ProgressBarModule, SelectModule, TableModule, TagModule, ToggleSwitchModule, MascotComponent],
   template: `
     <section class="page">
       <header class="page-heading">
@@ -116,6 +117,28 @@ import { MascotComponent } from '../../shared/mascot.component';
         </aside>
       </div>
 
+      @if (isNative() && llm.mode === 'proxy') {
+        <article class="surface">
+          <div class="section-title"><h2>{{ 'Baixar modelo GGUF (Hugging Face)' | t }}</h2></div>
+          <div class="pull-form">
+            <div class="field"><label for="hfRepo">{{ 'Repositório' | t }}</label>
+              <input id="hfRepo" pInputText [value]="hfRepo()" (input)="hfRepo.set($any($event.target).value)" placeholder="Qwen/Qwen3-4B-GGUF" spellcheck="false" /></div>
+            <div class="field"><label for="hfFile">{{ 'Arquivo .gguf' | t }}</label>
+              <input id="hfFile" pInputText [value]="hfFile()" (input)="hfFile.set($any($event.target).value)" placeholder="Qwen3-4B-Q4_K_M.gguf" spellcheck="false" /></div>
+            <p-button [label]="'Baixar' | t" icon="pi pi-download" [disabled]="!hfRepo() || !hfFile() || downloading()" (onClick)="download()" />
+          </div>
+          @if (llm.pull(); as job) {
+            <div class="pull-state" role="status">
+              <p-progressbar [value]="job.percent" [showValue]="job.bytesTotal > 0" />
+              <small class="note">{{ job.file }} · {{ mb(job.bytesDone) }} / {{ mb(job.bytesTotal) }} MB · {{ statusLabel(job.status) }}</small>
+              @if (job.error) { <small class="warn">{{ job.error }}</small> }
+              @if (downloading()) { <p-button size="small" [label]="'Cancelar' | t" severity="secondary" [outlined]="true" (onClick)="llm.cancelPull()" /> }
+            </div>
+          }
+          <p class="note">{{ 'Repositórios com acesso restrito exigem HF_TOKEN no servidor. Os arquivos vão para a pasta models/ do workdir.' | t }}</p>
+        </article>
+      }
+
       <article class="surface">
         <div class="section-title">
           <h2>{{ 'Modelos leves recomendados para teste' | t }}</h2>
@@ -135,6 +158,9 @@ import { MascotComponent } from '../../shared/mascot.component';
               <td><p-tag [value]="placementLabel(m.place)" [severity]="m.place === 'gpu' ? 'success' : m.place === 'tight' ? 'warn' : 'secondary'" /></td>
               <td>@if (m.installed) { <p-tag [value]="'Instalado' | t" severity="success" /> } @else { <small class="note">{{ 'não detectado' | t }}</small> }</td>
               <td class="row-actions">
+                @if (isNative() && llm.mode === 'proxy' && m.model.hf) {
+                  <p-button size="small" icon="pi pi-download" [text]="true" [pTooltip]="'Baixar GGUF' | t" [ariaLabel]="'Baixar GGUF' | t" [disabled]="downloading()" (onClick)="fillHf(m.model)" />
+                }
                 <p-button size="small" [label]="'Usar' | t" [outlined]="true" (onClick)="use(m.model, 'model')" />
                 <p-button size="small" icon="pi pi-clone" [text]="true" severity="secondary" [pTooltip]="'Copiar comando' | t" [ariaLabel]="'Copiar comando' | t" (onClick)="copyPull(m.model)" />
               </td>
@@ -152,6 +178,8 @@ import { MascotComponent } from '../../shared/mascot.component';
     .state { display: flex; gap: 8px; align-items: center; margin: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--flora-border); }
     .state.ok { color: var(--flora-ok); } .state.bad { color: var(--flora-fail); }
     .help ol { padding-left: 18px; display: grid; gap: 6px; margin: 8px 0; }
+    .pull-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+    .pull-state { display: grid; gap: 6px; margin: 10px 0; }
     .vram { display: flex; align-items: center; gap: 8px; }
     .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
     @media (max-width: 1000px) { .ai-grid, .two { grid-template-columns: 1fr; } }
@@ -165,6 +193,9 @@ export class AiModelsPageComponent {
   protected readonly providers = [...PROVIDERS];
   protected readonly saving = signal(false);
   protected readonly vram = signal(this.llm.settings().vramGb);
+  protected readonly hfRepo = signal('');
+  protected readonly hfFile = signal('');
+  protected readonly downloading = computed(() => ['queued', 'downloading'].includes(this.llm.pull()?.status ?? ''));
 
   protected readonly form = this.fb.nonNullable.group({
     enabled: this.llm.settings().enabled,
@@ -200,6 +231,29 @@ export class AiModelsPageComponent {
 
   protected placementLabel(p: Placement): string {
     return p === 'gpu' ? t('Cabe na GPU') : p === 'tight' ? t('Justo') : t('Precisa de offload');
+  }
+
+  protected mb(bytes: number): string {
+    return (bytes / 1048576).toFixed(bytes > 1e9 ? 0 : 1);
+  }
+
+  protected statusLabel(s: string): string {
+    return ({ queued: t('na fila'), downloading: t('baixando'), done: t('concluído'), error: t('falhou'), cancelled: t('cancelado') } as Record<string, string>)[s] ?? s;
+  }
+
+  protected fillHf(model: LocalModel): void {
+    if (!model.hf) return;
+    this.hfRepo.set(model.hf.repo);
+    this.hfFile.set(model.hf.file);
+    void this.download();
+  }
+
+  protected async download(): Promise<void> {
+    try {
+      await this.llm.startPull(this.hfRepo().trim(), this.hfFile().trim());
+    } catch (err) {
+      this.messages.add({ severity: 'error', summary: t('Baixar GGUF'), detail: err instanceof Error ? err.message : t('Falha ao salvar.') });
+    }
   }
 
   protected setVram(v: number | null): void {
