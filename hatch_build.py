@@ -11,10 +11,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from hatchling.builders.plugin.interface import BuilderHookInterface
+from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 
-class HatchBuildHook(BuilderHookInterface):
+class HatchBuildHook(BuildHookInterface):
     """Build hook that optionally compiles the Angular frontend."""
 
     def initialize(self, version: str, build_data: dict) -> None:
@@ -56,8 +56,9 @@ class HatchBuildHook(BuilderHookInterface):
                 text=True,
             )
             print("[flora] Frontend built successfully.")
-        except subprocess.CalledProcessError as exc:
+        except (subprocess.CalledProcessError, OSError) as exc:
+            detail = getattr(exc, "stderr", None) or str(exc)
             print(
-                f"[flora] WARNING: Frontend build failed:\n{exc.stderr}\n"
+                f"[flora] WARNING: Frontend build failed:\n{detail}\n"
                 "  The UI will fall back to the embedded HTML interface."
             )

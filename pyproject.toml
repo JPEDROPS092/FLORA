@@ -69,27 +69,24 @@ flora = "flora.ui.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/flora"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/flora/front/__init__.py" = "flora/front/__init__.py"
-"src/flora/front/dist" = "flora/front/dist"
-
-[tool.hatch.build.targets.wheel.exclude]
-"flora/front/angular.json" = true
-"flora/front/package.json" = true
-"flora/front/package-lock.json" = true
-"flora/front/tsconfig*.json" = true
-"flora/front/.postcssrc.json" = true
-"flora/front/eslint.config.js" = true
-"flora/front/metadata.json" = true
-"flora/front/README.md" = true
-"flora/front/.env.example" = true
-"flora/front/.gitignore" = true
-"flora/front/assets" = true
-"flora/front/public" = true
-"flora/front/src" = true
-"flora/front/node_modules" = true
-"flora/front/dist/app" = true
+artifacts = ["src/flora/front/dist"]
+exclude = [
+    "flora/front/angular.json",
+    "flora/front/package.json",
+    "flora/front/package-lock.json",
+    "flora/front/tsconfig*.json",
+    "flora/front/.postcssrc.json",
+    "flora/front/eslint.config.js",
+    "flora/front/metadata.json",
+    "flora/front/README.md",
+    "flora/front/.env.example",
+    "flora/front/.gitignore",
+    "flora/front/assets",
+    "flora/front/public",
+    "flora/front/src",
+    "flora/front/node_modules",
+    "flora/front/dist/app",
+]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
