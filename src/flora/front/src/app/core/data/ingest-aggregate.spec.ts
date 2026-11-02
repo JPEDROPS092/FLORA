@@ -8,7 +8,7 @@ describe('aggregateIngest', () => {
         { step: 'asv', success: true },
         { step: 'taxonomy', success: true }
       ]).success
-    ).toBeTrue();
+    ).toBe(true);
   });
 
   it('fails the batch when one request fails', () => {
@@ -18,12 +18,12 @@ describe('aggregateIngest', () => {
       { step: 'taxonomy', success: true }
     ]);
 
-    expect(outcome.success).toBeFalse();
+    expect(outcome.success).toBe(false);
     expect(outcome.error).toContain('asv: arquivo ausente');
     expect(outcome.steps.length).toBe(3);
   });
 
   it('does not report success for an empty batch', () => {
-    expect(aggregateIngest([]).success).toBeFalse();
+    expect(aggregateIngest([]).success).toBe(false);
   });
 });
