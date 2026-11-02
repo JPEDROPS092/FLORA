@@ -75,6 +75,7 @@ export class CommandPaletteComponent {
     this.nav(t('Agentes de IA'), '/agents', 'pi pi-sparkles'),
     this.nav(t('Projetos'), '/projects', 'pi pi-folder'),
     this.nav(t('Downloads'), '/downloads', 'pi pi-download'),
+    this.nav(t('Modelos de IA'), '/settings', 'pi pi-cog'),
     this.explore(t('PCoA Bray–Curtis'), { view: 'pcoa', distance: 'braycurtis' }),
     this.explore(t('Diversidade alfa · Shannon'), { view: 'alpha', metric: 'shannon' }),
     this.explore(t('Taxonomia por gênero'), { view: 'taxonomy', rank: 'genus' }),

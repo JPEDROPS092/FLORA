@@ -3,12 +3,14 @@ import { AfterViewChecked, Component, ElementRef, inject, signal, viewChild } fr
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { DrawerModule } from 'primeng/drawer';
 import { filter, map } from 'rxjs';
 
 import { AgentService } from '../core/agents/agent.service';
 import { MascotComponent } from './mascot.component';
+import { LlmService } from '../core/llm/llm.service';
 import { WorkspaceStore } from '../core/workspace/workspace.store';
 import { TPipe } from '../core/i18n/t.pipe';
 
@@ -17,12 +19,14 @@ import { TPipe } from '../core/i18n/t.pipe';
 @Component({
   selector: 'flora-copilot',
   standalone: true,
-  imports: [TPipe, MascotComponent, DatePipe, FormsModule, ButtonModule, DrawerModule],
+  imports: [RouterLink, TPipe, MascotComponent, DatePipe, FormsModule, ButtonModule, DrawerModule],
   template: `
     <p-drawer [visible]="store.copilotOpen()" (visibleChange)="store.copilotOpen.set($event)"
               position="right" [modal]="false" [style]="{ width: 'min(440px, 100vw)' }" styleClass="copilot-drawer">
       <ng-template #header>
-        <div class="cp-head"><i class="pi pi-sparkles"></i><strong>{{ 'Copiloto FLORA' | t }}</strong></div>
+        <div class="cp-head"><i class="pi pi-sparkles"></i><strong>{{ 'Copiloto FLORA' | t }}</strong>
+          <a class="cp-model" routerLink="/settings" [class.off]="!llm.ready()" [attr.title]="'Modelos de IA' | t">
+            <i class="pi pi-microchip"></i>{{ llm.ready() ? llm.settings().model : ('Sem modelo' | t) }}</a></div>
       </ng-template>
 
       <div class="cp-agents" role="radiogroup" [attr.aria-label]="'Agente' | t">
@@ -50,6 +54,14 @@ import { TPipe } from '../core/i18n/t.pipe';
               <p class="thinking"><span></span><span></span><span></span> {{ 'analisando dados…' | t }}</p>
             } @else {
               <p>{{ m.text }}</p>
+            }
+            @if (m.llm; as l) {
+              <div class="llm-note" [class.err]="l.status === 'error'">
+                <header><i class="pi pi-microchip"></i>{{ 'Interpretação do modelo' | t }} · <code>{{ l.model }}</code>@if (l.ms) { <small>{{ l.ms }} ms</small> }</header>
+                @if (l.status === 'pending') { <p class="thinking"><span></span><span></span><span></span> {{ 'o modelo está lendo os resultados…' | t }}</p> }
+                @else if (l.status === 'ok') { <p>{{ l.text }}</p><small>{{ 'Gerado por LLM a partir dos resultados acima; não é evidência experimental.' | t }}</small> }
+                @else { <small>{{ 'Modelo indisponível' | t }}: {{ l.error }}</small> }
+              </div>
             }
             @if (m.steps?.length) {
               <details class="trace">
@@ -92,6 +104,7 @@ import { TPipe } from '../core/i18n/t.pipe';
 export class CopilotComponent implements AfterViewChecked {
   protected readonly store = inject(WorkspaceStore);
   protected readonly svc = inject(AgentService);
+  protected readonly llm = inject(LlmService);
   private readonly router = inject(Router);
   private readonly thread = viewChild<ElementRef<HTMLElement>>('thread');
 

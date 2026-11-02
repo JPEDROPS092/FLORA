@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { t } from '../i18n/i18n';
+import { LlmService } from '../llm/llm.service';
 import { FloraRepository } from '../data/flora.repository';
 import { AGENTS, agentById } from './agent.catalog';
 import { nextId, routeAgent, runAgent } from './agent.engine';
@@ -13,6 +14,7 @@ const SESSION_KEY = 'flora.agent.session';
 export class AgentService {
   private readonly repo = inject(FloraRepository);
   private readonly router = inject(Router);
+  private readonly llm = inject(LlmService);
 
   readonly agents = AGENTS;
   readonly selected = signal<AgentId | 'auto'>('auto');
@@ -46,6 +48,7 @@ export class AgentService {
       const reply: AgentReply = text.length < 4 ? this.helpReply(agentId) : await runAgent(this.repo, agentId, text);
       this.patch(pending.id, { text: reply.text, steps: reply.steps, actions: reply.actions, pending: false });
       this.patchRun(run.id, { status: 'done', steps: reply.steps, summary: reply.text, actions: reply.actions });
+      if (this.llm.ready() && reply.steps.length) await this.interpret(pending.id, text, reply);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('erro desconhecido');
       this.patch(pending.id, { text: t('Não consegui concluir: {msg}. Nada foi alterado.', { msg }), pending: false });
@@ -67,6 +70,17 @@ export class AgentService {
 
   agentName(id: AgentId | undefined): string {
     return id ? agentById(id).name : t('Agente');
+  }
+
+  /** Optional step: a model explains the facts; failure never blocks the computed answer. */
+  private async interpret(id: string, question: string, reply: AgentReply): Promise<void> {
+    this.patch(id, { llm: { status: 'pending', model: this.llm.settings().model } });
+    try {
+      const out = await this.llm.interpret(question, reply.text, reply.steps.map((s) => `${s.tool}: ${s.detail}`));
+      this.patch(id, { llm: { status: 'ok', model: out.model, text: out.text, ms: out.elapsedMs } });
+    } catch (err) {
+      this.patch(id, { llm: { status: 'error', model: this.llm.settings().model, error: err instanceof Error ? err.message : String(err) } });
+    }
   }
 
   private helpReply(agentId: AgentId): AgentReply {

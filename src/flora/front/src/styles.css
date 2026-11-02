@@ -376,3 +376,12 @@ code { font-family: ui-monospace, monospace; font-size: .74rem; background: var(
 .inst-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
 .cp-empty { display: grid; justify-items: center; text-align: center; gap: 6px; padding: 12px 0; }
 @media (max-width: 800px) { .head-side flora-mascot { display: none; } }
+
+/* LLM chip + interpretation block */
+.cp-model { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; padding: 2px 8px; border-radius: 999px; text-decoration: none;
+  border: 1px solid var(--flora-primary); color: var(--flora-primary); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-model.off { border-color: var(--flora-border); color: var(--flora-muted); }
+.llm-note { border-left: 3px solid var(--flora-primary); padding: 6px 10px; background: var(--flora-primary-soft); border-radius: 0 8px 8px 0; display: grid; gap: 4px; }
+.llm-note.err { border-left-color: var(--flora-fail); background: transparent; }
+.llm-note header { display: flex; gap: 6px; align-items: center; font-size: .74rem; font-weight: 650; color: var(--flora-primary); }
+.llm-note small { color: var(--flora-muted); }

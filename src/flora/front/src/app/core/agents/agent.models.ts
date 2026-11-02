@@ -36,6 +36,8 @@ export interface AgentMessage {
   steps?: AgentStep[];
   actions?: AgentAction[];
   pending?: boolean;
+  /** Optional LLM reading of the deterministic result. Never counted as evidence. */
+  llm?: { status: 'pending' | 'ok' | 'error'; model?: string; text?: string; error?: string; ms?: number };
   at: Date;
 }
 

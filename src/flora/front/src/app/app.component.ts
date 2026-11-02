@@ -109,7 +109,8 @@ export class AppComponent implements OnInit {
   ];
   readonly library = [
     { path: '/projects', label: t('Projetos'), icon: 'pi pi-folder' },
-    { path: '/downloads', label: t('Downloads'), icon: 'pi pi-download' }
+    { path: '/downloads', label: t('Downloads'), icon: 'pi pi-download' },
+    { path: '/settings', label: t('Modelos de IA'), icon: 'pi pi-cog' }
   ];
 
   constructor() {

@@ -18,7 +18,7 @@ from flora.ui.frontend import (
     resolve_frontend_asset,
     should_serve_spa_index,
 )
-from flora.ui.handlers import downloads, ingest, ml, report, status, viz
+from flora.ui.handlers import downloads, ingest, llm, ml, report, status, viz
 from flora.ui.http import UiHttpError, read_json_body, send_error, send_html, send_json
 from flora.ui.state import FLORAState
 
@@ -55,6 +55,8 @@ GET_ROUTES = {
     "/api/status": status.get_status,
     "/api/feature_matrix": ingest.get_feature_matrix,
     "/api/report/preview": report.preview_report,
+    "/api/llm/config": llm.get_config,
+    "/api/llm/models": llm.list_models,
     "/api/viz/taxonomy": viz.viz_taxonomy,
     "/api/viz/pcoa": viz.viz_pcoa,
     "/api/viz/alpha": viz.viz_alpha,
@@ -77,6 +79,9 @@ POST_ROUTES = {
     "/api/download/emp": downloads.download_emp,
     "/api/download/synthetic": downloads.download_synthetic,
     "/api/report": report.generate_report,
+    "/api/llm/config": llm.save_config,
+    "/api/llm/test": llm.test_connection,
+    "/api/llm/chat": llm.chat,
 }
 
 

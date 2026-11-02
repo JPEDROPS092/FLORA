@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { t } from './core/i18n/i18n';
 
 import { WelcomePageComponent } from './features/welcome/welcome-page.component';
+import { AiModelsPageComponent } from './features/settings/ai-models-page.component';
 import { AgentsPageComponent } from './features/agents/agents-page.component';
 import { DashboardPageComponent } from './features/dashboard/dashboard-page.component';
 import { DownloadsPageComponent } from './features/downloads/downloads-page.component';
@@ -21,6 +22,7 @@ export const routes: Routes = [
   { path: 'ml', component: MlLabPageComponent, title: t('AI & ML Lab'), data: { tone: 'lab' } },
   { path: 'reports', component: ReportBuilderPageComponent, title: t('Scientific Report Builder') },
   { path: 'agents', component: AgentsPageComponent, title: t('Agentes de IA') },
+  { path: 'settings', component: AiModelsPageComponent, title: t('Modelos de IA') },
   { path: 'projects', component: ProjectsPageComponent, title: t('Projetos') },
   { path: 'downloads', component: DownloadsPageComponent, title: t('Downloads') },
   { path: 'overview', redirectTo: 'dashboard' },
