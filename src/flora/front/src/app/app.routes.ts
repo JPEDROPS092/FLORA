@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { WelcomePageComponent } from './features/welcome/welcome-page.component';
 import { AgentsPageComponent } from './features/agents/agents-page.component';
 import { DashboardPageComponent } from './features/dashboard/dashboard-page.component';
 import { DownloadsPageComponent } from './features/downloads/downloads-page.component';
@@ -10,7 +11,8 @@ import { ProjectsPageComponent } from './features/projects/projects-page.compone
 import { ReportBuilderPageComponent } from './features/reports/report-builder-page.component';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+  { path: '', pathMatch: 'full', redirectTo: 'welcome' },
+  { path: 'welcome', component: WelcomePageComponent, title: 'FLORA · Apresentação' },
   { path: 'dashboard', component: DashboardPageComponent, title: 'Research Dashboard' },
   { path: 'explorer', component: ExplorerPageComponent, title: 'Scientific Explorer' },
   { path: 'pipeline', component: PipelinePageComponent, title: 'Data Pipeline Studio' },
@@ -27,5 +29,5 @@ export const routes: Routes = [
   { path: 'analysis/ml', redirectTo: 'ml' },
   { path: 'results', redirectTo: 'reports' },
   { path: 'reporting', redirectTo: 'reports' },
-  { path: '**', redirectTo: 'dashboard' }
+  { path: '**', redirectTo: 'welcome' }
 ];

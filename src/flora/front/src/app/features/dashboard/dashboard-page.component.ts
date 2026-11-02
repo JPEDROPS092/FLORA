@@ -14,10 +14,13 @@ import { FloraRepository } from '../../core/data/flora.repository';
 import { DashboardSnapshot, DiagnosticEntry, RecentAnalysis, ResearchProject } from '../../core/models/domain';
 import { PlotCardComponent } from '../../shared/plot-card.component';
 
+import { MascotComponent } from '../../shared/mascot.component';
+
 @Component({
   selector: 'flora-dashboard',
   standalone: true,
   imports: [
+    MascotComponent,
     DecimalPipe,
     RouterLink,
     PrimeTemplate,
@@ -39,9 +42,10 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
             @if (snapshot()?.mocked) { · coorte de demonstração, não é um ensaio publicado. }
           </p>
         </div>
-        @if (snapshot()?.mocked) {
-          <p-tag value="Dados mockados" severity="secondary" />
-        }
+        <div class="head-side">
+          @if (snapshot()?.mocked) { <p-tag value="Dados mockados" severity="secondary" /> }
+          <flora-mascot name="binoculars" [size]="84" alt="Mascote FLORA com binóculos" />
+        </div>
       </header>
 
       <nav class="questions">

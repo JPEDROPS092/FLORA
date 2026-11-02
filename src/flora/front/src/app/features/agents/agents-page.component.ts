@@ -4,12 +4,13 @@ import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
 import { AgentService } from '../../core/agents/agent.service';
+import { MascotComponent } from '../../shared/mascot.component';
 import { WorkspaceStore } from '../../core/workspace/workspace.store';
 
 @Component({
   selector: 'flora-agents',
   standalone: true,
-  imports: [DatePipe, ButtonModule, TagModule],
+  imports: [MascotComponent, DatePipe, ButtonModule, TagModule],
   template: `
     <section class="page">
       <header class="page-heading">
@@ -18,7 +19,7 @@ import { WorkspaceStore } from '../../core/workspace/workspace.store';
           <h1>Equipe de análise assistida</h1>
           <p class="lede">Cada agente lê os dados do estudo, registra os passos e propõe ações. Nada muda sem sua confirmação.</p>
         </div>
-        <p-tag value="Respostas simuladas · ancoradas nos dados" severity="secondary" />
+        <div class="head-side"><p-tag value="Respostas simuladas · ancoradas nos dados" severity="secondary" /><flora-mascot name="laptop" [size]="96" alt="Mascote FLORA com laptop" /></div>
       </header>
 
       <div class="agent-grid">

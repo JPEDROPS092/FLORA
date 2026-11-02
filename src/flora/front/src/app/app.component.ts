@@ -24,7 +24,7 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
     <div class="shell" [class.collapsed]="!store.sidebarOpen()">
       <aside class="sidebar" aria-label="Navegação principal">
         <div class="brand">
-          <span class="mark" aria-hidden="true">FL</span>
+          <img class="mark-img" src="branding/logo/badge.webp" alt="" width="34" height="34" />
           <div class="brand-text"><strong>FLORA</strong><span>Microbiome Research</span></div>
         </div>
 
@@ -88,12 +88,13 @@ export class AppComponent implements OnInit {
 
   readonly source = this.repository.source;
   readonly lab = signal(this.router.url.startsWith('/ml'));
-  readonly title = signal('Painel');
+  readonly title = signal('Início');
   readonly health = signal<'checking' | 'online' | 'offline'>('checking');
   readonly connection = computed<Connection>(() => (this.source.mocked ? 'mock' : this.health()));
   readonly connectionLabel = computed(() => ({ mock: 'Mock 16S', checking: 'Conectando…', online: 'API conectada', offline: 'API offline' })[this.connection()]);
 
   readonly primary = [
+    { path: '/welcome', label: 'Início', icon: 'pi pi-home' },
     { path: '/dashboard', label: 'Painel', icon: 'pi pi-th-large' },
     { path: '/explorer', label: 'Explorer', icon: 'pi pi-chart-scatter' },
     { path: '/pipeline', label: 'Pipeline', icon: 'pi pi-sitemap' },

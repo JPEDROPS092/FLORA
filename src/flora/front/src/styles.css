@@ -368,3 +368,11 @@ code { font-family: ui-monospace, monospace; font-size: .74rem; background: var(
   .search-btn span, .search-btn kbd { display: none; }
   .search-btn { min-width: 0; }
 }
+
+/* ---------- branding ---------- */
+.mark-img { width: 34px; height: 34px; border-radius: 9px; background: #fff; object-fit: cover; flex: none; }
+.shell.collapsed .mark-img { width: 30px; height: 30px; }
+.head-side { display: flex; align-items: flex-end; gap: 12px; }
+.inst-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.cp-empty { display: grid; justify-items: center; text-align: center; gap: 6px; padding: 12px 0; }
+@media (max-width: 800px) { .head-side flora-mascot { display: none; } }

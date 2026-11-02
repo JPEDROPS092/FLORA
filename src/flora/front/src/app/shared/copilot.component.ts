@@ -8,13 +8,14 @@ import { DrawerModule } from 'primeng/drawer';
 import { filter, map } from 'rxjs';
 
 import { AgentService } from '../core/agents/agent.service';
+import { MascotComponent } from './mascot.component';
 import { WorkspaceStore } from '../core/workspace/workspace.store';
 
 /** Right-hand AI copilot, available on every page. Agents propose; the researcher confirms. */
 @Component({
   selector: 'flora-copilot',
   standalone: true,
-  imports: [DatePipe, FormsModule, ButtonModule, DrawerModule],
+  imports: [MascotComponent, DatePipe, FormsModule, ButtonModule, DrawerModule],
   template: `
     <p-drawer [visible]="store.copilotOpen()" (visibleChange)="store.copilotOpen.set($event)"
               position="right" [modal]="false" [style]="{ width: 'min(440px, 100vw)' }" styleClass="copilot-drawer">
@@ -36,6 +37,7 @@ import { WorkspaceStore } from '../core/workspace/workspace.store';
       <div class="cp-thread" #thread aria-live="polite">
         @if (!svc.messages().length) {
           <div class="cp-empty">
+            <flora-mascot name="wave" [size]="130" />
             <p>Pergunte sobre o estudo. Os agentes leem os dados, mostram os passos e <b>propõem</b> ações — você confirma.</p>
           </div>
         }
