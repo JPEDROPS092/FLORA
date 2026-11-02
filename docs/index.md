@@ -16,6 +16,8 @@ Version 0.1.0 — Python library for 16S rRNA amplicon microbiome analysis.
 - [Methods](methods.md) — scientific background for every algorithm used
 - [Article](article.md) — full scientific article describing the project
 - [Report](report.md) — technical project report
+- [Audit](audit.md) — repository audit from issue #2 (capability matrix and build baseline)
+- [ADRs](adr/0001-design-system-primeng.md) — architecture decision records (ADR 0001: PrimeNG design system)
 
 ---
 

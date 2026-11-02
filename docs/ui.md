@@ -48,7 +48,7 @@ flowchart TB
     style Server fill:#1a1a2e,stroke:#16213e,color:#e2e8f0
 ```
 
-When the pre-built Angular frontend is available (`flora/front/dist/`), it is served as a modern SPA with Angular Material and Tailwind CSS. Otherwise, a lightweight built-in HTML interface is used.
+When the pre-built Angular frontend is available (`flora/front/dist/`), it is served as a modern SPA built with Angular 21 and PrimeNG 21. Otherwise, a lightweight built-in HTML interface is used.
 
 ---
 
@@ -151,4 +151,4 @@ Options:
 
 The web interface uses only Python standard library modules (`http.server`). No Flask, FastAPI, or other web framework is required.
 
-Optional: the Angular frontend (`src/flora/front/`) provides a modern UI built with Angular 21, Angular Material, and Tailwind CSS 4. See [Frontend Development](../../src/flora/front/README.md) for build instructions.
+Optional: the Angular frontend (`src/flora/front/`) provides the modern UI, built with Angular 21 and PrimeNG 21 over a custom CSS-variables theme. See [Frontend Development](../../src/flora/front/README.md) for build instructions and [ADR 0001](../adr/0001-design-system-primeng.md) for the design-system decision.
