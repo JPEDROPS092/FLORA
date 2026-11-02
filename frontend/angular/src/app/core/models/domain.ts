@@ -1,0 +1,344 @@
+export type ThemeMode = 'light' | 'dark';
+
+export interface DataSourceInfo {
+  mode: 'mock' | 'http';
+  label: string;
+  apiBaseUrl: string;
+  mocked: boolean;
+}
+
+export interface PlotFigure {
+  data: Record<string, unknown>[];
+  layout: Record<string, unknown>;
+}
+
+export interface ChartResult {
+  status: 'ok' | 'error' | 'empty';
+  figure?: PlotFigure;
+  error?: string;
+}
+
+export interface Provenance {
+  pipelineVersion: string;
+  seed: number;
+  parameters: { label: string; value: string }[];
+  packages: { name: string; version: string }[];
+  inputs: string[];
+  history: { at: string; event: string }[];
+}
+
+export interface RecentAnalysis {
+  id: string;
+  name: string;
+  kind: string;
+  status: 'completed' | 'failed' | 'running';
+  finishedAt: string;
+  projectId: string;
+  summary: string;
+  provenance: Provenance;
+}
+
+export interface DashboardSnapshot {
+  source: DataSourceInfo;
+  studyId: string;
+  studyName: string;
+  marker: string;
+  samples: number;
+  asvs: number;
+  groups: number;
+  groupNames: string[];
+  quality: {
+    pass: number;
+    warn: number;
+    fail: number;
+    meanReads: number;
+    medianReads: number;
+  };
+  recent: RecentAnalysis[];
+  alpha: ChartResult;
+  pcoa: ChartResult;
+  mocked: boolean;
+  partial: boolean;
+  note?: string;
+  workdir?: string;
+  status: string;
+}
+
+export interface DiagnosticEntry {
+  timestamp: string;
+  level: 'INFO' | 'WARNING' | 'ERROR';
+  message: string;
+}
+
+export interface ResearchProject {
+  id: string;
+  name: string;
+  question: string;
+  status: 'active' | 'archived' | 'draft';
+  datasetName: string;
+  marker: string;
+  samples: number;
+  asvs: number;
+  groups: string[];
+  analyses: { id: string; name: string; kind: string; status: string }[];
+  results: { id: string; title: string; summary: string }[];
+  updatedAt: string;
+  mocked: boolean;
+}
+
+export interface ProjectDraft {
+  name: string;
+  question: string;
+}
+
+export interface IngestRequest {
+  metadataPath: string;
+  asvPath: string;
+  taxonomyPath: string;
+  sampleColumn: string;
+  groupColumn: string;
+  wideFormat: boolean;
+  metadataColumns?: string[];
+}
+
+export interface SampleQcRow {
+  sampleId: string;
+  metadataId: string;
+  group: string | null;
+  inMetadata: boolean;
+  inAsv: boolean;
+  reads: number | null;
+  status: 'pass' | 'warn' | 'fail';
+  issues: string[];
+}
+
+export interface IngestPreview {
+  columns: string[];
+  rows: SampleQcRow[];
+  summary: {
+    matched: number;
+    metadataOnly: number;
+    asvOnly: number;
+    lowDepth: number;
+    totalAsvs: number;
+  };
+  histogram: PlotFigure;
+  mocked: boolean;
+  warnings: string[];
+}
+
+export interface IngestStepResult {
+  step: 'metadata' | 'asv' | 'taxonomy';
+  success: boolean;
+  detail?: string;
+  error?: string;
+}
+
+export interface IngestOutcome {
+  success: boolean;
+  steps: IngestStepResult[];
+  error?: string;
+}
+
+export interface PipelineStage {
+  id: string;
+  tool: string;
+  name: string;
+  detail: string;
+  status: 'complete' | 'attention' | 'pending' | 'failed';
+}
+
+export interface NormalizationConfig {
+  rarefactionDepth: number;
+  method: 'clr' | 'tss' | 'none';
+  minPrevalence: number;
+  minAbundance: number;
+}
+
+export interface PipelineSnapshot {
+  stages: PipelineStage[];
+  normalization: NormalizationConfig;
+  qc: IngestPreview;
+  ingested: boolean;
+  mocked: boolean;
+  note?: string;
+}
+
+export type ExplorerView = 'pcoa' | 'alpha' | 'beta' | 'taxonomy' | 'relations';
+
+export interface ExplorationQuery {
+  groups: string[];
+  metric: 'shannon' | 'simpson' | 'observed' | 'chao1';
+  normalize: 'clr' | 'tss' | 'none';
+  rank: 'phylum' | 'class' | 'order' | 'family' | 'genus';
+  distance: 'braycurtis' | 'jaccard';
+  topN: number;
+}
+
+export interface TaxonNode {
+  key: string;
+  label: string;
+  rank: string;
+  abundance: number;
+  children?: TaxonNode[];
+}
+
+export interface GroupComparison {
+  group: string;
+  n: number;
+  shannonMean: number;
+  shannonSd: number;
+  observedMean: number;
+}
+
+export interface DifferentialTaxon {
+  taxon: string;
+  rank: 'phylum' | 'genus';
+  log2FoldChange: number;
+  pValue: number;
+  qValue: number;
+  higherIn: string;
+  contrast: string;
+}
+
+export interface ExplorationBundle {
+  query: ExplorationQuery;
+  pcoa: ChartResult;
+  alpha: ChartResult;
+  beta: ChartResult;
+  taxonomy: ChartResult;
+  relations: ChartResult;
+  tree: TaxonNode[];
+  comparisons: GroupComparison[];
+  differential: DifferentialTaxon[];
+  distanceNote: string;
+  sampleCount: number;
+  asvCount: number;
+  mocked: boolean;
+  note?: string;
+}
+
+export interface ClusterRequest {
+  method: 'kmeans' | 'hdbscan';
+  nClusters: number;
+  normalize: 'clr' | 'tss' | 'none';
+  seed: number;
+}
+
+export interface ClusterSummary {
+  success: boolean;
+  error?: string;
+  method: string;
+  nClusters: number;
+  silhouette: number | null;
+  daviesBouldin: number | null;
+  noiseFraction: number | null;
+  mocked: boolean;
+}
+
+export interface TrainRequest {
+  model: 'random_forest' | 'xgboost';
+  targetColumn: string;
+  trainFilter: string;
+  testFilter: string;
+  normalize: 'clr' | 'tss' | 'none';
+  cvFolds: number;
+  seed: number;
+}
+
+export interface MlExperiment {
+  id: string;
+  name: string;
+  model: string;
+  status: 'completed' | 'failed';
+  createdAt: string;
+  accuracy: number;
+  f1Macro: number;
+  rocAuc: number | null;
+  cvAccuracyMean: number;
+  trainN: number;
+  testN: number;
+  features: number;
+  importanceKind: 'shap' | 'impurity';
+  confusion: ChartResult;
+  roc: ChartResult;
+  importance: ChartResult;
+  labels: string[];
+  matrix: number[][];
+  importances: { feature: string; value: number }[];
+  config: { label: string; value: string }[];
+  limitations: string[];
+  provenance: Provenance;
+  error?: string;
+  mocked: boolean;
+}
+
+export interface ModelComparisonRow {
+  model: string;
+  experimentId: string;
+  accuracy: number;
+  f1Macro: number;
+  rocAuc: number | null;
+  cvAccuracyMean: number;
+  seed: number;
+  features: number;
+}
+
+export interface ReportSection {
+  id: string;
+  title: string;
+  narrative: string;
+  included: boolean;
+  figure: 'alpha' | 'pcoa' | 'taxonomy' | 'beta' | 'confusion' | 'shap' | null;
+  table: { columns: string[]; rows: string[][] } | null;
+}
+
+export interface ReportDraft {
+  title: string;
+  projectId: string;
+  mocked: boolean;
+  sections: ReportSection[];
+  parameters: { label: string; value: string }[];
+  figures: Partial<Record<NonNullable<ReportSection['figure']>, PlotFigure>>;
+  note?: string;
+}
+
+export interface ExportRequest {
+  title: string;
+  format: 'html' | 'pdf' | 'both';
+  sections: ReportSection[];
+  groupBy: string;
+}
+
+export interface ScientificExport {
+  success: boolean;
+  error?: string;
+  title: string;
+  html: string;
+  pdfBase64: string;
+  previewUrl?: string;
+  warnings: string[];
+  mocked: boolean;
+}
+
+export interface DownloadRequest {
+  source: 'synthetic' | 'emp' | 'mgnify' | 'sra';
+  outputDir: string;
+  samples?: number;
+  features?: number;
+  seed?: number;
+  studyAccession?: string;
+  biome?: string;
+  maxSamples?: number;
+  accessions?: string[];
+}
+
+export interface DownloadJob {
+  id: string;
+  source: string;
+  status: 'ready' | 'queued' | 'failed' | 'completed';
+  detail: string;
+  artifacts: { label: string; path: string }[];
+  mocked: boolean;
+  createdAt: string;
+}
