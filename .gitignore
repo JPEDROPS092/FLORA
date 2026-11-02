@@ -80,9 +80,6 @@ results/
 node_modules/
 coverage/
 .angular/
-frontend/angular/node_modules/
-frontend/angular/coverage/
-frontend/angular/.angular/
 # Angular frontend - build artifacts and dependencies
 src/flora/front/node_modules/
 src/flora/front/.angular/

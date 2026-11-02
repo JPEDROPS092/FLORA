@@ -4,7 +4,7 @@
 
 - Check that the process is listening on the expected host and port
 - Open `http://127.0.0.1:8765/api/status` directly and confirm the JSON response
-- If using a compiled SPA, verify that `src/flora/ui/static/app/index.html` exists
+- If using a compiled SPA, verify that `src/flora/front/dist/index.html` exists
 
 ## The UI loads but API calls fail
 
@@ -17,8 +17,8 @@
 That means the Angular SPA has not been built into the package assets yet. Run:
 
 ```bash
-cd frontend/angular
-npm install
+cd src/flora/front
+npm ci
 npm run build
 ```
 
