@@ -70,6 +70,34 @@ flora = "flora.ui.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/flora"]
+artifacts = ["src/flora/front/dist"]
+exclude = [
+    "flora/front/angular.json",
+    "flora/front/package.json",
+    "flora/front/package-lock.json",
+    "flora/front/tsconfig*.json",
+    "flora/front/.postcssrc.json",
+    "flora/front/eslint.config.js",
+    "flora/front/metadata.json",
+    "flora/front/README.md",
+    "flora/front/.env.example",
+    "flora/front/.gitignore",
+    "flora/front/assets",
+    "flora/front/public",
+    "flora/front/src",
+    "flora/front/node_modules",
+    "flora/front/dist/app",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "src/flora/front/src",
+  "src/flora/front/node_modules",
+  "src/flora/front/.angular",
+]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
