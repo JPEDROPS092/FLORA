@@ -2,10 +2,11 @@
 
 Angular 21 SPA for the FLORA microbiome analysis platform.
 
-> **Status: scaffolding.** The application source (`src/`) does not exist yet — it
-> is created in issue #4 (AppShell) on top of the design-system decision
-> recorded in [ADR 0001](../../../docs/adr/0001-design-system-primeng.md).
-> Until then, `flora ui` serves the built-in fallback HTML interface.
+> **Status: AppShell implemented (issue #4).** The application shell builds,
+> passes unit tests and lint, and is served by `flora ui` when `dist/` is
+> present. Feature pages land with issues #7–#14 on top of the design-system
+> decision recorded in
+> [ADR 0001](../../../docs/adr/0001-design-system-primeng.md).
 
 ---
 
@@ -28,20 +29,28 @@ these static files instead of the fallback HTML interface.
 
 ```
 src/flora/front/
+├── src/
+│   ├── index.html            # SPA entry
+│   ├── main.ts               # bootstrapApplication
+│   ├── styles.css            # imports tokens/themes/scientific
+│   ├── styles/
+│   │   ├── tokens.css        # FLORA design tokens
+│   │   ├── themes.css        # fonts, focus visibility, scrollbars
+│   │   └── scientific.css    # data-display utilities
+│   └── app/
+│       ├── app.ts / app.html / app.config.ts   # root + PrimeNG theme preset
+│       ├── app.routes.ts                       # routes (lazy per feature)
+│       ├── core/api/flora-api.service.ts       # GET /api/status client
+│       ├── layout/shell.*                      # sidebar + topbar layout
+│       └── pages/home.page.ts                  # dashboard placeholder (#7)
 ├── public/favicon.ico        # Static assets
 ├── angular.json              # Angular CLI config (output: dist/)
 ├── package.json              # npm dependencies (PrimeNG stack)
 ├── tsconfig.json             # TypeScript config
 ├── tsconfig.app.json         # App compilation config
 ├── tsconfig.spec.json        # Test compilation config
-├── eslint.config.js          # angular-eslint flat config
-└── README.md
+└── eslint.config.js          # angular-eslint flat config
 ```
-
-The application source tree (`src/index.html`, `src/main.ts`, `src/app/…`)
-is added by issue #4. It will follow the target layout from the roadmap:
-`app/core` (api, models, services), `app/layout`, `app/shared`,
-`app/features/<domain>` per module of the platform, and `app.routes.ts`.
 
 ## Development
 

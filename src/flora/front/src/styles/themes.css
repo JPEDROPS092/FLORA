@@ -1,0 +1,45 @@
+/* Global theme wiring: fonts, scrollbars, PrimeNG surface overrides. */
+
+@import 'primeicons/primeicons.css';
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--flora-font-sans);
+  background: var(--p-surface-900);
+  color: var(--p-text-color);
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+pre {
+  font-family: var(--flora-font-mono);
+  font-size: 0.92em;
+}
+
+/* Focus visibility (WCAG 2.2 AA) */
+:focus-visible {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Slim scrollbars that follow the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--p-surface-500) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--p-surface-500);
+  border-radius: 4px;
+}

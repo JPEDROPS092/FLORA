@@ -1,0 +1,28 @@
+/* FLORA design tokens (ADR 0001). Layout and brand variables; component
+ * colors come from the PrimeNG preset in app.config.ts. */
+
+:root {
+  --flora-font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --flora-font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+
+  --flora-sidebar-width: 264px;
+  --flora-topbar-height: 3.5rem;
+  --flora-content-max: 1200px;
+
+  /* Semantic accents beyond the primary palette */
+  --flora-accent-cyan: #38c0f0;
+  --flora-success: #3ecf8e;
+  --flora-warning: #e8b04b;
+  --flora-error: #f26d6d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

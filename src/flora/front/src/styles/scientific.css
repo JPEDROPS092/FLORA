@@ -1,0 +1,29 @@
+/* Scientific data display utilities. */
+
+.flora-mono {
+  font-family: var(--flora-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.flora-muted {
+  color: var(--p-text-muted-color);
+}
+
+/* Tables with their own horizontal scroll — the page never scrolls sideways. */
+.flora-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.flora-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Plotly (and other figure) containers keep a stable minimum height so the
+ * layout does not jump while figures render. */
+.plot-container {
+  width: 100%;
+  min-height: 420px;
+}
