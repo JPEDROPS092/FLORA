@@ -25,18 +25,27 @@ else
   npx ng build --configuration production
 fi
 
-# The Angular CLI outputs to dist/app/ by default when outputPath is "dist"
-# We need to flatten it to dist/ for the Python package
-SRC="$FRONT_DIR/dist/app/browser"
-if [ ! -d "$SRC" ]; then
-  SRC="$FRONT_DIR/dist/app"
-fi
+# Angular 21's application builder outputs to dist/browser when outputPath
+# is "dist" (older CLIs used dist/app or dist/app/browser). Flatten whatever
+# exists into dist/ so the Python package can serve it.
+SRC=""
+for candidate in "$FRONT_DIR/dist/browser" "$FRONT_DIR/dist/app/browser" "$FRONT_DIR/dist/app"; do
+  if [ -d "$candidate" ]; then
+    SRC="$candidate"
+    break
+  fi
+done
 
-if [ -d "$SRC" ]; then
+if [ -n "$SRC" ]; then
   echo "==> Copying built assets to $DIST_TARGET..."
+  # The build output lives inside DIST_TARGET itself; stage it in a temp dir
+  # first so we can replace dist/ without deleting the source mid-copy.
+  TMP_DIR="$(mktemp -d)"
+  cp -r "$SRC"/* "$TMP_DIR/"
   rm -rf "$DIST_TARGET"
   mkdir -p "$DIST_TARGET"
-  cp -r "$SRC"/* "$DIST_TARGET/"
+  cp -r "$TMP_DIR"/* "$DIST_TARGET/"
+  rm -rf "$TMP_DIR"
 
   # Remove source maps from production builds
   find "$DIST_TARGET" -name "*.map" -delete 2>/dev/null || true
@@ -44,6 +53,6 @@ if [ -d "$SRC" ]; then
   echo "==> Frontend built successfully. Assets at: $DIST_TARGET"
   du -sh "$DIST_TARGET"
 else
-  echo "ERROR: Build output not found at $SRC" >&2
+  echo "ERROR: Build output not found (checked dist/browser, dist/app/browser, dist/app)" >&2
   exit 1
 fi

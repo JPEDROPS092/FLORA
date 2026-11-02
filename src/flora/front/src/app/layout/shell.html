@@ -1,0 +1,82 @@
+<div class="shell" [class.sidebar-collapsed]="!sidebarOpen()">
+  <aside class="sidebar" id="flora-sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">F</span>
+      <div class="brand-text">
+        <strong>FLORA</strong>
+        <small>Omics Research Analytics</small>
+      </div>
+    </div>
+
+    <nav aria-label="Primary">
+      <ul class="nav-list">
+        @for (item of navItems; track item.label) {
+          <li>
+            @if (item.ready && item.route) {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="active"
+                [attr.aria-label]="item.label"
+              >
+                <i [class]="item.icon" aria-hidden="true"></i>
+                <span>{{ item.label }}</span>
+              </a>
+            } @else {
+              <span class="nav-soon" [pTooltip]="'Planned in issue ' + item.issue" tooltipPosition="right">
+                <i [class]="item.icon" aria-hidden="true"></i>
+                <span>{{ item.label }}</span>
+                <em class="soon-badge">soon</em>
+              </span>
+            }
+          </li>
+        }
+      </ul>
+    </nav>
+
+    <div class="sidebar-footer">
+      @switch (connection().kind) {
+        @case ('checking') {
+          <span class="conn conn-checking"><span class="dot" aria-hidden="true"></span>Connecting…</span>
+        }
+        @case ('connected') {
+          <button type="button" class="conn conn-ok" (click)="refreshStatus()" aria-label="Refresh backend status">
+            <span class="dot" aria-hidden="true"></span>
+            Connected
+          </button>
+        }
+        @case ('disconnected') {
+          <button type="button" class="conn conn-bad" (click)="refreshStatus()" aria-label="Backend unreachable — retry">
+            <span class="dot" aria-hidden="true"></span>
+            Disconnected
+          </button>
+        }
+      }
+    </div>
+  </aside>
+
+  <div class="main-col">
+    <header class="topbar">
+      <p-button
+        icon="pi pi-bars"
+        [text]="true"
+        [rounded]="true"
+        (onClick)="toggleSidebar()"
+        ariaLabel="Toggle navigation sidebar"
+      />
+      <div class="topbar-title">
+        <ng-content select="[page-title]" />
+      </div>
+      <p-button
+        [icon]="dark() ? 'pi pi-sun' : 'pi pi-moon'"
+        [text]="true"
+        [rounded]="true"
+        (onClick)="toggleDark()"
+        [ariaLabel]="dark() ? 'Switch to light theme' : 'Switch to dark theme'"
+      />
+    </header>
+
+    <main class="content" id="flora-content">
+      <router-outlet />
+    </main>
+  </div>
+</div>
