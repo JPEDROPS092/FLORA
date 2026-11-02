@@ -505,7 +505,7 @@ Embora o foco do periodo tenha migrado para a consolidacao da biblioteca, a cama
     \item baixar datasets publicos com \texttt{flora download mgnify}, \texttt{sra}, \texttt{emp} e \texttt{synthetic}.
 \end{itemize}
 
-Na camada HTTP, \texttt{src/flora/ui/server.py} organiza o despacho das rotas e integra o estado da interface por meio de \texttt{FLORAState}. O frontend compilado da SPA Angular e servido a partir de \texttt{src/flora/ui/static/app/}, mantendo a operacao local sem necessidade de infraestrutura web externa. Isso reforca o conceito original do projeto: uma plataforma \textit{friendly}, local e aberta.
+Na camada HTTP, \texttt{src/flora/ui/server.py} organiza o despacho das rotas e integra o estado da interface por meio de \texttt{FLORAState}. O frontend compilado da SPA Angular e servido a partir de \texttt{src/flora/front/dist/}, mantendo a operacao local sem necessidade de infraestrutura web externa. Isso reforca o conceito original do projeto: uma plataforma \textit{friendly}, local e aberta.
 
 Os relatarios sao produzidos por \texttt{FLORAReport}, em \texttt{src/flora/reports/html\_report.py}. Esse componente monta um HTML autocontido com metricas, tabelas e graficos Plotly. Assim, o produto final da analise nao e apenas um banco ou um notebook, mas um artefato compartilhavel e auditavel.
 

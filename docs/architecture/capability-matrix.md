@@ -13,8 +13,8 @@ Evidência de execução na `dev` (Linux, Node 22, Python venv limpo):
 | `npm run build` | ✅ após remover `.postcssrc.json` (referenciava `@tailwindcss/postcss`, removido pelo ADR 0001); bundle inicial 543,88 kB (120,09 kB transferidos), **acima do orçamento de 500 kB** (warning) |
 | `npm test` | ✅ 1 arquivo, 1 teste |
 | `pip install -e .` | ✅ |
-| `flora ui` (smoke) | ✅ `/` → 200 HTML (modo `angular-spa`); `/api/status` → JSON `connected`; `/api/viz/pcoa` sem dados → 400 |
-| `pytest` UI | ⚠️ não executado: o extra de cobertura (`pytest-cov`) não estava instalado e o `addopts` o exige |
+| `flora ui` (smoke) | ✅ após remover o legado: `/` → 200 com `<title>FLORA Studio` (app novo, `front/dist`); `/api/status` → JSON `connected`, modo `angular-spa`; `/api/viz/pcoa` sem dados → 400 |
+| `pytest` UI (frontend, http, status, integração do servidor) | ✅ 14 passam (`--no-cov`) |
 
 ## 1. Backend (Python)
 
@@ -52,12 +52,11 @@ Evidência de execução na `dev` (Linux, Node 22, Python venv limpo):
 
 | Item | Estado | Observação |
 |---|---|---|
-| `frontend/angular/` (raiz) | 🟡 | árvore Angular antiga com `app.component.spec.ts`; relação com `src/flora/front/` não documentada — decidir remover ou arquivar |
+| `frontend/angular/` e build em `ui/static/app/` | ✅ removidos | Eram o front antigo (5 páginas: overview, workspace, downloads, visuals, reporting; a rota `downloads` importava um arquivo inexistente). O build antigo tinha prioridade sobre `front/dist` em `flora ui`. Recuperáveis no commit `ac0aebe`; a portagem das páginas para PrimeNG é escopo de #7–#14 |
 | `backlog/backlog.md` (50 itens "concluídos") | 🟡 | itens de Python não reverificados item a item aqui |
 
 ## 4. Pendências para encerrar a auditoria
 
 - Reverificar item a item o `backlog/backlog.md` contra código/testes.
 - Rodar a suíte Python completa com `pytest-cov` e registrar a cobertura.
-- Decidir o destino de `frontend/angular/`.
 - Responsáveis: a definir pelo mantenedor.

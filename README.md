@@ -225,7 +225,7 @@ flora ui --host 127.0.0.1 --port 8765 --workdir results/ --log-level INFO
 
 FLORA now serves a single frontend:
 
-- Angular SPA built from `frontend/angular/` and served from `src/flora/ui/static/app/`
+- Angular SPA built from `src/flora/front/` and served from `src/flora/front/dist/`
 
 If the Angular build is absent, `flora ui` returns an explicit build-missing page with instructions instead of silently falling back to the legacy embedded UI.
 

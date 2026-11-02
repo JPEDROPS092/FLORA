@@ -7,19 +7,16 @@ from mimetypes import guess_type
 from pathlib import Path
 
 PACKAGE_DIR = Path(__file__).parent
-STATIC_ROOT = PACKAGE_DIR / "static"
-SPA_BUILD_DIR = STATIC_ROOT / "app"
-# Output of ``scripts/build_frontend.sh``; only a fallback for ``SPA_BUILD_DIR``.
-FRONT_DIST_DIR = PACKAGE_DIR.parent / "front" / "dist"
+# Output of ``scripts/build_frontend.sh`` (source in ``src/flora/front``).
+SPA_BUILD_DIR = PACKAGE_DIR.parent / "front" / "dist"
 
 
 def spa_root_dir() -> Path:
     """Return the directory that contains the built SPA assets.
 
-    The ``frontend/angular`` build in ``SPA_BUILD_DIR`` wins; the
-    ``flora/front/dist`` build is used only when that one is absent.
+    The build lives in ``SPA_BUILD_DIR`` (``flora/front/dist``).
     """
-    for candidate in (SPA_BUILD_DIR / "browser", SPA_BUILD_DIR, FRONT_DIST_DIR):
+    for candidate in (SPA_BUILD_DIR / "browser", SPA_BUILD_DIR):
         if (candidate / "index.html").exists():
             return candidate
     return SPA_BUILD_DIR
@@ -57,7 +54,7 @@ def load_index_html() -> str:
     """Load the Angular SPA entrypoint HTML."""
     if not has_built_frontend():
         raise FrontendNotBuiltError(
-            "Angular UI build not found. Run `cd frontend/angular && npm run build`."
+            "Angular UI build not found. Run `cd src/flora/front && npm ci && npm run build`."
         )
     return spa_index_path().read_text(encoding="utf-8")
 

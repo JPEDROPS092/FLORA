@@ -53,23 +53,23 @@ flora ui --config config.yaml --workdir results/
 
 ## Angular Workflow
 
-The Angular workspace now lives in:
+The Angular workspace lives in:
 
 ```text
-frontend/angular/
+src/flora/front/
 ```
 
 The backend serves the compiled SPA from:
 
 ```text
-src/flora/ui/static/app/
+src/flora/front/dist/
 ```
 
 Frontend commands:
 
 ```bash
-cd frontend/angular
-npm install
+cd src/flora/front
+npm ci
 npm run build
 ```
 

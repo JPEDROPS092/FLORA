@@ -54,14 +54,14 @@ flora/
 ### Frontend Target
 
 ```text
-frontend/angular/
+src/flora/front/
   src/app/
     core/          # API client, interceptors, environment
     features/      # dashboard, ingest, downloads, diversity, ML, reports
     shared/        # reusable UI components
 ```
 
-Angular compiles to `src/flora/ui/static/app/`, and the Python server serves:
+Angular compiles to `src/flora/front/dist/`, and the Python server serves:
 
 - built SPA assets
 - client-side route fallback to the SPA index
@@ -116,7 +116,7 @@ The repository is now prepared for a compiled SPA through `src/flora/ui/frontend
 
 Serving order:
 
-1. If `src/flora/ui/static/app/index.html` exists, serve the compiled SPA
+1. If `src/flora/front/dist/index.html` exists, serve the compiled SPA
 2. Otherwise, serve the existing embedded UI from `flora.ui.webapp`
 
 This now gives a cleaner operational model:
@@ -125,7 +125,7 @@ This now gives a cleaner operational model:
 - the backend remains responsible for serving the compiled assets and API
 - missing builds fail explicitly instead of hiding the problem with a legacy UI
 
-The repository now already contains the Angular workspace in `frontend/angular/`
+The repository now already contains the Angular workspace in `src/flora/front/`
 and a backend integration layer in `src/flora/ui/frontend.py`.
 
 ## Migration Plan

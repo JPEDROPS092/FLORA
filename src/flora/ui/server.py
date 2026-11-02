@@ -99,8 +99,8 @@ def _serve_frontend_missing(handler: BaseHTTPRequestHandler, message: str) -> No
   <main>
     <h1>FLORA UI build not found</h1>
     <p>{message}</p>
-    <pre>cd frontend/angular
-npm install
+    <pre>cd src/flora/front
+npm ci
 npm run build
 flora ui --host 127.0.0.1 --port 8765 --workdir results/ --log-level INFO</pre>
   </main>
