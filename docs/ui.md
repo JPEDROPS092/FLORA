@@ -2,6 +2,8 @@
 
 FLORA includes a browser-based dashboard for interactive microbiome analysis.
 
+> **Status:** the Angular SPA currently ships only the AppShell and a status dashboard; feature pages are still in development. See the [capability matrix](architecture/capability-matrix.md) for what is implemented, partial or missing.
+
 ---
 
 ## Quick start
