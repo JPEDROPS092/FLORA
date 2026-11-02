@@ -73,6 +73,10 @@ class FloraDB:
 
     def _connect(self) -> None:
         try:
+            if self._path != ":memory:":
+                parent = Path(self._path).parent
+                if parent and not parent.exists():
+                    parent.mkdir(parents=True, exist_ok=True)
             self._conn = duckdb.connect(
                 database=self._path,
                 read_only=self._read_only,
@@ -566,11 +570,13 @@ class FloraDB:
             "v_diversity_wide": """
                 SELECT
                     sample_id,
-                    MAX(CASE WHEN metric = 'shannon'           THEN value END) AS shannon,
-                    MAX(CASE WHEN metric = 'observed_features' THEN value END) AS observed_features,
-                    MAX(CASE WHEN metric = 'chao1'             THEN value END) AS chao1,
-                    MAX(CASE WHEN metric = 'simpson'           THEN value END) AS simpson,
-                    MAX(CASE WHEN metric = 'pielou_e'          THEN value END) AS pielou_e
+                    AVG(CASE WHEN metric = 'shannon' THEN value END) AS shannon,
+                    AVG(CASE WHEN metric = 'observed_features' THEN value END)
+                        AS observed_features,
+                    AVG(CASE WHEN metric = 'chao1' THEN value END) AS chao1,
+                    AVG(CASE WHEN metric = 'simpson' THEN value END) AS simpson,
+                    AVG(CASE WHEN metric = 'pielou_e' THEN value END) AS pielou_e,
+                    AVG(CASE WHEN metric = 'faith_pd' THEN value END) AS faith_pd
                 FROM diversity_alpha
                 GROUP BY sample_id
             """,
@@ -637,10 +643,22 @@ class QueryResult:
         """Materialize the result as a PyArrow table.
 
         DuckDB may return either a ``pyarrow.Table`` or a
-        ``pyarrow.RecordBatchReader`` depending on the version. This helper
-        normalizes both cases and preserves empty-result schemas.
+        ``pyarrow.RecordBatchReader`` depending on the version, and the
+        method name differs too: DuckDB 2.x exposes ``to_arrow_table`` (also on
+        the object returned by ``execute``), while older releases only have
+        ``arrow`` / ``fetch_arrow_table``. This helper picks whichever exists,
+        normalizes both return types and preserves empty-result schemas.
         """
-        arrow_obj = self._rel.arrow()
+        for method in ("to_arrow_table", "arrow", "fetch_arrow_table"):
+            fetch = getattr(self._rel, method, None)
+            if fetch is not None:
+                arrow_obj = fetch()
+                break
+        else:
+            raise AttributeError(
+                f"{type(self._rel).__name__} has no Arrow export method "
+                "(tried to_arrow_table, arrow, fetch_arrow_table)"
+            )
         if isinstance(arrow_obj, pa.Table):
             return arrow_obj
         if isinstance(arrow_obj, pa.RecordBatchReader):

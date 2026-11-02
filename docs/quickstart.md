@@ -110,12 +110,39 @@ flora download emp --outdir data/raw/emp --biome forest --max-samples 200
 
 ---
 
+## Web interface
+
+Start the interactive dashboard:
+
+```bash
+flora ui
+# or with explicit options
+flora ui --host 127.0.0.1 --port 8765 --workdir results/
+```
+
+Opens at `http://127.0.0.1:8765` with:
+
+- Dashboard showing pipeline status and database stats
+- Forms for data ingestion, downloads, and ML training
+- Interactive Plotly visualizations
+- One-click HTML report generation
+
+See the [Web Interface documentation](ui.md) for details.
+
+---
+
 ## Other sources
 
 ```bash
 # MGnify pre-computed analyses
 flora download mgnify MGYS00005116 --outdir data/raw --analyses --max-samples 20
 flora run config.yaml
+
+# Download from MGnify and ingest into DuckDB
+flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80 --to-duckdb
+
+# Ingest an existing download directory
+flora ingest data/raw --duckdb-path results/flora.duckdb
 
 # NCBI SRA (requires: conda install -c bioconda sra-tools)
 flora download sra SRR12345678 SRR12345679 --outdir data/raw --jobs 4
