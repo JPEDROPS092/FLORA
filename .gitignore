@@ -7,6 +7,8 @@ build/
 develop-eggs/
 dist/
 downloads/
+!frontend/angular/src/app/features/downloads/
+!frontend/angular/src/app/features/downloads/**
 eggs/
 .eggs/
 lib/

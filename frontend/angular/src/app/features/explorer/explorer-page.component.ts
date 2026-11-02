@@ -1,0 +1,285 @@
+import { DecimalPipe } from '@angular/common';
+import { Component, inject, signal } from '@angular/core';
+import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { TreeNode } from 'primeng/api';
+import { ButtonModule } from 'primeng/button';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { MultiSelectModule } from 'primeng/multiselect';
+import { SelectModule } from 'primeng/select';
+import { TableModule } from 'primeng/table';
+import { TabsModule } from 'primeng/tabs';
+import { TagModule } from 'primeng/tag';
+import { TreeModule } from 'primeng/tree';
+import { PrimeTemplate } from 'primeng/api';
+
+import { FloraRepository } from '../../core/data/flora.repository';
+import { ChartResult, ExplorationBundle, ExplorerView, TaxonNode } from '../../core/models/domain';
+import { downloadBlob } from '../../shared/download';
+import { PlotCardComponent } from '../../shared/plot-card.component';
+
+@Component({
+  selector: 'flora-explorer',
+  standalone: true,
+  imports: [
+    DecimalPipe,
+    ReactiveFormsModule,
+    ButtonModule,
+    InputNumberModule,
+    MultiSelectModule,
+    SelectModule,
+    TableModule,
+    TabsModule,
+    TagModule,
+    TreeModule,
+    PrimeTemplate,
+    PlotCardComponent
+  ],
+  template: `
+    <section class="page">
+      <header class="page-heading">
+        <div>
+          <p class="kicker">Scientific Explorer</p>
+          <h1>Ordenação, diversidade e composição</h1>
+          <p class="lede">Os filtros valem para todas as vistas. A figura ativa ocupa o centro.</p>
+        </div>
+        @if (bundle()?.mocked) { <p-tag value="Dados mockados" severity="secondary" /> }
+      </header>
+
+      <div class="explorer">
+        <form class="surface filters" [formGroup]="filters" (ngSubmit)="apply()">
+          <div class="field">
+            <label for="groups">Grupos</label>
+            <p-multiselect inputId="groups" [options]="groupOptions" formControlName="groups" display="chip" appendTo="body" [fluid]="true" />
+            @if (filters.controls.groups.invalid && filters.controls.groups.touched) {
+              <small class="field-error">Selecione ao menos um grupo.</small>
+            }
+          </div>
+          <div class="field">
+            <label for="metric">Métrica alfa</label>
+            <p-select inputId="metric" [options]="metrics" formControlName="metric" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
+          </div>
+          <div class="field">
+            <label for="normalize">Transformação</label>
+            <p-select inputId="normalize" [options]="normalizations" formControlName="normalize" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
+          </div>
+          <div class="field">
+            <label for="rank">Rank taxonômico</label>
+            <p-select inputId="rank" [options]="ranks" formControlName="rank" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
+          </div>
+          <div class="field">
+            <label for="distance">Distância beta</label>
+            <p-select inputId="distance" [options]="distances" formControlName="distance" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
+          </div>
+          <div class="field">
+            <label for="topN">Top N</label>
+            <p-inputnumber inputId="topN" formControlName="topN" [min]="2" [max]="12" [fluid]="true" />
+          </div>
+          <div class="actions">
+            <p-button type="submit" label="Aplicar filtros" icon="pi pi-filter" [loading]="busy()" />
+            <p-button type="button" label="Exportar tabela" severity="secondary" [text]="true" (onClick)="exportTable()" />
+          </div>
+          <p class="note">{{ bundle()?.sampleCount | number }} amostras na rarefação · {{ bundle()?.asvCount | number }} ASVs no estudo.</p>
+        </form>
+
+        <div class="stack">
+          <p-tabs [value]="view()" (valueChange)="onView($event)">
+            <p-tablist>
+              <p-tab value="pcoa">PCoA</p-tab>
+              <p-tab value="alpha">Alfa</p-tab>
+              <p-tab value="beta">Beta</p-tab>
+              <p-tab value="taxonomy">Taxonomia</p-tab>
+              <p-tab value="relations">Relações</p-tab>
+            </p-tablist>
+          </p-tabs>
+
+          <article class="surface stage" [class.with-tree]="view() === 'taxonomy'">
+            @if (view() === 'taxonomy') {
+              <div class="tree-pane">
+                <div class="section-title"><h2>Árvore resumida</h2></div>
+                @if (tree().length) {
+                  <p-tree [value]="tree()" />
+                } @else {
+                  <p class="note">{{ bundle()?.note || 'Sem árvore estruturada nesta fonte.' }}</p>
+                }
+              </div>
+            }
+            <div>
+              <div class="section-title">
+                <h2>{{ viewTitle() }}</h2>
+                <p>{{ view() === 'beta' || view() === 'pcoa' ? bundle()?.distanceNote : '' }}</p>
+              </div>
+              <flora-plot [result]="activeChart()" [height]="560" />
+            </div>
+          </article>
+
+          <article class="surface">
+            <div class="section-title">
+              <h2>Comparação de grupos</h2>
+              <p>Mesmos filtros da figura.</p>
+            </div>
+            <p-table [value]="bundle()?.comparisons ?? []">
+              <ng-template pTemplate="header">
+                <tr><th>Grupo</th><th>n</th><th>Shannon</th><th>DP</th><th>ASVs observados</th></tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-row>
+                <tr>
+                  <td>{{ row.group }}</td>
+                  <td>{{ row.n }}</td>
+                  <td>{{ row.shannonMean | number:'1.2-2' }}</td>
+                  <td>{{ row.shannonSd | number:'1.2-2' }}</td>
+                  <td>{{ row.observedMean | number }}</td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage"><tr><td colspan="5">Sem resumo numérico nesta fonte.</td></tr></ng-template>
+            </p-table>
+          </article>
+
+          <article class="surface">
+            <div class="section-title">
+              <h2>Táxons diferenciais</h2>
+              <p>log2 fold change mockado no rank selecionado, quando existir.</p>
+            </div>
+            <p-table [value]="bundle()?.differential ?? []" [rows]="8" [paginator]="true">
+              <ng-template pTemplate="header">
+                <tr><th>Táxon</th><th>log2FC</th><th>p</th><th>q</th><th>Maior em</th><th>Contraste</th></tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-row>
+                <tr>
+                  <td>{{ row.taxon }}</td>
+                  <td>{{ row.log2FoldChange | number:'1.2-2' }}</td>
+                  <td>{{ row.pValue | number:'1.4-4' }}</td>
+                  <td>{{ row.qValue | number:'1.3-3' }}</td>
+                  <td>{{ row.higherIn }}</td>
+                  <td>{{ row.contrast }}</td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage"><tr><td colspan="6">{{ bundle()?.note || 'Sem contrastes.' }}</td></tr></ng-template>
+            </p-table>
+          </article>
+        </div>
+      </div>
+    </section>
+  `
+})
+export class ExplorerPageComponent {
+  private readonly repository = inject(FloraRepository);
+  private readonly route = inject(ActivatedRoute);
+  private readonly fb = inject(FormBuilder);
+
+  readonly view = signal<ExplorerView>('pcoa');
+  readonly bundle = signal<ExplorationBundle | null>(null);
+  readonly tree = signal<TreeNode[]>([]);
+  readonly busy = signal(false);
+
+  readonly groupOptions = ['Rhizosphere', 'Bulk soil', 'Endosphere'];
+  readonly metrics = [
+    { label: 'Shannon', value: 'shannon' },
+    { label: 'Simpson', value: 'simpson' },
+    { label: 'Observados', value: 'observed' },
+    { label: 'Chao1', value: 'chao1' }
+  ];
+  readonly normalizations = [
+    { label: 'CLR', value: 'clr' },
+    { label: 'TSS', value: 'tss' },
+    { label: 'Sem transformação', value: 'none' }
+  ];
+  readonly ranks = [
+    { label: 'Filo', value: 'phylum' },
+    { label: 'Classe', value: 'class' },
+    { label: 'Ordem', value: 'order' },
+    { label: 'Família', value: 'family' },
+    { label: 'Gênero', value: 'genus' }
+  ];
+  readonly distances = [
+    { label: 'Bray–Curtis', value: 'braycurtis' },
+    { label: 'Jaccard', value: 'jaccard' }
+  ];
+
+  readonly filters = this.fb.nonNullable.group({
+    groups: this.fb.nonNullable.control(this.groupOptions.slice(), { validators: [nonEmptyGroups] }),
+    metric: this.fb.nonNullable.control<'shannon' | 'simpson' | 'observed' | 'chao1'>('shannon'),
+    normalize: this.fb.nonNullable.control<'clr' | 'tss' | 'none'>('clr'),
+    rank: this.fb.nonNullable.control<'phylum' | 'class' | 'order' | 'family' | 'genus'>('genus'),
+    distance: this.fb.nonNullable.control<'braycurtis' | 'jaccard'>('braycurtis'),
+    topN: this.fb.nonNullable.control(8, { validators: [Validators.required, Validators.min(2), Validators.max(12)] })
+  });
+
+  constructor() {
+    const question = this.route.snapshot.queryParamMap.get('question');
+    if (question === 'diversity') {
+      this.view.set('alpha');
+    } else if (question === 'differential') {
+      this.view.set('taxonomy');
+    } else if (question === 'clustering') {
+      this.view.set('pcoa');
+    }
+    void this.apply();
+  }
+
+  activeChart(): ChartResult | null {
+    const bundle = this.bundle();
+    if (!bundle) {
+      return null;
+    }
+    return bundle[this.view()];
+  }
+
+  viewTitle(): string {
+    switch (this.view()) {
+      case 'alpha':
+        return 'Diversidade alfa';
+      case 'beta':
+        return 'Matriz de distância';
+      case 'taxonomy':
+        return 'Abundância taxonômica';
+      case 'relations':
+        return 'Co-ocorrência entre gêneros';
+      default:
+        return 'PCoA';
+    }
+  }
+
+  onView(value: string | number | undefined): void {
+    if (value === 'pcoa' || value === 'alpha' || value === 'beta' || value === 'taxonomy' || value === 'relations') {
+      this.view.set(value);
+    }
+  }
+
+  async apply(): Promise<void> {
+    if (this.filters.invalid) {
+      this.filters.markAllAsTouched();
+      return;
+    }
+    this.busy.set(true);
+    try {
+      const bundle = await this.repository.exploration(this.filters.getRawValue());
+      this.bundle.set(bundle);
+      this.tree.set(bundle.tree.map((node) => this.toNode(node)));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  exportTable(): void {
+    const rows = this.bundle()?.comparisons ?? [];
+    const lines = ['group,n,shannon_mean,shannon_sd,observed_mean'];
+    for (const row of rows) {
+      lines.push(`${row.group},${row.n},${row.shannonMean},${row.shannonSd},${row.observedMean}`);
+    }
+    downloadBlob('comparacao-grupos.csv', new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  }
+
+  private toNode(node: TaxonNode): TreeNode {
+    return {
+      key: node.key,
+      label: node.label,
+      expanded: true,
+      children: node.children?.map((child) => this.toNode(child))
+    };
+  }
+}
+
+function nonEmptyGroups(control: AbstractControl): ValidationErrors | null {
+  return Array.isArray(control.value) && control.value.length > 0 ? null : { required: true };
+}
