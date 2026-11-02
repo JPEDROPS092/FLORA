@@ -385,3 +385,4 @@ code { font-family: ui-monospace, monospace; font-size: .74rem; background: var(
 .llm-note.err { border-left-color: var(--flora-fail); background: transparent; }
 .llm-note header { display: flex; gap: 6px; align-items: center; font-size: .74rem; font-weight: 650; color: var(--flora-primary); }
 .llm-note small { color: var(--flora-muted); }
+.native-note { display: block; padding: 8px 10px; border: 1px dashed var(--flora-border); border-radius: 8px; line-height: 1.5; }

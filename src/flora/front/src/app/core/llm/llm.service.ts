@@ -10,7 +10,7 @@ import { ChatMessage, ChatResult, LlmSettings, LlmStatus } from './llm.models';
 const KEY = 'flora.llm';
 const DEFAULTS: LlmSettings = {
   enabled: false, provider: 'ollama', baseUrl: PROVIDERS[0].baseUrl, apiKey: '', hasApiKey: false,
-  model: '', routerModel: '', temperature: 0.2, maxTokens: 700, vramGb: 6
+  model: '', routerModel: '', temperature: 0.2, maxTokens: 700, nCtx: 4096, nGpuLayers: -1, vramGb: 6
 };
 
 /** Strips <think> blocks that reasoning models (Qwen3, …) may emit. */
@@ -34,7 +34,7 @@ export class LlmService {
   readonly status = signal<LlmStatus>('idle');
   readonly statusMessage = signal('');
   readonly latencyMs = signal<number | null>(null);
-  readonly ready = computed(() => this.settings().enabled && !!this.settings().model.trim() && !!this.settings().baseUrl);
+  readonly ready = computed(() => this.settings().enabled && !!this.settings().model.trim() && (!!this.settings().baseUrl || this.settings().provider === 'native'));
 
   constructor() {
     if (this.mode === 'proxy') void this.loadRemote();
@@ -50,7 +50,8 @@ export class LlmService {
     }
     const body: Record<string, unknown> = {
       enabled: next.enabled, provider: next.provider, base_url: next.baseUrl, model: next.model,
-      router_model: next.routerModel, temperature: next.temperature, max_tokens: next.maxTokens
+      router_model: next.routerModel, temperature: next.temperature, max_tokens: next.maxTokens,
+      n_ctx: next.nCtx, n_gpu_layers: next.nGpuLayers
     };
     if (patch.apiKey !== undefined) body['api_key'] = patch.apiKey;
     const res = await this.post<{ settings: Record<string, unknown> }>('/api/llm/config', body);
@@ -64,13 +65,15 @@ export class LlmService {
     this.statusMessage.set('');
     try {
       if (this.mode === 'proxy') {
-        const res = await this.post<{ success: boolean; error?: string; latency_ms?: number; models?: string[]; model_available?: boolean }>(
-          '/api/llm/test', { base_url: s.baseUrl, model: s.model, ...(draft?.apiKey ? { api_key: draft.apiKey } : {}) });
+        const res = await this.post<{ success: boolean; error?: string; latency_ms?: number; models?: string[]; model_available?: boolean; models_dir?: string }>(
+          '/api/llm/test', { provider: s.provider, base_url: s.baseUrl, model: s.model, ...(draft?.apiKey ? { api_key: draft.apiKey } : {}) });
         if (!res.success) throw new Error(res.error || t('Sem resposta do servidor.'));
         this.models.set(res.models ?? []);
         this.latencyMs.set(res.latency_ms ?? null);
         this.finishTest(!!s.model, !!res.model_available, s.model);
+        if (res.models_dir && this.status() !== 'error') this.statusMessage.set(`${this.statusMessage()} ${res.models_dir}`);
       } else {
+        if (s.provider === 'native') throw new Error(t('O llama.cpp embutido exige o backend FLORA (flora ui). Sem backend, use o Ollama ou outro servidor.'));
         const started = performance.now();
         this.models.set(await this.listDirect(s));
         this.latencyMs.set(Math.round(performance.now() - started));
@@ -90,6 +93,7 @@ export class LlmService {
         messages, model: model || undefined, temperature: s.temperature, max_tokens: s.maxTokens });
       return { model: r.model, text: r.text, elapsedMs: r.elapsed_ms };
     }
+    if (s.provider === 'native') throw new Error(t('O llama.cpp embutido exige o backend FLORA (flora ui). Sem backend, use o Ollama ou outro servidor.'));
     const started = performance.now();
     const body = await this.direct<{ choices: { message: { content: string } }[] }>(s, '/chat/completions', {
       model: model || s.model, messages, temperature: s.temperature, max_tokens: s.maxTokens, stream: false });
@@ -165,7 +169,8 @@ export class LlmService {
     return {
       enabled: !!r['enabled'], provider: (r['provider'] as LlmSettings['provider']) ?? 'ollama', baseUrl: String(r['base_url'] ?? ''),
       apiKey: '', hasApiKey: !!r['has_api_key'], model: String(r['model'] ?? ''), routerModel: String(r['router_model'] ?? ''),
-      temperature: Number(r['temperature'] ?? 0.2), maxTokens: Number(r['max_tokens'] ?? 700), vramGb
+      temperature: Number(r['temperature'] ?? 0.2), maxTokens: Number(r['max_tokens'] ?? 700),
+      nCtx: Number(r['n_ctx'] ?? 4096), nGpuLayers: Number(r['n_gpu_layers'] ?? -1), vramGb
     };
   }
 

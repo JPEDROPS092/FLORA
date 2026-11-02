@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MessageService, PrimeTemplate } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -44,8 +45,16 @@ import { MascotComponent } from '../../shared/mascot.component';
           <div class="field"><label for="provider">{{ 'Provedor' | t }}</label>
             <p-select inputId="provider" [options]="providers" formControlName="provider" optionLabel="label" optionValue="id" appendTo="body" [fluid]="true" (onChange)="onProvider($event.value)" /></div>
 
-          <div class="field"><label for="baseUrl">{{ 'URL base' | t }}</label>
-            <input id="baseUrl" pInputText formControlName="baseUrl" placeholder="http://127.0.0.1:11434/v1" autocomplete="off" spellcheck="false" /></div>
+          @if (isNative()) {
+            <p class="note native-note"><i class="pi pi-info-circle"></i>
+              {{ 'Roda dentro do processo do FLORA, sem Ollama nem servidor. Coloque arquivos .gguf na pasta models/ do workdir (ou em FLORA_MODELS_DIR) e instale com' | t }}
+              <code>pip install "flora[local]"</code>.
+              @if (llm.mode === 'direct') { <br /><strong class="warn">{{ 'Requer o backend FLORA (flora ui).' | t }}</strong> }
+            </p>
+          } @else {
+            <div class="field"><label for="baseUrl">{{ 'URL base' | t }}</label>
+              <input id="baseUrl" pInputText formControlName="baseUrl" placeholder="http://127.0.0.1:11434/v1" autocomplete="off" spellcheck="false" /></div>
+          }
 
           @if (needsKey()) {
             <div class="field"><label for="apiKey">{{ 'Chave de API' | t }}</label>
@@ -62,6 +71,15 @@ import { MascotComponent } from '../../shared/mascot.component';
             <div class="field"><label for="router">{{ 'Modelo leve (roteamento)' | t }}</label>
               <p-select inputId="router" [options]="modelOptions()" formControlName="routerModel" [editable]="true" appendTo="body" [fluid]="true" [showClear]="true" [placeholder]="'qwen3:1.7b'" /></div>
           </div>
+
+          @if (isNative()) {
+            <div class="two">
+              <div class="field"><label for="nctx">{{ 'Contexto (n_ctx)' | t }}</label>
+                <p-inputnumber inputId="nctx" formControlName="nCtx" [min]="512" [max]="131072" [step]="512" [fluid]="true" /></div>
+              <div class="field"><label for="ngl">{{ 'Camadas na GPU (-1 = todas)' | t }}</label>
+                <p-inputnumber inputId="ngl" formControlName="nGpuLayers" [min]="-1" [max]="999" [fluid]="true" /></div>
+            </div>
+          }
 
           <div class="two">
             <div class="field"><label for="temp">{{ 'Temperatura' | t }}</label>
@@ -156,11 +174,15 @@ export class AiModelsPageComponent {
     model: this.llm.settings().model,
     routerModel: this.llm.settings().routerModel,
     temperature: this.llm.settings().temperature,
-    maxTokens: this.llm.settings().maxTokens
+    maxTokens: this.llm.settings().maxTokens,
+    nCtx: this.llm.settings().nCtx,
+    nGpuLayers: this.llm.settings().nGpuLayers
   });
+  protected readonly providerId = toSignal(this.form.controls.provider.valueChanges, { initialValue: this.form.controls.provider.value });
+  protected readonly isNative = computed(() => this.providerId() === 'native');
 
   protected readonly needsKey = computed(() => {
-    const id = this.form.controls.provider.value;
+    const id = this.providerId();
     return PROVIDERS.find((p) => p.id === id)?.needsKey || id === 'custom';
   });
   protected readonly modelOptions = computed(() => this.llm.models());
@@ -203,7 +225,7 @@ export class AiModelsPageComponent {
 
   protected async test(): Promise<void> {
     const v = this.form.getRawValue();
-    await this.llm.test({ baseUrl: v.baseUrl, model: v.model, apiKey: v.apiKey || undefined });
+    await this.llm.test({ provider: v.provider, baseUrl: v.baseUrl, model: v.model, apiKey: v.apiKey || undefined });
   }
 
   protected async save(): Promise<void> {
@@ -212,7 +234,7 @@ export class AiModelsPageComponent {
     try {
       await this.llm.save({
         enabled: v.enabled, provider: v.provider, baseUrl: v.baseUrl.trim(), model: v.model.trim(), routerModel: v.routerModel.trim(),
-        temperature: v.temperature, maxTokens: v.maxTokens, ...(v.apiKey ? { apiKey: v.apiKey } : {})
+        temperature: v.temperature, maxTokens: v.maxTokens, nCtx: v.nCtx, nGpuLayers: v.nGpuLayers, ...(v.apiKey ? { apiKey: v.apiKey } : {})
       });
       this.form.controls.apiKey.setValue('');
       this.messages.add({ severity: 'success', summary: t('Modelos de IA'), detail: t('Configuração salva.') });

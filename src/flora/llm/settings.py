@@ -11,13 +11,14 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
-ProviderId = Literal["ollama", "lmstudio", "llamacpp", "gemini", "openai", "openrouter", "custom"]
+ProviderId = Literal["ollama", "lmstudio", "llamacpp", "native", "gemini", "openai", "openrouter", "custom"]
 
 #: Default endpoints per provider. All speak the OpenAI-compatible API.
 PRESETS: dict[str, dict[str, Any]] = {
     "ollama": {"label": "Ollama (local)", "base_url": "http://127.0.0.1:11434/v1", "needs_key": False},
     "lmstudio": {"label": "LM Studio (local)", "base_url": "http://127.0.0.1:1234/v1", "needs_key": False},
     "llamacpp": {"label": "llama.cpp server (local)", "base_url": "http://127.0.0.1:8080/v1", "needs_key": False},
+    "native": {"label": "llama.cpp embutido (sem servidor)", "base_url": "", "needs_key": False},
     "gemini": {
         "label": "Google Gemini",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -42,6 +43,9 @@ class LlmSettings(BaseModel):
     temperature: float = Field(0.2, ge=0, le=2)
     max_tokens: int = Field(700, ge=16, le=8192)
     timeout_s: float = Field(120, ge=1, le=900)
+    # Only used by the in-process ``native`` provider (GGUF files under <workdir>/models).
+    n_ctx: int = Field(4096, ge=512, le=131072)
+    n_gpu_layers: int = Field(-1, ge=-1, le=999, description="-1 offloads every layer to the GPU")
 
     @field_validator("base_url")
     @classmethod

@@ -136,3 +136,57 @@ def test_gemini_preset_uses_env_key_and_strips_model_prefix(monkeypatch, server)
     OpenAICompatClient(s).list_models()
     assert "Bearer env-key" in _FakeOpenAI.seen_auth
     assert LlmSettings(provider="gemini", api_key="own").effective_api_key() == "own"
+
+
+class _FakeLlama:
+    loads: list[dict] = []
+
+    def __init__(self, **kw):
+        type(self).loads.append(kw)
+
+    def create_chat_completion(self, messages, temperature, max_tokens):
+        return {"choices": [{"message": {"content": "<think>x</think>local:" + messages[-1]["content"]}}], "usage": {"total_tokens": 3}}
+
+
+@pytest.fixture()
+def native(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from flora.llm import native as mod
+
+    _FakeLlama.loads = []
+    mod.unload()
+    monkeypatch.setitem(sys.modules, "llama_cpp", types.SimpleNamespace(Llama=_FakeLlama))
+    monkeypatch.delenv("FLORA_MODELS_DIR", raising=False)
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "qwen3-4b-q4.gguf").write_bytes(b"GGUF")
+    (models / "notes.txt").write_text("x")
+    yield SimpleNamespace(workdir=tmp_path)
+    mod.unload()
+
+
+def test_native_provider_lists_gguf_and_chats_in_process(native):
+    handlers.save_config(native, {"enabled": True, "provider": "native", "model": "qwen3-4b-q4.gguf", "n_ctx": 2048, "n_gpu_layers": 20})
+    assert handlers.list_models(native)["models"] == ["qwen3-4b-q4.gguf"]
+    ping = handlers.test_connection(native, {})
+    assert ping["model_available"] and ping["models_dir"].endswith("models")
+    assert handlers.chat(native, {"messages": [{"role": "user", "content": "hi"}]})["text"] == "local:hi"
+    handlers.chat(native, {"messages": [{"role": "user", "content": "again"}]})
+    assert len(_FakeLlama.loads) == 1  # model cached between calls
+    assert _FakeLlama.loads[0]["n_ctx"] == 2048 and _FakeLlama.loads[0]["n_gpu_layers"] == 20
+
+
+def test_native_rejects_paths_and_missing_backend(native, monkeypatch):
+    handlers.save_config(native, {"enabled": True, "provider": "native", "model": "../etc/passwd"})
+    with pytest.raises(UiHttpError, match="gguf"):
+        handlers.chat(native, {"messages": [{"role": "user", "content": "x"}]})
+    handlers.save_config(native, {"model": "missing.gguf"})
+    with pytest.raises(UiHttpError, match="not found"):
+        handlers.chat(native, {"messages": [{"role": "user", "content": "x"}]})
+    import sys
+
+    monkeypatch.setitem(sys.modules, "llama_cpp", None)  # simulate "not installed"
+    out = handlers.test_connection(native, {})
+    assert out["success"] is False and "flora[local]" in out["error"]

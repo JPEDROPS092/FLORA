@@ -1,4 +1,4 @@
-export type ProviderId = 'ollama' | 'lmstudio' | 'llamacpp' | 'gemini' | 'openai' | 'openrouter' | 'custom';
+export type ProviderId = 'ollama' | 'lmstudio' | 'llamacpp' | 'native' | 'gemini' | 'openai' | 'openrouter' | 'custom';
 
 export interface LlmSettings {
   enabled: boolean;
@@ -11,6 +11,9 @@ export interface LlmSettings {
   routerModel: string;
   temperature: number;
   maxTokens: number;
+  /** In-process llama.cpp only. */
+  nCtx: number;
+  nGpuLayers: number;
   /** Used only to estimate which local models fit; never sent anywhere. */
   vramGb: number;
 }

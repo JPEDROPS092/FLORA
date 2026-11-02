@@ -5,6 +5,7 @@ export const PROVIDERS: readonly ProviderPreset[] = [
   { id: 'ollama', label: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', needsKey: false, local: true },
   { id: 'lmstudio', label: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', needsKey: false, local: true },
   { id: 'llamacpp', label: 'llama.cpp server', baseUrl: 'http://127.0.0.1:8080/v1', needsKey: false, local: true },
+  { id: 'native', label: t('llama.cpp embutido (sem servidor)'), baseUrl: '', needsKey: false, local: true },
   { id: 'gemini', label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true, local: false },
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', needsKey: true, local: false },
   { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', needsKey: true, local: false },

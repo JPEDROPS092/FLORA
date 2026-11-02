@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from flora.llm import PRESETS, LlmError, LlmSettings, OpenAICompatClient, SettingsStore
+from flora.llm.native import NativeClient
 from flora.ui.http import UiHttpError, json_success
 
 _ALLOWED_ROLES = {"system", "user", "assistant"}
@@ -18,8 +19,10 @@ def _store(state) -> SettingsStore:
     return SettingsStore(state.workdir)
 
 
-def _client(settings: LlmSettings) -> OpenAICompatClient:
+def _client(state, settings: LlmSettings):
     try:
+        if settings.provider == "native":
+            return NativeClient(settings, state.workdir)
         return OpenAICompatClient(settings)
     except LlmError as exc:
         raise UiHttpError(str(exc), status=400, code="llm_not_configured") from exc
@@ -39,7 +42,7 @@ def save_config(state, body: dict[str, Any]) -> dict[str, Any]:
 
 def list_models(state, params: dict[str, list[str]] | None = None) -> dict[str, Any]:
     try:
-        return json_success(data={"models": _client(_store(state).load()).list_models()})
+        return json_success(data={"models": _client(state, _store(state).load()).list_models()})
     except LlmError as exc:
         raise UiHttpError(str(exc), status=502, code="llm_unreachable") from exc
 
@@ -53,7 +56,7 @@ def test_connection(state, body: dict[str, Any]) -> dict[str, Any]:
     except ValidationError as exc:
         raise UiHttpError("Invalid LLM settings.", code="invalid_settings") from exc
     try:
-        return json_success(data=_client(settings).ping())
+        return json_success(data=_client(state, settings).ping())
     except LlmError as exc:
         return {"success": False, "error": str(exc), "code": "llm_unreachable", "reachable": False}
 
@@ -77,7 +80,7 @@ def chat(state, body: dict[str, Any]) -> dict[str, Any]:
         raise UiHttpError("Conversation too long.", status=413, code="payload_too_large")
     model = body.get("model") if isinstance(body.get("model"), str) and body.get("model") else None
     try:
-        result = _client(settings).chat(clean, model=model, temperature=body.get("temperature"), max_tokens=body.get("max_tokens"))
+        result = _client(state, settings).chat(clean, model=model, temperature=body.get("temperature"), max_tokens=body.get("max_tokens"))
     except LlmError as exc:
         raise UiHttpError(str(exc), status=502, code="llm_error") from exc
     return json_success(data=result)

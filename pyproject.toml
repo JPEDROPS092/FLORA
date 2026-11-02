@@ -48,6 +48,8 @@ dependencies = [
 hdbscan = ["hdbscan>=0.8.33"]
 imbalanced = ["imbalanced-learn>=0.11.0"]
 qiime2 = ["qiime2"]
+# In-process llama.cpp (GGUF). GPU build: CMAKE_ARGS="-DGGML_CUDA=on" pip install "flora[local]"
+local = ["llama-cpp-python>=0.3.0"]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
