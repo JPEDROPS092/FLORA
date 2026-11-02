@@ -9,13 +9,19 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).parent
 STATIC_ROOT = PACKAGE_DIR / "static"
 SPA_BUILD_DIR = STATIC_ROOT / "app"
+# Output of ``scripts/build_frontend.sh``; only a fallback for ``SPA_BUILD_DIR``.
+FRONT_DIST_DIR = PACKAGE_DIR.parent / "front" / "dist"
 
 
 def spa_root_dir() -> Path:
-    """Return the directory that contains the built SPA assets."""
-    browser_dir = SPA_BUILD_DIR / "browser"
-    if (browser_dir / "index.html").exists():
-        return browser_dir
+    """Return the directory that contains the built SPA assets.
+
+    The ``frontend/angular`` build in ``SPA_BUILD_DIR`` wins; the
+    ``flora/front/dist`` build is used only when that one is absent.
+    """
+    for candidate in (SPA_BUILD_DIR / "browser", SPA_BUILD_DIR, FRONT_DIST_DIR):
+        if (candidate / "index.html").exists():
+            return candidate
     return SPA_BUILD_DIR
 
 

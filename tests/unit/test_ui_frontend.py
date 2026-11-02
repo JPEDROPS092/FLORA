@@ -5,6 +5,38 @@ import pytest
 from flora.ui import frontend
 
 
+@pytest.fixture(autouse=True)
+def _isolate_front_dist(monkeypatch, tmp_path):
+    """Keep a locally built ``flora/front/dist`` from leaking into these tests."""
+    monkeypatch.setattr(frontend, "FRONT_DIST_DIR", tmp_path / "front-dist-absent")
+
+
+def test_spa_root_dir_falls_back_to_front_dist(monkeypatch, tmp_path):
+    dist = tmp_path / "front-dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>dist</html>", encoding="utf-8")
+    monkeypatch.setattr(frontend, "SPA_BUILD_DIR", tmp_path / "app")
+    monkeypatch.setattr(frontend, "FRONT_DIST_DIR", dist)
+
+    assert frontend.spa_root_dir() == dist
+    assert frontend.has_built_frontend() is True
+    assert frontend.load_index_html() == "<html>dist</html>"
+
+
+def test_spa_root_dir_prefers_frontend_angular_over_front_dist(monkeypatch, tmp_path):
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    (app_dir / "index.html").write_text("<html>angular</html>", encoding="utf-8")
+    dist = tmp_path / "front-dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>dist</html>", encoding="utf-8")
+    monkeypatch.setattr(frontend, "SPA_BUILD_DIR", app_dir)
+    monkeypatch.setattr(frontend, "FRONT_DIST_DIR", dist)
+
+    assert frontend.spa_root_dir() == app_dir
+    assert frontend.load_index_html() == "<html>angular</html>"
+
+
 def test_frontend_mode_defaults_to_missing_build(monkeypatch, tmp_path):
     monkeypatch.setattr(frontend, "SPA_BUILD_DIR", tmp_path / "app")
 
