@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { AgentsPageComponent } from './features/agents/agents-page.component';
 import { DashboardPageComponent } from './features/dashboard/dashboard-page.component';
 import { DownloadsPageComponent } from './features/downloads/downloads-page.component';
 import { ExplorerPageComponent } from './features/explorer/explorer-page.component';
@@ -15,6 +16,7 @@ export const routes: Routes = [
   { path: 'pipeline', component: PipelinePageComponent, title: 'Data Pipeline Studio' },
   { path: 'ml', component: MlLabPageComponent, title: 'AI & ML Lab', data: { tone: 'lab' } },
   { path: 'reports', component: ReportBuilderPageComponent, title: 'Scientific Report Builder' },
+  { path: 'agents', component: AgentsPageComponent, title: 'Agentes de IA' },
   { path: 'projects', component: ProjectsPageComponent, title: 'Projetos' },
   { path: 'downloads', component: DownloadsPageComponent, title: 'Downloads' },
   { path: 'overview', redirectTo: 'dashboard' },

@@ -1,6 +1,7 @@
 import { Component, ElementRef, effect, inject, input, viewChild } from '@angular/core';
 
 import { ChartResult, ThemeMode } from '../core/models/domain';
+import { WorkspaceStore } from '../core/workspace/workspace.store';
 import { PlotlyService } from '../core/plotly/plotly.service';
 
 @Component({
@@ -25,7 +26,8 @@ import { PlotlyService } from '../core/plotly/plotly.service';
 })
 export class PlotCardComponent {
   readonly result = input<ChartResult | null>(null);
-  readonly theme = input<ThemeMode>('light');
+  readonly theme = input<ThemeMode | null>(null);
+  private readonly store = inject(WorkspaceStore);
   readonly height = input(360);
 
   private readonly host = viewChild<ElementRef<HTMLElement>>('host');
@@ -36,7 +38,7 @@ export class PlotCardComponent {
     effect(() => {
       const element = this.host()?.nativeElement;
       const result = this.result();
-      const theme = this.theme();
+      const theme: ThemeMode = this.theme() ?? (this.store.dark() ? 'dark' : 'light');
       const height = this.height();
       if (!element || result?.status !== 'ok' || !result.figure) {
         return;

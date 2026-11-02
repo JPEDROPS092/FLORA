@@ -1,7 +1,8 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { TreeNode } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -206,15 +207,37 @@ export class ExplorerPageComponent {
   });
 
   constructor() {
-    const question = this.route.snapshot.queryParamMap.get('question');
-    if (question === 'diversity') {
-      this.view.set('alpha');
-    } else if (question === 'differential') {
-      this.view.set('taxonomy');
-    } else if (question === 'clustering') {
-      this.view.set('pcoa');
-    }
-    void this.apply();
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      this.applyParams(params);
+      void this.apply();
+    });
+  }
+
+  /** URL contract: ?view=&metric=&normalize=&rank=&distance=&topN=&groups=a,b&question= */
+  private applyParams(params: ParamMap): void {
+    const question = params.get('question');
+    if (question === 'diversity') this.view.set('alpha');
+    else if (question === 'differential') this.view.set('taxonomy');
+    else if (question === 'clustering') this.view.set('pcoa');
+
+    const view = params.get('view');
+    if (view) this.onView(view);
+
+    const patch: Partial<ReturnType<typeof this.filters.getRawValue>> = {};
+    const pick = <T extends string>(key: string, allowed: readonly T[]): T | undefined => {
+      const v = params.get(key);
+      return v && (allowed as readonly string[]).includes(v) ? (v as T) : undefined;
+    };
+    patch.metric = pick('metric', ['shannon', 'simpson', 'observed', 'chao1']);
+    patch.normalize = pick('normalize', ['clr', 'tss', 'none']);
+    patch.rank = pick('rank', ['phylum', 'class', 'order', 'family', 'genus']);
+    patch.distance = pick('distance', ['braycurtis', 'jaccard']);
+    const topN = Number(params.get('topN'));
+    if (Number.isFinite(topN) && topN >= 2 && topN <= 12) patch.topN = topN;
+    const groups = params.get('groups')?.split(',').filter((g) => this.groupOptions.includes(g));
+    if (groups?.length) patch.groups = groups;
+    const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    this.filters.patchValue(defined);
   }
 
   activeChart(): ChartResult | null {
