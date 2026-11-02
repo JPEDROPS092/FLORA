@@ -1,4 +1,5 @@
 import { PlotFigure, ReportSection } from '../models/domain';
+import { t } from '../i18n/i18n';
 
 export interface ReportFileInput {
   title: string;
@@ -67,7 +68,7 @@ function buildHtml(input: ReportFileInput): string {
 </head>
 <body>
   <main>
-    <p class="banner">${input.mocked ? 'Dados mockados · ' : ''}FLORA Scientific Report</p>
+    <p class="banner">${input.mocked ? t('Dados mockados · ') : ''}FLORA Scientific Report</p>
     <h1>${escapeHtml(input.title)}</h1>
     ${sections}
   </main>
@@ -77,7 +78,7 @@ function buildHtml(input: ReportFileInput): string {
 }
 
 function buildPlainLines(input: ReportFileInput): string[] {
-  const lines = [input.title, input.mocked ? 'Dados mockados' : 'Exportação da API', ''];
+  const lines = [input.title, input.mocked ? t('Dados mockados') : t('Exportação da API'), ''];
   for (const section of input.sections.filter((item) => item.included)) {
     lines.push(section.title, section.narrative, '');
     if (section.table) {
@@ -92,7 +93,7 @@ function buildPlainLines(input: ReportFileInput): string[] {
     }
   }
   if (input.parameters.length) {
-    lines.push('Parâmetros');
+    lines.push(t('Parâmetros'));
     for (const parameter of input.parameters) {
       lines.push(`${parameter.label}: ${parameter.value}`);
     }

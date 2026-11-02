@@ -10,22 +10,24 @@ import { filter, map } from 'rxjs';
 import { AgentService } from '../core/agents/agent.service';
 import { MascotComponent } from './mascot.component';
 import { WorkspaceStore } from '../core/workspace/workspace.store';
+import { TPipe } from '../core/i18n/t.pipe';
 
 /** Right-hand AI copilot, available on every page. Agents propose; the researcher confirms. */
+
 @Component({
   selector: 'flora-copilot',
   standalone: true,
-  imports: [MascotComponent, DatePipe, FormsModule, ButtonModule, DrawerModule],
+  imports: [TPipe, MascotComponent, DatePipe, FormsModule, ButtonModule, DrawerModule],
   template: `
     <p-drawer [visible]="store.copilotOpen()" (visibleChange)="store.copilotOpen.set($event)"
               position="right" [modal]="false" [style]="{ width: 'min(440px, 100vw)' }" styleClass="copilot-drawer">
       <ng-template #header>
-        <div class="cp-head"><i class="pi pi-sparkles"></i><strong>Copiloto FLORA</strong></div>
+        <div class="cp-head"><i class="pi pi-sparkles"></i><strong>{{ 'Copiloto FLORA' | t }}</strong></div>
       </ng-template>
 
-      <div class="cp-agents" role="radiogroup" aria-label="Agente">
+      <div class="cp-agents" role="radiogroup" [attr.aria-label]="'Agente' | t">
         <button type="button" role="radio" [attr.aria-checked]="svc.selected() === 'auto'"
-                [class.on]="svc.selected() === 'auto'" (click)="svc.selected.set('auto')">Auto</button>
+                [class.on]="svc.selected() === 'auto'" (click)="svc.selected.set('auto')">{{ 'Auto' | t }}</button>
         @for (a of svc.agents; track a.id) {
           <button type="button" role="radio" [attr.aria-checked]="svc.selected() === a.id"
                   [class.on]="svc.selected() === a.id" [title]="a.role" (click)="svc.selected.set(a.id)">
@@ -38,23 +40,23 @@ import { WorkspaceStore } from '../core/workspace/workspace.store';
         @if (!svc.messages().length) {
           <div class="cp-empty">
             <flora-mascot name="wave" [size]="130" />
-            <p>Pergunte sobre o estudo. Os agentes leem os dados, mostram os passos e <b>propõem</b> ações — você confirma.</p>
+            <p>{{ 'Pergunte sobre o estudo. Os agentes leem os dados, mostram os passos e' | t }} <b>{{ 'propõem' | t }}</b> {{ 'ações — você confirma.' | t }}</p>
           </div>
         }
         @for (m of svc.messages(); track m.id) {
           <article class="msg" [class.user]="m.role === 'user'">
             @if (m.role === 'agent') { <header><i class="pi pi-sparkles"></i>{{ svc.agentName(m.agentId) }}<time>{{ m.at | date:'HH:mm' }}</time></header> }
             @if (m.pending) {
-              <p class="thinking"><span></span><span></span><span></span> analisando dados…</p>
+              <p class="thinking"><span></span><span></span><span></span> {{ 'analisando dados…' | t }}</p>
             } @else {
               <p>{{ m.text }}</p>
             }
             @if (m.steps?.length) {
               <details class="trace">
-                <summary>{{ m.steps!.length }} passos executados</summary>
+                <summary>{{ m.steps!.length }} {{ 'passos executados' | t }}</summary>
                 <ol>
                   @for (s of m.steps; track s.tool) {
-                    <li><code>{{ s.tool }}</code> {{ s.label }} <small>— {{ s.detail }} · {{ s.ms }} ms</small></li>
+                    <li><code>{{ s.tool }}</code> {{ s.label }} <small>— {{ s.detail }} · {{ s.ms }} {{ 'ms' | t }}</small></li>
                   }
                 </ol>
               </details>
@@ -78,11 +80,11 @@ import { WorkspaceStore } from '../core/workspace/workspace.store';
         </div>
         <form (ngSubmit)="send(draft())" class="cp-form">
           <textarea rows="2" name="draft" [ngModel]="draft()" (ngModelChange)="draft.set($event)"
-                    (keydown.enter)="onEnter($event)" placeholder="Pergunte ou peça uma análise…  (Enter envia)"
-                    aria-label="Mensagem para o agente"></textarea>
-          <p-button type="submit" icon="pi pi-send" [loading]="svc.busy()" ariaLabel="Enviar" />
+                    (keydown.enter)="onEnter($event)" [placeholder]="'Pergunte ou peça uma análise…  (Enter envia)' | t"
+                    [attr.aria-label]="'Mensagem para o agente' | t"></textarea>
+          <p-button type="submit" icon="pi pi-send" [loading]="svc.busy()" [ariaLabel]="'Enviar' | t" />
         </form>
-        <button type="button" class="cp-clear" (click)="svc.clear()" [disabled]="!svc.messages().length">Limpar conversa</button>
+        <button type="button" class="cp-clear" (click)="svc.clear()" [disabled]="!svc.messages().length">{{ 'Limpar conversa' | t }}</button>
       </div>
     </p-drawer>
   `

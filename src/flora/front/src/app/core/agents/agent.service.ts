@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { t } from '../i18n/i18n';
 import { FloraRepository } from '../data/flora.repository';
 import { AGENTS, agentById } from './agent.catalog';
 import { nextId, routeAgent, runAgent } from './agent.engine';
@@ -24,11 +25,11 @@ export class AgentService {
 
   /** Suggested prompts, tuned to the page the researcher is on. */
   suggestionsFor(url: string): string[] {
-    if (url.startsWith('/pipeline')) return ['Quais amostras falharam no QC?', 'A ingestão está pronta para confirmar?'];
-    if (url.startsWith('/ml')) return ['Qual modelo está melhor e com que ressalvas?', 'Resuma os táxons diferenciais'];
-    if (url.startsWith('/reports')) return ['O relatório está completo para exportar?', 'Liste os parâmetros que entram em Métodos'];
-    if (url.startsWith('/explorer')) return ['Compare a diversidade entre os grupos', 'Quais táxons diferem entre grupos?'];
-    return ['Dê um resumo do estudo', 'Quais amostras falharam no QC?', 'Compare a diversidade entre os grupos'];
+    if (url.startsWith('/pipeline')) return [t('Quais amostras falharam no QC?'), t('A ingestão está pronta para confirmar?')];
+    if (url.startsWith('/ml')) return [t('Qual modelo está melhor e com que ressalvas?'), t('Resuma os táxons diferenciais')];
+    if (url.startsWith('/reports')) return [t('O relatório está completo para exportar?'), t('Liste os parâmetros que entram em Métodos')];
+    if (url.startsWith('/explorer')) return [t('Compare a diversidade entre os grupos'), t('Quais táxons diferem entre grupos?')];
+    return [t('Dê um resumo do estudo'), t('Quais amostras falharam no QC?'), t('Compare a diversidade entre os grupos')];
   }
 
   async ask(prompt: string): Promise<void> {
@@ -46,8 +47,8 @@ export class AgentService {
       this.patch(pending.id, { text: reply.text, steps: reply.steps, actions: reply.actions, pending: false });
       this.patchRun(run.id, { status: 'done', steps: reply.steps, summary: reply.text, actions: reply.actions });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'erro desconhecido';
-      this.patch(pending.id, { text: `Não consegui concluir: ${msg}. Nada foi alterado.`, pending: false });
+      const msg = err instanceof Error ? err.message : t('erro desconhecido');
+      this.patch(pending.id, { text: t('Não consegui concluir: {msg}. Nada foi alterado.', { msg }), pending: false });
       this.patchRun(run.id, { status: 'failed', summary: msg });
     } finally {
       this.busy.set(false);
@@ -65,11 +66,11 @@ export class AgentService {
   }
 
   agentName(id: AgentId | undefined): string {
-    return id ? agentById(id).name : 'Agente';
+    return id ? agentById(id).name : t('Agente');
   }
 
   private helpReply(agentId: AgentId): AgentReply {
-    return { agentId, steps: [], actions: [], text: 'Pergunte algo sobre diversidade, QC, táxons, modelos ou o relatório.' };
+    return { agentId, steps: [], actions: [], text: t('Pergunte algo sobre diversidade, QC, táxons, modelos ou o relatório.') };
   }
 
   private markApplied(id: string): void {

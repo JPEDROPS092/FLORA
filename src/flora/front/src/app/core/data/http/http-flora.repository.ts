@@ -33,6 +33,7 @@ import {
 import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
+import { t } from '../../i18n/i18n';
 
 interface StatusResponse {
   success: boolean;
@@ -127,7 +128,7 @@ const EMPTY_PROVENANCE: Provenance = {
   parameters: [],
   packages: [],
   inputs: [],
-  history: [{ at: '', event: 'A API atual não devolve histórico de execução.' }]
+  history: [{ at: '', event: t('A API atual não devolve histórico de execução.') }]
 };
 
 /**
@@ -178,7 +179,7 @@ export class HttpFloraRepository extends FloraRepository {
       pcoa,
       mocked: false,
       partial: true,
-      note: 'Contagens vindas de /api/status. Qualidade por amostra e projetos não têm endpoint ainda.',
+      note: t('Contagens vindas de /api/status. Qualidade por amostra e projetos não têm endpoint ainda.'),
       status: status.status ?? 'unknown',
       workdir: status.workdir
     };
@@ -194,7 +195,7 @@ export class HttpFloraRepository extends FloraRepository {
     const current: ResearchProject = {
       id: 'workspace',
       name: 'Workspace atual',
-      question: 'Pergunta ainda não persistida na API.',
+      question: t('Pergunta ainda não persistida na API.'),
       status: 'active',
       datasetName: status.workdir ?? 'workdir',
       marker: '16S',
@@ -215,7 +216,7 @@ export class HttpFloraRepository extends FloraRepository {
       name: draft.name.trim(),
       question: draft.question.trim(),
       status: 'draft',
-      datasetName: 'Somente nesta sessão',
+      datasetName: t('Somente nesta sessão'),
       marker: '16S',
       samples: 0,
       asvs: 0,
@@ -237,23 +238,23 @@ export class HttpFloraRepository extends FloraRepository {
       ingested: hasSamples,
       mocked: false,
       normalization: { ...this.normalization },
-      note: 'Etapas QIIME2/DADA2 são acompanhamento local. A API expõe ingestão, diversidade e matriz.',
-      qc: emptyPreview('O QC por amostra chega depois do POST /api/ingest. A API não lista erros por amostra.'),
+      note: t('Etapas QIIME2/DADA2 são acompanhamento local. A API expõe ingestão, diversidade e matriz.'),
+      qc: emptyPreview(t('O QC por amostra chega depois do POST /api/ingest. A API não lista erros por amostra.')),
       stages: [
         { id: 'import', tool: 'QIIME2', name: 'Importar', detail: 'Fora deste esqueleto', status: 'pending' },
         { id: 'cutadapt', tool: 'QIIME2', name: 'Primers', detail: 'Fora deste esqueleto', status: 'pending' },
         { id: 'dada2', tool: 'DADA2', name: 'Denoise', detail: 'Fora deste esqueleto', status: 'pending' },
-        { id: 'taxonomy', tool: 'FLORA', name: 'Taxonomia', detail: hasSamples ? 'Tabela presente' : 'Aguardando ingestão', status: hasSamples ? 'complete' : 'pending' },
-        { id: 'table', tool: 'FLORA', name: 'Tabela', detail: `${numberFrom(tables, ['samples'])} amostras`, status: hasSamples ? 'attention' : 'pending' },
-        { id: 'norm', tool: 'FLORA', name: 'Normalizar', detail: this.normalization.method.toUpperCase(), status: hasSamples ? 'complete' : 'pending' }
+        { id: 'taxonomy', tool: 'FLORA', name: 'Taxonomia', detail: hasSamples ? t('Tabela presente') : t('Aguardando ingestão'), status: hasSamples ? 'complete' : 'pending' },
+        { id: 'table', tool: 'FLORA', name: t('Tabela'), detail: t('{n} amostras', { n: numberFrom(tables, ['samples']) }), status: hasSamples ? 'attention' : 'pending' },
+        { id: 'norm', tool: 'FLORA', name: t('Normalizar'), detail: this.normalization.method.toUpperCase(), status: hasSamples ? 'complete' : 'pending' }
       ]
     };
   }
 
   async previewIngest(request: IngestRequest): Promise<IngestPreview> {
-    const warnings = ['Validação estrutural local. A correspondência de amostras só é confirmada pelos endpoints de ingestão.'];
+    const warnings = [t('Validação estrutural local. A correspondência de amostras só é confirmada pelos endpoints de ingestão.')];
     if (request.metadataColumns?.length && !request.metadataColumns.includes(request.sampleColumn)) {
-      warnings.push(`A coluna "${request.sampleColumn}" não está no arquivo enviado.`);
+      warnings.push(t('A coluna "{col}" não está no arquivo enviado.', { col: request.sampleColumn }));
     }
     return {
       ...emptyPreview(warnings[0]),
@@ -288,7 +289,7 @@ export class HttpFloraRepository extends FloraRepository {
       });
     } catch (error) {
       const snapshot = await this.pipeline();
-      snapshot.note = error instanceof Error ? error.message : 'Falha ao pedir a matriz.';
+      snapshot.note = error instanceof Error ? error.message : t('Falha ao pedir a matriz.');
       snapshot.stages = snapshot.stages.map((stage) =>
         stage.id === 'norm' ? { ...stage, status: 'failed', detail: snapshot.note ?? stage.detail } : stage
       );
@@ -312,7 +313,7 @@ export class HttpFloraRepository extends FloraRepository {
       settleChart(() => this.loadPlot('/api/viz/taxonomy', { level: query.rank, group_by: group })),
       settleChart(() => this.loadPlot('/api/viz/network', { level: 'genus', top_n: query.topN, threshold: 0.35 }))
     ]);
-    let note = 'Figuras pedidas em separado a /api/viz. A árvore taxonômica estruturada e os testes diferenciais não têm endpoint.';
+    let note = t('Figuras pedidas em separado a /api/viz. A árvore taxonômica estruturada e os testes diferenciais não têm endpoint.');
     try {
       await this.send<DiversityResponse>('POST', '/api/diversity', {
         body: { sampling_depth: this.normalization.rarefactionDepth, metrics: ['shannon', 'observed_features', 'chao1'] }
@@ -330,7 +331,7 @@ export class HttpFloraRepository extends FloraRepository {
       tree: [],
       comparisons: [],
       differential: [],
-      distanceNote: 'Métrica pedida ao endpoint /api/viz/beta_heatmap.',
+      distanceNote: t('Métrica pedida ao endpoint /api/viz/beta_heatmap.'),
       sampleCount: 0,
       asvCount: 0,
       mocked: false,
@@ -355,7 +356,7 @@ export class HttpFloraRepository extends FloraRepository {
         }
       });
       if (!response.success) {
-        throw new Error(response.error ?? 'Classificação recusada.');
+        throw new Error(response.error ?? t('Classificação recusada.'));
       }
       const importances = (response.top_features ?? []).map((row, index) => ({
         feature: String(row['feature'] ?? row['feature_id'] ?? `feature_${index + 1}`),
@@ -375,8 +376,8 @@ export class HttpFloraRepository extends FloraRepository {
         testN: 0,
         features: importances.length,
         importanceKind: 'impurity',
-        confusion: { status: 'empty', error: 'A API não devolve a matriz de confusão.' },
-        roc: { status: 'empty', error: 'A API não devolve a curva ROC.' },
+        confusion: { status: 'empty', error: t('A API não devolve a matriz de confusão.') },
+        roc: { status: 'empty', error: t('A API não devolve a curva ROC.') },
         importance:
           importances.length > 0
             ? {
@@ -386,7 +387,7 @@ export class HttpFloraRepository extends FloraRepository {
                   layout: { margin: { l: 120, t: 16, r: 16, b: 40 }, showlegend: false }
                 }
               }
-            : { status: 'empty', error: 'Sem importâncias na resposta.' },
+            : { status: 'empty', error: t('Sem importâncias na resposta.') },
         labels: [],
         matrix: [],
         importances,
@@ -399,8 +400,8 @@ export class HttpFloraRepository extends FloraRepository {
           { label: 'Seed', value: String(request.seed) }
         ],
         limitations: [
-          'O endpoint /api/ml/classify devolve métricas e top_features, não SHAP, ROC nem matriz de confusão.',
-          response.classification_report ? 'Há um classification_report textual na resposta.' : 'Sem classification_report.'
+          t('O endpoint /api/ml/classify devolve métricas e top_features, não SHAP, ROC nem matriz de confusão.'),
+          response.classification_report ? t('Há um classification_report textual na resposta.') : t('Sem classification_report.')
         ],
         provenance: {
           ...EMPTY_PROVENANCE,
@@ -412,7 +413,7 @@ export class HttpFloraRepository extends FloraRepository {
       this.experimentStore = [experiment, ...this.experimentStore];
       return experiment;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha no treino.';
+      const message = error instanceof Error ? error.message : t('Falha no treino.');
       const failed: MlExperiment = {
         id: `http-failed-${Date.now()}`,
         name: request.model,
@@ -477,7 +478,7 @@ export class HttpFloraRepository extends FloraRepository {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Falha no agrupamento.',
+        error: error instanceof Error ? error.message : t('Falha no agrupamento.'),
         method: request.method,
         nClusters: request.nClusters,
         silhouette: null,
@@ -506,13 +507,13 @@ export class HttpFloraRepository extends FloraRepository {
   async reportDraft(): Promise<ReportDraft> {
     const status = await this.dashboard();
     return {
-      title: 'Relatório FLORA',
+      title: t('Relatório FLORA'),
       projectId: 'workspace',
       mocked: false,
-      note: 'O HTML/PDF local usa o texto editado. O backend gera outro artefato em POST /api/report.',
+      note: t('O HTML/PDF local usa o texto editado. O backend gera outro artefato em POST /api/report.'),
       parameters: [
         { label: 'Workdir', value: status.workdir ?? 'n/d' },
-        { label: 'Amostras', value: String(status.samples) },
+        { label: t('Amostras'), value: String(status.samples) },
         { label: 'ASVs', value: String(status.asvs) }
       ],
       figures: {},
@@ -522,11 +523,11 @@ export class HttpFloraRepository extends FloraRepository {
           title: 'Resumo',
           included: true,
           figure: null,
-          narrative: 'Descreva o desenho do estudo. Os números do workspace vêm de /api/status.',
+          narrative: t('Descreva o desenho do estudo. Os números do workspace vêm de /api/status.'),
           table: {
             columns: ['Campo', 'Valor'],
             rows: [
-              ['Amostras', String(status.samples)],
+              [t('Amostras'), String(status.samples)],
               ['ASVs', String(status.asvs)],
               ['Status', status.status]
             ]
@@ -534,10 +535,10 @@ export class HttpFloraRepository extends FloraRepository {
         },
         {
           id: 'methods',
-          title: 'Métodos',
+          title: t('Métodos'),
           included: true,
           figure: null,
-          narrative: 'Registre rarefação, transformação, distância e modelo. A API ainda não devolve esses parâmetros.',
+          narrative: t('Registre rarefação, transformação, distância e modelo. A API ainda não devolve esses parâmetros.'),
           table: null
         }
       ]
@@ -566,19 +567,19 @@ export class HttpFloraRepository extends FloraRepository {
         }
       });
       if (!response.success) {
-        warnings.push(response.error ?? 'POST /api/report recusou o relatório.');
+        warnings.push(response.error ?? t('POST /api/report recusou o relatório.'));
       } else {
         previewUrl = response.report_preview_url;
         warnings.push(...(response.warnings ?? []));
         if (response.report_path) {
-          warnings.push(`HTML do backend: ${response.report_path}`);
+          warnings.push(t('HTML do backend: {path}', { path: response.report_path }));
         }
         if (response.pdf_path) {
-          warnings.push(`PDF do backend: ${response.pdf_path}`);
+          warnings.push(t('PDF do backend: {path}', { path: response.pdf_path }));
         }
       }
     } catch (error) {
-      warnings.push(error instanceof Error ? error.message : 'Falha em POST /api/report.');
+      warnings.push(error instanceof Error ? error.message : t('Falha em POST /api/report.'));
     }
     return {
       success: true,
@@ -644,7 +645,7 @@ export class HttpFloraRepository extends FloraRepository {
         id: `http-failed-${Date.now()}`,
         source: request.source,
         status: 'failed',
-        detail: error instanceof Error ? error.message : 'Falha no download.',
+        detail: error instanceof Error ? error.message : t('Falha no download.'),
         artifacts: [],
         mocked: false,
         createdAt: new Date().toISOString()
@@ -658,12 +659,12 @@ export class HttpFloraRepository extends FloraRepository {
     try {
       const response = await this.send<IngestResponse>('POST', path, { body });
       if (!response.success) {
-        return { step, success: false, error: response.error ?? 'A API recusou a etapa.' };
+        return { step, success: false, error: response.error ?? t('A API recusou a etapa.') };
       }
       const count = response.samples_ingested ?? response.observations_ingested ?? response.taxonomy_rows;
       return { step, success: true, detail: count !== undefined ? `${count} registros` : 'ok' };
     } catch (error) {
-      return { step, success: false, error: error instanceof Error ? error.message : 'Falha na etapa.' };
+      return { step, success: false, error: error instanceof Error ? error.message : t('Falha na etapa.') };
     }
   }
 
@@ -704,7 +705,7 @@ export class HttpFloraRepository extends FloraRepository {
         }
         throw new Error(error.message || `HTTP ${error.status}`);
       }
-      throw error instanceof Error ? error : new Error('Falha de rede');
+      throw error instanceof Error ? error : new Error(t('Falha de rede'));
     }
   }
 }

@@ -1,5 +1,6 @@
 import { PlotFigure } from '../../models/domain';
 import { GROUP_COLOR, MockSample, relationMatrix } from './mock-study';
+import { t } from '../../i18n/i18n';
 
 const AXIS = {
   mirror: false,
@@ -112,7 +113,7 @@ export function taxonomyBar(
     })),
     layout: layout({
       barmode: 'stack',
-      yaxis: { title: { text: `Abundância relativa (%) · ${rank}` }, ...AXIS },
+      yaxis: { title: { text: t('Abundância relativa (%) · {rank}', { rank }) }, ...AXIS },
       xaxis: { ...AXIS },
       legend: { orientation: 'v', x: 1.02, y: 1 },
       margin: { t: 24, r: 140, b: 48, l: 56 }
@@ -161,17 +162,17 @@ export function readHistogram(reads: number[]): PlotFigure {
     data: [
       {
         type: 'bar',
-        name: 'Amostras',
+        name: t('Amostras'),
         x: bins.map((bin) => bin.label),
         y: bins.map((bin) => reads.filter((value) => bin.test(value)).length),
         marker: { color: '#155E53' },
-        hovertemplate: '%{x}<br>%{y} amostras<extra></extra>'
+        hovertemplate: t('%{x}<br>%{y} amostras<extra></extra>')
       }
     ],
     layout: layout({
       showlegend: false,
-      yaxis: { title: { text: 'Amostras' }, ...AXIS },
-      xaxis: { title: { text: 'Reads por amostra' }, ...AXIS },
+      yaxis: { title: { text: t('Amostras') }, ...AXIS },
+      xaxis: { title: { text: t('Reads por amostra') }, ...AXIS },
       shapes: [
         {
           type: 'line',
@@ -227,14 +228,14 @@ export function rocFigure(dark = false): PlotFigure {
   const color = dark ? '#D5E4DE' : '#8FA099';
   return {
     data: [
-      { type: 'scatter', mode: 'lines', name: 'Referência', x: diagonal, y: diagonal, line: { color, dash: 'dot' } },
+      { type: 'scatter', mode: 'lines', name: t('Referência'), x: diagonal, y: diagonal, line: { color, dash: 'dot' } },
       { type: 'scatter', mode: 'lines', name: 'Rhizosphere · AUC 0,91', x: diagonal, y: rhizosphere, line: { color: '#155E53', width: 2 } },
       { type: 'scatter', mode: 'lines', name: 'Bulk soil · AUC 0,94', x: diagonal, y: bulk, line: { color: '#C47B2B', width: 2 } },
       { type: 'scatter', mode: 'lines', name: 'Endosphere · AUC 0,96', x: diagonal, y: endosphere, line: { color: '#3D6B8C', width: 2 } }
     ],
     layout: layout({
-      xaxis: { title: { text: 'Taxa de falso positivo' }, range: [0, 1], ...AXIS },
-      yaxis: { title: { text: 'Taxa de verdadeiro positivo' }, range: [0, 1], ...AXIS },
+      xaxis: { title: { text: t('Taxa de falso positivo') }, range: [0, 1], ...AXIS },
+      yaxis: { title: { text: t('Taxa de verdadeiro positivo') }, range: [0, 1], ...AXIS },
       legend: { orientation: 'h', y: -0.22 }
     })
   };
@@ -257,7 +258,7 @@ export function importanceBars(features: { feature: string; value: number }[], k
     ],
     layout: layout({
       showlegend: false,
-      xaxis: { title: { text: kind === 'shap' ? 'SHAP médio' : 'Importância' }, ...AXIS },
+      xaxis: { title: { text: kind === 'shap' ? t('SHAP médio') : t('Importância') }, ...AXIS },
       yaxis: { ...AXIS, automargin: true },
       margin: { t: 12, r: 16, b: 48, l: 120 }
     })

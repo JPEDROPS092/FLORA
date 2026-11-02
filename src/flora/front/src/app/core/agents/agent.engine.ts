@@ -1,3 +1,4 @@
+import { t } from '../i18n/i18n';
 import { FloraRepository } from '../data/flora.repository';
 import { ExplorationQuery } from '../models/domain';
 import { AGENTS, AUTO_ROUTES } from './agent.catalog';
@@ -48,24 +49,23 @@ async function diversity(repo: FloraRepository): Promise<AgentReply> {
   const bundle = await repo.exploration(DEFAULT_QUERY);
   const rows = [...bundle.comparisons].sort((a, b) => b.shannonMean - a.shannonMean);
   const steps = [
-    step('exploration.alpha', 'Calcular diversidade alfa', `${bundle.sampleCount} amostras, Shannon, ${DEFAULT_QUERY.normalize.toUpperCase()}`),
-    step('exploration.compare', 'Comparar grupos', `${rows.length} grupos`)
+    step('exploration.alpha', t('Calcular diversidade alfa'), t('{n} amostras, Shannon, {norm}', { n: bundle.sampleCount, norm: DEFAULT_QUERY.normalize.toUpperCase() })),
+    step('exploration.compare', t('Comparar grupos'), t('{n} grupos', { n: rows.length }))
   ];
   if (!rows.length) {
-    return { agentId: 'analyst', steps, actions: [], text: bundle.note ?? 'A fonte atual não devolveu resumo por grupo.' };
+    return { agentId: 'analyst', steps, actions: [], text: bundle.note ?? t('A fonte atual não devolveu resumo por grupo.') };
   }
   const [top, ...rest] = rows;
   const low = rest[rest.length - 1] ?? top;
-  const text =
-    `${top.group} tem a maior diversidade de Shannon (${fmt(top.shannonMean)} ± ${fmt(top.shannonSd)}, n=${top.n}); ` +
-    `${low.group} tem a menor (${fmt(low.shannonMean)}). ` +
-    `Diferença de ${fmt(top.shannonMean - low.shannonMean)} entre extremos. ` +
-    `Isto é descritivo: confirme com teste estatístico e correção para múltiplas comparações antes de concluir.`;
+  const text = t(
+    '{top} tem a maior diversidade de Shannon ({topMean} ± {topSd}, n={n}); {low} tem a menor ({lowMean}). Diferença de {diff} entre extremos. Isto é descritivo: confirme com teste estatístico e correção para múltiplas comparações antes de concluir.',
+    { top: top.group, topMean: fmt(top.shannonMean), topSd: fmt(top.shannonSd), n: top.n, low: low.group, lowMean: fmt(low.shannonMean), diff: fmt(top.shannonMean - low.shannonMean) }
+  );
   return {
     agentId: 'analyst', steps, text,
     actions: [
-      action('Abrir diversidade alfa (Shannon)', 'pi pi-chart-bar', '/explorer', { view: 'alpha', metric: 'shannon' }),
-      action('Ver PCoA Bray–Curtis', 'pi pi-chart-scatter', '/explorer', { view: 'pcoa', distance: 'braycurtis' })
+      action(t('Abrir diversidade alfa (Shannon)'), 'pi pi-chart-bar', '/explorer', { view: 'alpha', metric: 'shannon' }),
+      action(t('Ver PCoA Bray–Curtis'), 'pi pi-chart-scatter', '/explorer', { view: 'pcoa', distance: 'braycurtis' })
     ]
   };
 }
@@ -74,30 +74,31 @@ async function differential(repo: FloraRepository): Promise<AgentReply> {
   const bundle = await repo.exploration(DEFAULT_QUERY);
   const sig = bundle.differential.filter((d) => d.qValue < 0.05).sort((a, b) => Math.abs(b.log2FoldChange) - Math.abs(a.log2FoldChange));
   const steps = [
-    step('exploration.differential', 'Listar táxons diferenciais', `${bundle.differential.length} contrastes`),
-    step('stats.filter_fdr', 'Filtrar q < 0,05', `${sig.length} significativos`)
+    step('exploration.differential', t('Listar táxons diferenciais'), t('{n} contrastes', { n: bundle.differential.length })),
+    step('stats.filter_fdr', t('Filtrar q < 0,05'), t('{n} significativos', { n: sig.length }))
   ];
   const text = sig.length
-    ? `${sig.length} táxons com q < 0,05. Os mais fortes: ` +
-      sig.slice(0, 3).map((d) => `${d.taxon} (log2FC ${fmt(d.log2FoldChange)}, maior em ${d.higherIn})`).join('; ') +
-      '. Resultados de abundância relativa são composicionais; interprete o sinal, não a magnitude absoluta.'
-    : 'Nenhum táxon passou q < 0,05 nesta configuração.';
+    ? t('{n} táxons com q < 0,05. Os mais fortes: {list}. Resultados de abundância relativa são composicionais; interprete o sinal, não a magnitude absoluta.', {
+        n: sig.length,
+        list: sig.slice(0, 3).map((d) => t('{taxon} (log2FC {fc}, maior em {grp})', { taxon: d.taxon, fc: fmt(d.log2FoldChange), grp: d.higherIn })).join('; ')
+      })
+    : t('Nenhum táxon passou q < 0,05 nesta configuração.');
   return {
     agentId: 'taxonomist', steps, text,
-    actions: [action('Abrir taxonomia por gênero', 'pi pi-sitemap', '/explorer', { view: 'taxonomy', rank: 'genus', topN: 8 })]
+    actions: [action(t('Abrir taxonomia por gênero'), 'pi pi-sitemap', '/explorer', { view: 'taxonomy', rank: 'genus', topN: 8 })]
   };
 }
 
 async function models(repo: FloraRepository): Promise<AgentReply> {
   const rows = await repo.comparison();
-  const steps = [step('ml.comparison', 'Comparar modelos treinados', `${rows.length} experimentos`)];
-  if (!rows.length) return { agentId: 'taxonomist', steps, actions: [], text: 'Ainda não há experimentos para comparar. Treine um modelo no ML Lab.' };
+  const steps = [step('ml.comparison', t('Comparar modelos treinados'), t('{n} experimentos', { n: rows.length }))];
+  if (!rows.length) return { agentId: 'taxonomist', steps, actions: [], text: t('Ainda não há experimentos para comparar. Treine um modelo no ML Lab.') };
   const best = [...rows].sort((a, b) => b.cvAccuracyMean - a.cvAccuracyMean)[0];
-  const text =
-    `${best.model} lidera na validação cruzada (acc ${fmt(best.cvAccuracyMean)}, F1 macro ${fmt(best.f1Macro)}` +
-    `${best.rocAuc != null ? `, AUC ${fmt(best.rocAuc)}` : ''}; seed ${best.seed}, ${best.features} features). ` +
-    `Ressalvas: cohort pequeno, risco de overfitting e vazamento entre réplicas da mesma unidade; valide em coorte externa.`;
-  return { agentId: 'taxonomist', steps, text, actions: [action('Abrir ML Lab', 'pi pi-microchip', '/ml')] };
+  const text = t(
+    '{model} lidera na validação cruzada (acc {acc}, F1 macro {f1}{auc}; seed {seed}, {feat} features). Ressalvas: cohort pequeno, risco de overfitting e vazamento entre réplicas da mesma unidade; valide em coorte externa.',
+    { model: best.model, acc: fmt(best.cvAccuracyMean), f1: fmt(best.f1Macro), auc: best.rocAuc != null ? `, AUC ${fmt(best.rocAuc)}` : '', seed: best.seed, feat: best.features }
+  );
+  return { agentId: 'taxonomist', steps, text, actions: [action(t('Abrir ML Lab'), 'pi pi-microchip', '/ml')] };
 }
 
 async function qc(repo: FloraRepository): Promise<AgentReply> {
@@ -106,15 +107,15 @@ async function qc(repo: FloraRepository): Promise<AgentReply> {
   const fails = rows.filter((r) => r.status === 'fail');
   const warns = rows.filter((r) => r.status === 'warn');
   const steps = [
-    step('pipeline.qc_table', 'Ler QC por amostra', `${rows.length} amostras`),
-    step('pipeline.reconcile', 'Reconciliar metadata × ASV', `${summary.matched} casadas, ${summary.metadataOnly + summary.asvOnly} órfãs`)
+    step('pipeline.qc_table', t('Ler QC por amostra'), t('{n} amostras', { n: rows.length })),
+    step('pipeline.reconcile', t('Reconciliar metadata × ASV'), t('{m} casadas, {o} órfãs', { m: summary.matched, o: summary.metadataOnly + summary.asvOnly }))
   ];
-  const detail = fails.slice(0, 3).map((r) => `${r.sampleId} (${r.issues[0] ?? 'falha'})`).join(', ');
+  const detail = fails.slice(0, 3).map((r) => `${r.sampleId} (${r.issues[0] ?? t('falha')})`).join(', ');
   const text =
-    `${fails.length} falhas e ${warns.length} alertas; ${summary.lowDepth} amostras com baixa profundidade. ` +
-    (fails.length ? `Pior caso: ${detail}. ` : '') +
-    (snap.ingested ? 'A ingestão já foi confirmada.' : 'A ingestão só fecha com metadata, ASV e taxonomia bem-sucedidos; resolva as falhas antes de confirmar.');
-  return { agentId: 'qc', steps, text, actions: [action('Abrir QC no Pipeline Studio', 'pi pi-sitemap', '/pipeline')] };
+    t('{f} falhas e {w} alertas; {d} amostras com baixa profundidade.', { f: fails.length, w: warns.length, d: summary.lowDepth }) + ' ' +
+    (fails.length ? t('Pior caso: {list}.', { list: detail }) + ' ' : '') +
+    (snap.ingested ? t('A ingestão já foi confirmada.') : t('A ingestão só fecha com metadata, ASV e taxonomia bem-sucedidos; resolva as falhas antes de confirmar.'));
+  return { agentId: 'qc', steps, text, actions: [action(t('Abrir QC no Pipeline Studio'), 'pi pi-sitemap', '/pipeline')] };
 }
 
 async function reporter(repo: FloraRepository): Promise<AgentReply> {
@@ -123,15 +124,15 @@ async function reporter(repo: FloraRepository): Promise<AgentReply> {
   const empty = included.filter((s) => !s.narrative.trim());
   const noFigure = included.filter((s) => s.figure === null);
   const steps = [
-    step('report.draft', 'Ler rascunho', `${draft.sections.length} seções`),
-    step('report.parameters', 'Coletar parâmetros', `${draft.parameters.length} parâmetros para Métodos`)
+    step('report.draft', t('Ler rascunho'), t('{n} seções', { n: draft.sections.length })),
+    step('report.parameters', t('Coletar parâmetros'), t('{n} parâmetros para Métodos', { n: draft.parameters.length }))
   ];
   const text =
-    `${included.length}/${draft.sections.length} seções incluídas. ` +
-    (empty.length ? `Sem texto: ${empty.map((s) => s.title).join(', ')}. ` : 'Todas as incluídas têm texto. ') +
-    (noFigure.length ? `${noFigure.length} sem figura. ` : '') +
-    'Registre seed e versões no bloco de Métodos para reprodutibilidade.';
-  return { agentId: 'reporter', steps, text, actions: [action('Abrir Report Builder', 'pi pi-file', '/reports')] };
+    t('{a}/{b} seções incluídas.', { a: included.length, b: draft.sections.length }) + ' ' +
+    (empty.length ? t('Sem texto: {list}.', { list: empty.map((x) => x.title).join(', ') }) : t('Todas as incluídas têm texto.')) + ' ' +
+    (noFigure.length ? t('{n} sem figura.', { n: noFigure.length }) + ' ' : '') +
+    t('Registre seed e versões no bloco de Métodos para reprodutibilidade.');
+  return { agentId: 'reporter', steps, text, actions: [action(t('Abrir Report Builder'), 'pi pi-file', '/reports')] };
 }
 
 export const AGENT_IDS = AGENTS.map((a) => a.id);

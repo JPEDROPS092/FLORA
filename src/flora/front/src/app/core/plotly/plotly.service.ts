@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 
 import { PlotFigure, ThemeMode } from '../models/domain';
+import { t } from '../i18n/i18n';
 
 interface PlotlyApi {
   newPlot: (target: HTMLElement, data: unknown[], layout: object, config?: object) => Promise<void>;
@@ -17,7 +18,7 @@ declare global {
 export class PlotlyService {
   async render(target: HTMLElement, figure: PlotFigure, theme: ThemeMode): Promise<void> {
     if (!window.Plotly) {
-      target.replaceChildren(notice('Plotly não está disponível neste navegador.'));
+      target.replaceChildren(notice(t('Plotly não está disponível neste navegador.')));
       return;
     }
     await window.Plotly.newPlot(target, figure.data, themedLayout(figure.layout, theme), {

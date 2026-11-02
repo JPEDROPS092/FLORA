@@ -18,11 +18,13 @@ import { FloraRepository } from '../../core/data/flora.repository';
 import { ChartResult, ExplorationBundle, ExplorerView, TaxonNode } from '../../core/models/domain';
 import { downloadBlob } from '../../shared/download';
 import { PlotCardComponent } from '../../shared/plot-card.component';
+import { TPipe } from '../../core/i18n/t.pipe';
+import { t } from '../../core/i18n/i18n';
 
 @Component({
   selector: 'flora-explorer',
   standalone: true,
-  imports: [
+  imports: [TPipe, 
     DecimalPipe,
     ReactiveFormsModule,
     ButtonModule,
@@ -40,68 +42,68 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
     <section class="page">
       <header class="page-heading">
         <div>
-          <p class="kicker">Scientific Explorer</p>
-          <h1>Ordenação, diversidade e composição</h1>
-          <p class="lede">Os filtros valem para todas as vistas. A figura ativa ocupa o centro.</p>
+          <p class="kicker">{{ 'Scientific Explorer' | t }}</p>
+          <h1>{{ 'Ordenação, diversidade e composição' | t }}</h1>
+          <p class="lede">{{ 'Os filtros valem para todas as vistas. A figura ativa ocupa o centro.' | t }}</p>
         </div>
-        @if (bundle()?.mocked) { <p-tag value="Dados mockados" severity="secondary" /> }
+        @if (bundle()?.mocked) { <p-tag [value]="'Dados mockados' | t" severity="secondary" /> }
       </header>
 
       <div class="explorer">
         <form class="surface filters" [formGroup]="filters" (ngSubmit)="apply()">
           <div class="field">
-            <label for="groups">Grupos</label>
+            <label for="groups">{{ 'Grupos' | t }}</label>
             <p-multiselect inputId="groups" [options]="groupOptions" formControlName="groups" display="chip" appendTo="body" [fluid]="true" />
             @if (filters.controls.groups.invalid && filters.controls.groups.touched) {
-              <small class="field-error">Selecione ao menos um grupo.</small>
+              <small class="field-error">{{ 'Selecione ao menos um grupo.' | t }}</small>
             }
           </div>
           <div class="field">
-            <label for="metric">Métrica alfa</label>
+            <label for="metric">{{ 'Métrica alfa' | t }}</label>
             <p-select inputId="metric" [options]="metrics" formControlName="metric" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
           </div>
           <div class="field">
-            <label for="normalize">Transformação</label>
+            <label for="normalize">{{ 'Transformação' | t }}</label>
             <p-select inputId="normalize" [options]="normalizations" formControlName="normalize" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
           </div>
           <div class="field">
-            <label for="rank">Rank taxonômico</label>
+            <label for="rank">{{ 'Rank taxonômico' | t }}</label>
             <p-select inputId="rank" [options]="ranks" formControlName="rank" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
           </div>
           <div class="field">
-            <label for="distance">Distância beta</label>
+            <label for="distance">{{ 'Distância beta' | t }}</label>
             <p-select inputId="distance" [options]="distances" formControlName="distance" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
           </div>
           <div class="field">
-            <label for="topN">Top N</label>
+            <label for="topN">{{ 'Top N' | t }}</label>
             <p-inputnumber inputId="topN" formControlName="topN" [min]="2" [max]="12" [fluid]="true" />
           </div>
           <div class="actions">
-            <p-button type="submit" label="Aplicar filtros" icon="pi pi-filter" [loading]="busy()" />
-            <p-button type="button" label="Exportar tabela" severity="secondary" [text]="true" (onClick)="exportTable()" />
+            <p-button type="submit" [label]="'Aplicar filtros' | t" icon="pi pi-filter" [loading]="busy()" />
+            <p-button type="button" [label]="'Exportar tabela' | t" severity="secondary" [text]="true" (onClick)="exportTable()" />
           </div>
-          <p class="note">{{ bundle()?.sampleCount | number }} amostras na rarefação · {{ bundle()?.asvCount | number }} ASVs no estudo.</p>
+          <p class="note">{{ bundle()?.sampleCount | number }} {{ 'amostras na rarefação ·' | t }} {{ bundle()?.asvCount | number }} {{ 'ASVs no estudo.' | t }}</p>
         </form>
 
         <div class="stack">
           <p-tabs [value]="view()" (valueChange)="onView($event)">
             <p-tablist>
-              <p-tab value="pcoa">PCoA</p-tab>
-              <p-tab value="alpha">Alfa</p-tab>
-              <p-tab value="beta">Beta</p-tab>
-              <p-tab value="taxonomy">Taxonomia</p-tab>
-              <p-tab value="relations">Relações</p-tab>
+              <p-tab value="pcoa">{{ 'PCoA' | t }}</p-tab>
+              <p-tab value="alpha">{{ 'Alfa' | t }}</p-tab>
+              <p-tab value="beta">{{ 'Beta' | t }}</p-tab>
+              <p-tab value="taxonomy">{{ 'Taxonomia' | t }}</p-tab>
+              <p-tab value="relations">{{ 'Relações' | t }}</p-tab>
             </p-tablist>
           </p-tabs>
 
           <article class="surface stage" [class.with-tree]="view() === 'taxonomy'">
             @if (view() === 'taxonomy') {
               <div class="tree-pane">
-                <div class="section-title"><h2>Árvore resumida</h2></div>
+                <div class="section-title"><h2>{{ 'Árvore resumida' | t }}</h2></div>
                 @if (tree().length) {
                   <p-tree [value]="tree()" />
                 } @else {
-                  <p class="note">{{ bundle()?.note || 'Sem árvore estruturada nesta fonte.' }}</p>
+                  <p class="note">{{ bundle()?.note || t('Sem árvore estruturada nesta fonte.') }}</p>
                 }
               </div>
             }
@@ -116,12 +118,12 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
 
           <article class="surface">
             <div class="section-title">
-              <h2>Comparação de grupos</h2>
-              <p>Mesmos filtros da figura.</p>
+              <h2>{{ 'Comparação de grupos' | t }}</h2>
+              <p>{{ 'Mesmos filtros da figura.' | t }}</p>
             </div>
             <p-table [value]="bundle()?.comparisons ?? []">
               <ng-template pTemplate="header">
-                <tr><th>Grupo</th><th>n</th><th>Shannon</th><th>DP</th><th>ASVs observados</th></tr>
+                <tr><th>{{ 'Grupo' | t }}</th><th>{{ 'n' | t }}</th><th>{{ 'Shannon' | t }}</th><th>{{ 'DP' | t }}</th><th>{{ 'ASVs observados' | t }}</th></tr>
               </ng-template>
               <ng-template pTemplate="body" let-row>
                 <tr>
@@ -132,18 +134,18 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
                   <td>{{ row.observedMean | number }}</td>
                 </tr>
               </ng-template>
-              <ng-template pTemplate="emptymessage"><tr><td colspan="5">Sem resumo numérico nesta fonte.</td></tr></ng-template>
+              <ng-template pTemplate="emptymessage"><tr><td colspan="5">{{ 'Sem resumo numérico nesta fonte.' | t }}</td></tr></ng-template>
             </p-table>
           </article>
 
           <article class="surface">
             <div class="section-title">
-              <h2>Táxons diferenciais</h2>
-              <p>log2 fold change mockado no rank selecionado, quando existir.</p>
+              <h2>{{ 'Táxons diferenciais' | t }}</h2>
+              <p>{{ 'log2 fold change mockado no rank selecionado, quando existir.' | t }}</p>
             </div>
             <p-table [value]="bundle()?.differential ?? []" [rows]="8" [paginator]="true">
               <ng-template pTemplate="header">
-                <tr><th>Táxon</th><th>log2FC</th><th>p</th><th>q</th><th>Maior em</th><th>Contraste</th></tr>
+                <tr><th>{{ 'Táxon' | t }}</th><th>{{ 'log2FC' | t }}</th><th>{{ 'p' | t }}</th><th>{{ 'q' | t }}</th><th>{{ 'Maior em' | t }}</th><th>{{ 'Contraste' | t }}</th></tr>
               </ng-template>
               <ng-template pTemplate="body" let-row>
                 <tr>
@@ -155,7 +157,7 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
                   <td>{{ row.contrast }}</td>
                 </tr>
               </ng-template>
-              <ng-template pTemplate="emptymessage"><tr><td colspan="6">{{ bundle()?.note || 'Sem contrastes.' }}</td></tr></ng-template>
+              <ng-template pTemplate="emptymessage"><tr><td colspan="6">{{ bundle()?.note || t('Sem contrastes.') }}</td></tr></ng-template>
             </p-table>
           </article>
         </div>
@@ -164,6 +166,7 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
   `
 })
 export class ExplorerPageComponent {
+  protected readonly t = t;
   private readonly repository = inject(FloraRepository);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
@@ -177,20 +180,20 @@ export class ExplorerPageComponent {
   readonly metrics = [
     { label: 'Shannon', value: 'shannon' },
     { label: 'Simpson', value: 'simpson' },
-    { label: 'Observados', value: 'observed' },
+    { label: t('Observados'), value: 'observed' },
     { label: 'Chao1', value: 'chao1' }
   ];
   readonly normalizations = [
     { label: 'CLR', value: 'clr' },
     { label: 'TSS', value: 'tss' },
-    { label: 'Sem transformação', value: 'none' }
+    { label: t('Sem transformação'), value: 'none' }
   ];
   readonly ranks = [
-    { label: 'Filo', value: 'phylum' },
-    { label: 'Classe', value: 'class' },
-    { label: 'Ordem', value: 'order' },
-    { label: 'Família', value: 'family' },
-    { label: 'Gênero', value: 'genus' }
+    { label: t('Filo'), value: 'phylum' },
+    { label: t('Classe'), value: 'class' },
+    { label: t('Ordem'), value: 'order' },
+    { label: t('Família'), value: 'family' },
+    { label: t('Gênero'), value: 'genus' }
   ];
   readonly distances = [
     { label: 'Bray–Curtis', value: 'braycurtis' },
@@ -251,15 +254,15 @@ export class ExplorerPageComponent {
   viewTitle(): string {
     switch (this.view()) {
       case 'alpha':
-        return 'Diversidade alfa';
+        return t('Diversidade alfa');
       case 'beta':
-        return 'Matriz de distância';
+        return t('Matriz de distância');
       case 'taxonomy':
-        return 'Abundância taxonômica';
+        return t('Abundância taxonômica');
       case 'relations':
-        return 'Co-ocorrência entre gêneros';
+        return t('Co-ocorrência entre gêneros');
       default:
-        return 'PCoA';
+        return t('PCoA');
     }
   }
 

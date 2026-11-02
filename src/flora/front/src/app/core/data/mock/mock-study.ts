@@ -1,7 +1,8 @@
 import { DifferentialTaxon, NormalizationConfig, Provenance, TaxonNode } from '../../models/domain';
+import { t } from '../../i18n/i18n';
 
 export const STUDY_ID = 'FL16S-SORGHUM-01';
-export const STUDY_NAME = 'Rizosfera de sorgo sob seca';
+export const STUDY_NAME = t('Rizosfera de sorgo sob seca');
 export const ASV_COUNT = 1842;
 export const RAREFACTION_DEPTH = 10000;
 
@@ -86,7 +87,7 @@ export const GENERA: AbundanceRow[] = [
   { name: 'Rhizobium', rank: 'genus', values: { Rhizosphere: 2.9, 'Bulk soil': 1.1, Endosphere: 0.9 } },
   { name: 'Massilia', rank: 'genus', values: { Rhizosphere: 1.7, 'Bulk soil': 2.4, Endosphere: 1.2 } },
   { name: 'Pedobacter', rank: 'genus', values: { Rhizosphere: 1.4, 'Bulk soil': 1.6, Endosphere: 2.8 } },
-  { name: 'Outros gêneros', rank: 'genus', values: { Rhizosphere: 61.7, 'Bulk soil': 71.4, Endosphere: 74.1 } }
+  { name: t('Outros gêneros'), rank: 'genus', values: { Rhizosphere: 61.7, 'Bulk soil': 71.4, Endosphere: 74.1 } }
 ];
 
 export const RANK_TABLE: Record<string, AbundanceRow[]> = {
@@ -114,7 +115,7 @@ export const RANK_TABLE: Record<string, AbundanceRow[]> = {
     { name: 'Sphingomonadaceae', rank: 'phylum', values: { Rhizosphere: 4, 'Bulk soil': 9, Endosphere: 3 } },
     { name: 'Methylobacteriaceae', rank: 'phylum', values: { Rhizosphere: 2, 'Bulk soil': 1, Endosphere: 8 } },
     { name: 'Streptomycetaceae', rank: 'phylum', values: { Rhizosphere: 5, 'Bulk soil': 4, Endosphere: 2 } },
-    { name: 'Outras famílias', rank: 'phylum', values: { Rhizosphere: 69, 'Bulk soil': 80, Endosphere: 77 } }
+    { name: t('Outras famílias'), rank: 'phylum', values: { Rhizosphere: 69, 'Bulk soil': 80, Endosphere: 77 } }
   ],
   genus: GENERA
 };
@@ -279,33 +280,33 @@ export function createSamples(): MockSample[] {
   if (low) {
     low.reads = 640;
     low.status = 'fail';
-    low.issues = ['Profundidade 640 reads, abaixo da rarefação de 10.000.'];
+    low.issues = [t('Profundidade 640 reads, abaixo da rarefação de 10.000.')];
   }
   const missingAsv = byId('FL16S_031');
   if (missingAsv) {
     missingAsv.inAsv = false;
     missingAsv.reads = null;
     missingAsv.status = 'fail';
-    missingAsv.issues = ['Presente na metadata e ausente na tabela ASV.'];
+    missingAsv.issues = [t('Presente na metadata e ausente na tabela ASV.')];
   }
   const missingMeta = byId('FL16S_052');
   if (missingMeta) {
     missingMeta.inMetadata = false;
     missingMeta.group = null;
     missingMeta.status = 'fail';
-    missingMeta.issues = ['Presente na tabela ASV e ausente na metadata.'];
+    missingMeta.issues = [t('Presente na tabela ASV e ausente na metadata.')];
   }
   const borderline = byId('FL16S_067');
   if (borderline) {
     borderline.reads = 8200;
     borderline.status = 'warn';
-    borderline.issues = ['Profundidade 8.200 reads, abaixo do limiar de rarefação.'];
+    borderline.issues = [t('Profundidade 8.200 reads, abaixo do limiar de rarefação.')];
   }
   const mismatch = byId('FL16S_078');
   if (mismatch) {
     mismatch.metadataId = 'FL16S_78';
     mismatch.status = 'fail';
-    mismatch.issues = ['Identificador da metadata (FL16S_78) não corresponde a FL16S_078.'];
+    mismatch.issues = [t('Identificador da metadata (FL16S_78) não corresponde a FL16S_078.')];
   }
 
   return samples;
@@ -333,10 +334,10 @@ export function baseProvenance(seed = 42): Provenance {
       { label: 'DADA2 truncLen', value: '240 / 200' },
       { label: 'DADA2 maxEE', value: '2' },
       { label: 'Classificador', value: 'SILVA 138.2, sklearn' },
-      { label: 'Rarefação', value: '10.000 reads' },
-      { label: 'Transformação', value: 'CLR' },
-      { label: 'Prevalência mínima', value: '0,05' },
-      { label: 'Distância beta', value: 'Bray–Curtis' },
+      { label: t('Rarefação'), value: '10.000 reads' },
+      { label: t('Transformação'), value: 'CLR' },
+      { label: t('Prevalência mínima'), value: '0,05' },
+      { label: t('Distância beta'), value: 'Bray–Curtis' },
       { label: 'Seed', value: String(seed) }
     ],
     packages: [
@@ -353,11 +354,11 @@ export function baseProvenance(seed = 42): Provenance {
       'results/raw/FL16S-SORGHUM-01/taxonomy.tsv'
     ],
     history: [
-      { at: '2026-02-12 09:14', event: 'Importação FASTQ e metadata (QIIME2).' },
-      { at: '2026-02-12 09:41', event: 'DADA2 denoise: 1.842 ASVs, 80 amostras.' },
-      { at: '2026-02-12 10:05', event: 'Taxonomia SILVA 138.2 atribuída.' },
-      { at: '2026-02-12 10:22', event: 'QC: 75 amostras passam; 4 falham; 1 alerta.' },
-      { at: '2026-02-12 11:03', event: 'Rarefação a 10.000 e matriz CLR.' }
+      { at: '2026-02-12 09:14', event: t('Importação FASTQ e metadata (QIIME2).') },
+      { at: '2026-02-12 09:41', event: t('DADA2 denoise: 1.842 ASVs, 80 amostras.') },
+      { at: '2026-02-12 10:05', event: t('Taxonomia SILVA 138.2 atribuída.') },
+      { at: '2026-02-12 10:22', event: t('QC: 75 amostras passam; 4 falham; 1 alerta.') },
+      { at: '2026-02-12 11:03', event: t('Rarefação a 10.000 e matriz CLR.') }
     ]
   };
 }
@@ -372,16 +373,16 @@ export function defaultNormalization(): NormalizationConfig {
 }
 
 export const MOCK_LOGS = [
-  '2026-02-12 09:14:02 INFO flora.ui — Estudo mockado FL16S-SORGHUM-01 carregado (80 amostras, 1.842 ASVs).',
+  t('2026-02-12 09:14:02 INFO flora.ui — Estudo mockado FL16S-SORGHUM-01 carregado (80 amostras, 1.842 ASVs).'),
   '2026-02-12 09:41:18 INFO flora.dada2 — truncLenF=240 truncLenR=200 maxEE=2 pool=pseudo.',
   '2026-02-12 10:05:44 INFO flora.taxonomy — SILVA 138.2, 1.842 features classificadas.',
   '2026-02-12 10:22:09 WARNING flora.qc — FL16S_014 profundidade 640.',
-  '2026-02-12 10:22:09 WARNING flora.qc — FL16S_031 ausente na tabela ASV.',
-  '2026-02-12 10:22:10 WARNING flora.qc — FL16S_052 ausente na metadata.',
+  t('2026-02-12 10:22:09 WARNING flora.qc — FL16S_031 ausente na tabela ASV.'),
+  t('2026-02-12 10:22:10 WARNING flora.qc — FL16S_052 ausente na metadata.'),
   '2026-02-12 10:22:10 WARNING flora.qc — FL16S_067 profundidade 8.200.',
   '2026-02-12 10:22:11 ERROR flora.qc — FL16S_078 identificador divergente (FL16S_78).',
-  '2026-02-12 11:03:27 INFO flora.features — rarefação 10000, CLR, prevalência 0.05 → 612 features.',
+  t('2026-02-12 11:03:27 INFO flora.features — rarefação 10000, CLR, prevalência 0.05 → 612 features.'),
   '2026-02-12 11:18:55 INFO flora.ml — random_forest seed=42 cv=5 accuracy=0.86.',
   '2026-02-12 11:24:12 INFO flora.ml — xgboost seed=42 cv=5 accuracy=0.88.',
-  '2026-02-12 11:40:00 INFO flora.report — rascunho HTML do relatório científico disponível.'
+  t('2026-02-12 11:40:00 INFO flora.report — rascunho HTML do relatório científico disponível.')
 ];

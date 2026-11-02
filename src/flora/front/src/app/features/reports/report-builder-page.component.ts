@@ -11,20 +11,22 @@ import { FloraRepository } from '../../core/data/flora.repository';
 import { ReportDraft, ReportSection } from '../../core/models/domain';
 import { decodeBase64, downloadBlob } from '../../shared/download';
 import { PlotCardComponent } from '../../shared/plot-card.component';
+import { TPipe } from '../../core/i18n/t.pipe';
+import { t } from '../../core/i18n/i18n';
 
 @Component({
   selector: 'flora-report-builder',
   standalone: true,
-  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, SelectModule, TagModule, TextareaModule, PlotCardComponent],
+  imports: [TPipe, ReactiveFormsModule, ButtonModule, InputTextModule, SelectModule, TagModule, TextareaModule, PlotCardComponent],
   template: `
     <section class="page">
       <header class="page-heading">
         <div>
-          <p class="kicker">Scientific Report Builder</p>
-          <h1>Relatório com métodos e figuras</h1>
-          <p class="lede">Edite o texto, mantenha os parâmetros e exporte HTML interativo ou PDF textual.</p>
+          <p class="kicker">{{ 'Scientific Report Builder' | t }}</p>
+          <h1>{{ 'Relatório com métodos e figuras' | t }}</h1>
+          <p class="lede">{{ 'Edite o texto, mantenha os parâmetros e exporte HTML interativo ou PDF textual.' | t }}</p>
         </div>
-        @if (draft()?.mocked) { <p-tag value="Dados mockados" severity="secondary" /> }
+        @if (draft()?.mocked) { <p-tag [value]="'Dados mockados' | t" severity="secondary" /> }
       </header>
 
       <div class="builder">
@@ -42,13 +44,13 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
               <h2>{{ section.title }}</h2>
               <p-button
                 type="button"
-                [label]="section.included ? 'Incluída' : 'Omitida'"
+                [label]="section.included ? t('Incluída') : t('Omitida')"
                 [severity]="section.included ? 'primary' : 'secondary'"
                 (onClick)="toggle(section.id)"
               />
             </div>
             <form class="field" [formGroup]="editor">
-              <label for="narrative">Texto</label>
+              <label for="narrative">{{ 'Texto' | t }}</label>
               <textarea id="narrative" pTextarea rows="8" formControlName="narrative"></textarea>
             </form>
             @if (section.figure && figure(section.figure); as chart) {
@@ -72,23 +74,23 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
         <aside class="surface stack">
           <form class="filters" [formGroup]="meta" (ngSubmit)="exportReport('both')">
             <div class="field">
-              <label for="title">Título</label>
+              <label for="title">{{ 'Título' | t }}</label>
               <input id="title" pInputText formControlName="title" />
               @if (meta.controls.title.invalid && meta.controls.title.touched) {
-                <small class="field-error">O título é obrigatório.</small>
+                <small class="field-error">{{ 'O título é obrigatório.' | t }}</small>
               }
             </div>
             <div class="field">
-              <label for="groupBy">Agrupar relatório por</label>
+              <label for="groupBy">{{ 'Agrupar relatório por' | t }}</label>
               <p-select inputId="groupBy" [options]="groups" formControlName="groupBy" appendTo="body" [fluid]="true" />
             </div>
             <div class="actions">
-              <p-button type="button" label="HTML" icon="pi pi-download" [loading]="busy()" (onClick)="exportReport('html')" />
-              <p-button type="button" label="PDF" severity="secondary" [loading]="busy()" (onClick)="exportReport('pdf')" />
+              <p-button type="button" [label]="'HTML' | t" icon="pi pi-download" [loading]="busy()" (onClick)="exportReport('html')" />
+              <p-button type="button" [label]="'PDF' | t" severity="secondary" [loading]="busy()" (onClick)="exportReport('pdf')" />
             </div>
           </form>
           <div>
-            <h2>Parâmetros reprodutíveis</h2>
+            <h2>{{ 'Parâmetros reprodutíveis' | t }}</h2>
             <dl class="param-list">
               @for (item of draft()?.parameters ?? []; track item.label) {
                 <div><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
@@ -101,7 +103,7 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
             </ul>
           }
           @if (previewUrl()) {
-            <a [href]="previewUrl()" target="_blank" rel="noopener">Prévia no backend</a>
+            <a [href]="previewUrl()" target="_blank" rel="noopener">{{ 'Prévia no backend' | t }}</a>
           }
           <p class="note">{{ draft()?.note }}</p>
         </aside>
@@ -110,6 +112,7 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
   `
 })
 export class ReportBuilderPageComponent {
+  protected readonly t = t;
   private readonly repository = inject(FloraRepository);
   private readonly messages = inject(MessageService);
   private readonly fb = inject(FormBuilder);
@@ -180,9 +183,9 @@ export class ReportBuilderPageComponent {
         const bytes = decodeBase64(result.pdfBase64);
         downloadBlob(`${slug}.pdf`, new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }));
       }
-      this.messages.add({ severity: result.success ? 'success' : 'warn', summary: 'Exportação', detail: 'Arquivo gerado nesta sessão.' });
+      this.messages.add({ severity: result.success ? 'success' : 'warn', summary: t('Exportação'), detail: t('Arquivo gerado nesta sessão.') });
     } catch (error) {
-      this.messages.add({ severity: 'error', summary: 'Exportação', detail: error instanceof Error ? error.message : 'Falha ao exportar.' });
+      this.messages.add({ severity: 'error', summary: t('Exportação'), detail: error instanceof Error ? error.message : t('Falha ao exportar.') });
     } finally {
       this.busy.set(false);
     }

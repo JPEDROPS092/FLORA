@@ -6,20 +6,22 @@ import { TagModule } from 'primeng/tag';
 import { AgentService } from '../../core/agents/agent.service';
 import { MascotComponent } from '../../shared/mascot.component';
 import { WorkspaceStore } from '../../core/workspace/workspace.store';
+import { TPipe } from '../../core/i18n/t.pipe';
+import { t } from '../../core/i18n/i18n';
 
 @Component({
   selector: 'flora-agents',
   standalone: true,
-  imports: [MascotComponent, DatePipe, ButtonModule, TagModule],
+  imports: [TPipe, MascotComponent, DatePipe, ButtonModule, TagModule],
   template: `
     <section class="page">
       <header class="page-heading">
         <div>
-          <p class="kicker">Agentes de IA</p>
-          <h1>Equipe de análise assistida</h1>
-          <p class="lede">Cada agente lê os dados do estudo, registra os passos e propõe ações. Nada muda sem sua confirmação.</p>
+          <p class="kicker">{{ 'Agentes de IA' | t }}</p>
+          <h1>{{ 'Equipe de análise assistida' | t }}</h1>
+          <p class="lede">{{ 'Cada agente lê os dados do estudo, registra os passos e propõe ações. Nada muda sem sua confirmação.' | t }}</p>
         </div>
-        <div class="head-side"><p-tag value="Respostas simuladas · ancoradas nos dados" severity="secondary" /><flora-mascot name="laptop" [size]="96" alt="Mascote FLORA com laptop" /></div>
+        <div class="head-side"><p-tag [value]="'Respostas simuladas · ancoradas nos dados' | t" severity="secondary" /><flora-mascot name="laptop" [size]="96" [alt]="'Mascote FLORA com laptop' | t" /></div>
       </header>
 
       <div class="agent-grid">
@@ -39,8 +41,8 @@ import { WorkspaceStore } from '../../core/workspace/workspace.store';
 
       <article class="surface">
         <div class="section-title">
-          <h2>Execuções desta sessão</h2>
-          <p>{{ svc.pendingActions() }} ações propostas aguardando confirmação</p>
+          <h2>{{ 'Execuções desta sessão' | t }}</h2>
+          <p>{{ svc.pendingActions() }} {{ 'ações propostas aguardando confirmação' | t }}</p>
         </div>
         @for (r of svc.runs(); track r.id) {
           <details class="run">
@@ -50,20 +52,21 @@ import { WorkspaceStore } from '../../core/workspace/workspace.store';
               <span class="prompt">{{ r.prompt }}</span>
               <time>{{ r.startedAt | date:'HH:mm:ss' }}</time>
             </summary>
-            <p>{{ r.summary || 'Em execução…' }}</p>
+            <p>{{ r.summary || t('Em execução…') }}</p>
             <ol>@for (s of r.steps; track s.tool) { <li><code>{{ s.tool }}</code> {{ s.label }} <small>— {{ s.detail }}</small></li> }</ol>
             <div class="cp-actions">
               @for (a of r.actions; track a.id) { <p-button size="small" [label]="a.label" [icon]="a.icon" [outlined]="true" (onClick)="svc.apply(a)" /> }
             </div>
           </details>
         } @empty {
-          <p class="note">Nenhuma execução ainda. Escolha uma pergunta inicial acima ou abra o copiloto (Ctrl+J).</p>
+          <p class="note">{{ 'Nenhuma execução ainda. Escolha uma pergunta inicial acima ou abra o copiloto (Ctrl+J).' | t }}</p>
         }
       </article>
     </section>
   `
 })
 export class AgentsPageComponent {
+  protected readonly t = t;
   protected readonly svc = inject(AgentService);
   private readonly store = inject(WorkspaceStore);
 

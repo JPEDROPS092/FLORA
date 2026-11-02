@@ -16,11 +16,13 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { FloraRepository } from '../../core/data/flora.repository';
 import { IngestOutcome, IngestPreview, PipelineSnapshot } from '../../core/models/domain';
 import { PlotCardComponent } from '../../shared/plot-card.component';
+import { TPipe } from '../../core/i18n/t.pipe';
+import { t } from '../../core/i18n/i18n';
 
 @Component({
   selector: 'flora-pipeline',
   standalone: true,
-  imports: [
+  imports: [TPipe, 
     DecimalPipe,
     ReactiveFormsModule,
     RouterLink,
@@ -40,13 +42,13 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
     <section class="page">
       <header class="page-heading">
         <div>
-          <p class="kicker">Data Pipeline Studio</p>
-          <h1>Importação, QC e normalização</h1>
-          <p class="lede">O trilho segue a ordem QIIME2 / DADA2. A conferência de amostras acontece antes de aceitar a tabela.</p>
+          <p class="kicker">{{ 'Data Pipeline Studio' | t }}</p>
+          <h1>{{ 'Importação, QC e normalização' | t }}</h1>
+          <p class="lede">{{ 'O trilho segue a ordem QIIME2 / DADA2. A conferência de amostras acontece antes de aceitar a tabela.' | t }}</p>
         </div>
         <div class="actions">
-          @if (pipeline()?.mocked) { <p-tag value="Dados mockados" severity="secondary" /> }
-          <a routerLink="/downloads">Fontes externas</a>
+          @if (pipeline()?.mocked) { <p-tag [value]="'Dados mockados' | t" severity="secondary" /> }
+          <a routerLink="/downloads">{{ 'Fontes externas' | t }}</a>
         </div>
       </header>
 
@@ -63,40 +65,40 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
       <section class="split">
         <article class="surface">
           <div class="section-title">
-            <h2>Normalização</h2>
-            <p>Rarefação, transformação e prevalência mínima.</p>
+            <h2>{{ 'Normalização' | t }}</h2>
+            <p>{{ 'Rarefação, transformação e prevalência mínima.' | t }}</p>
           </div>
           <form class="filters" [formGroup]="normForm" (ngSubmit)="applyNorm()">
             <div class="field">
-              <label for="depth">Rarefação (reads)</label>
+              <label for="depth">{{ 'Rarefação (reads)' | t }}</label>
               <p-inputnumber inputId="depth" formControlName="rarefactionDepth" [min]="1000" [fluid]="true" />
               @if (normForm.controls.rarefactionDepth.invalid && normForm.controls.rarefactionDepth.touched) {
-                <small class="field-error">Informe uma profundidade de pelo menos 1.000 reads.</small>
+                <small class="field-error">{{ 'Informe uma profundidade de pelo menos 1.000 reads.' | t }}</small>
               }
             </div>
             <div class="field">
-              <label for="method">Transformação</label>
+              <label for="method">{{ 'Transformação' | t }}</label>
               <p-select inputId="method" [options]="methods" formControlName="method" optionLabel="label" optionValue="value" appendTo="body" [fluid]="true" />
             </div>
             <div class="field">
-              <label for="prevalence">Prevalência mínima</label>
+              <label for="prevalence">{{ 'Prevalência mínima' | t }}</label>
               <p-inputnumber inputId="prevalence" formControlName="minPrevalence" [min]="0" [max]="1" [minFractionDigits]="2" [maxFractionDigits]="2" [fluid]="true" />
             </div>
             <div class="field">
-              <label for="abundance">Abundância mínima</label>
+              <label for="abundance">{{ 'Abundância mínima' | t }}</label>
               <p-inputnumber inputId="abundance" formControlName="minAbundance" [min]="0" [fluid]="true" />
             </div>
-            <p-button type="submit" label="Aplicar na matriz" [loading]="busy()" />
+            <p-button type="submit" [label]="'Aplicar na matriz' | t" [loading]="busy()" />
           </form>
         </article>
 
         <article class="surface">
-          <div class="section-title"><h2>Correspondência</h2></div>
-          <p>Pareadas: {{ preview()?.summary?.matched | number }}</p>
-          <p>Só na metadata: {{ preview()?.summary?.metadataOnly | number }}</p>
-          <p>Só na tabela ASV: {{ preview()?.summary?.asvOnly | number }}</p>
-          <p>Abaixo da rarefação: {{ preview()?.summary?.lowDepth | number }}</p>
-          <p class="note">ASVs declarados: {{ preview()?.summary?.totalAsvs | number }}</p>
+          <div class="section-title"><h2>{{ 'Correspondência' | t }}</h2></div>
+          <p>{{ 'Pareadas:' | t }} {{ preview()?.summary?.matched | number }}</p>
+          <p>{{ 'Só na metadata:' | t }} {{ preview()?.summary?.metadataOnly | number }}</p>
+          <p>{{ 'Só na tabela ASV:' | t }} {{ preview()?.summary?.asvOnly | number }}</p>
+          <p>{{ 'Abaixo da rarefação:' | t }} {{ preview()?.summary?.lowDepth | number }}</p>
+          <p class="note">{{ 'ASVs declarados:' | t }} {{ preview()?.summary?.totalAsvs | number }}</p>
           @for (warning of preview()?.warnings ?? []; track warning) {
             <p class="note">{{ warning }}</p>
           }
@@ -106,11 +108,11 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
       <article class="surface">
         <p-stepper [value]="step()" (valueChange)="onStep($event)" [linear]="true">
           <p-step-list>
-            <p-step [value]="1">Arquivos</p-step>
-            <p-step [value]="2">Colunas</p-step>
-            <p-step [value]="3">Amostras</p-step>
-            <p-step [value]="4">Reads</p-step>
-            <p-step [value]="5">Confirmar</p-step>
+            <p-step [value]="1">{{ 'Arquivos' | t }}</p-step>
+            <p-step [value]="2">{{ 'Colunas' | t }}</p-step>
+            <p-step [value]="3">{{ 'Amostras' | t }}</p-step>
+            <p-step [value]="4">{{ 'Reads' | t }}</p-step>
+            <p-step [value]="5">{{ 'Confirmar' | t }}</p-step>
           </p-step-list>
           <p-step-panels>
             <p-step-panel [value]="1">
@@ -121,28 +123,28 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
                     [customUpload]="true"
                     [multiple]="true"
                     accept=".tsv,.csv,.txt,.biom"
-                    chooseLabel="Selecionar arquivos"
+                    [chooseLabel]="'Selecionar arquivos' | t"
                     [showUploadButton]="false"
                     [showCancelButton]="false"
                     (onSelect)="onFiles($event)"
                   />
                   <div class="field">
-                    <label for="metadataPath">Metadata</label>
+                    <label for="metadataPath">{{ 'Metadata' | t }}</label>
                     <input id="metadataPath" pInputText formControlName="metadataPath" />
                   </div>
                   <div class="field">
-                    <label for="asvPath">Tabela ASV</label>
+                    <label for="asvPath">{{ 'Tabela ASV' | t }}</label>
                     <input id="asvPath" pInputText formControlName="asvPath" />
                   </div>
                   <div class="field">
-                    <label for="taxonomyPath">Taxonomia</label>
+                    <label for="taxonomyPath">{{ 'Taxonomia' | t }}</label>
                     <input id="taxonomyPath" pInputText formControlName="taxonomyPath" />
                   </div>
                   @if (uploadForm.invalid && uploadForm.touched) {
-                    <small class="field-error">Os três caminhos são obrigatórios. No mock, use fail-taxonomy para simular falha dessa etapa.</small>
+                    <small class="field-error">{{ 'Os três caminhos são obrigatórios. No mock, use fail-taxonomy para simular falha dessa etapa.' | t }}</small>
                   }
                   <div class="actions">
-                    <p-button type="button" label="Mapear colunas" icon="pi pi-arrow-right" iconPos="right" (onClick)="goColumns(activateCallback)" />
+                    <p-button type="button" [label]="'Mapear colunas' | t" icon="pi pi-arrow-right" iconPos="right" (onClick)="goColumns(activateCallback)" />
                   </div>
                 </form>
               </ng-template>
@@ -151,20 +153,20 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
               <ng-template pTemplate="content" let-activateCallback="activateCallback">
                 <form class="filters" [formGroup]="uploadForm">
                   <div class="field">
-                    <label for="sampleColumn">Coluna da amostra</label>
+                    <label for="sampleColumn">{{ 'Coluna da amostra' | t }}</label>
                     <p-select inputId="sampleColumn" [options]="columns()" formControlName="sampleColumn" appendTo="body" [fluid]="true" [editable]="true" />
                   </div>
                   <div class="field">
-                    <label for="groupColumn">Coluna do grupo</label>
+                    <label for="groupColumn">{{ 'Coluna do grupo' | t }}</label>
                     <p-select inputId="groupColumn" [options]="columns()" formControlName="groupColumn" appendTo="body" [fluid]="true" [editable]="true" />
                   </div>
                   <div class="field">
-                    <label for="wide">Tabela ASV larga</label>
+                    <label for="wide">{{ 'Tabela ASV larga' | t }}</label>
                     <p-toggleswitch inputId="wide" formControlName="wideFormat" />
                   </div>
                   <div class="actions">
-                    <p-button type="button" label="Voltar" severity="secondary" (onClick)="activateCallback(1)" />
-                    <p-button type="button" label="Validar amostras" (onClick)="goValidate(activateCallback)" />
+                    <p-button type="button" [label]="'Voltar' | t" severity="secondary" (onClick)="activateCallback(1)" />
+                    <p-button type="button" [label]="'Validar amostras' | t" (onClick)="goValidate(activateCallback)" />
                   </div>
                 </form>
               </ng-template>
@@ -173,24 +175,24 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
               <ng-template pTemplate="content" let-activateCallback="activateCallback">
                 <p-table [value]="problemRows()" [paginator]="true" [rows]="8">
                   <ng-template pTemplate="header">
-                    <tr><th>Amostra</th><th>Metadata</th><th>Grupo</th><th>ASV</th><th>Reads</th><th>Estado</th><th>Problema</th></tr>
+                    <tr><th>{{ 'Amostra' | t }}</th><th>{{ 'Metadata' | t }}</th><th>{{ 'Grupo' | t }}</th><th>{{ 'ASV' | t }}</th><th>{{ 'Reads' | t }}</th><th>{{ 'Estado' | t }}</th><th>{{ 'Problema' | t }}</th></tr>
                   </ng-template>
                   <ng-template pTemplate="body" let-row>
                     <tr>
                       <td>{{ row.sampleId }}</td>
                       <td>{{ row.metadataId }}</td>
                       <td>{{ row.group || '—' }}</td>
-                      <td>{{ row.inAsv ? 'sim' : 'não' }}</td>
+                      <td>{{ row.inAsv ? t('sim') : t('não') }}</td>
                       <td>{{ row.reads === null ? '—' : (row.reads | number) }}</td>
                       <td [class]="'status-' + row.status">{{ row.status }}</td>
                       <td>{{ row.issues.join(' ') }}</td>
                     </tr>
                   </ng-template>
-                  <ng-template pTemplate="emptymessage"><tr><td colspan="7">Nenhuma divergência listada.</td></tr></ng-template>
+                  <ng-template pTemplate="emptymessage"><tr><td colspan="7">{{ 'Nenhuma divergência listada.' | t }}</td></tr></ng-template>
                 </p-table>
                 <div class="actions">
-                  <p-button type="button" label="Voltar" severity="secondary" (onClick)="activateCallback(2)" />
-                  <p-button type="button" label="Ver distribuição" (onClick)="activateCallback(4)" />
+                  <p-button type="button" [label]="'Voltar' | t" severity="secondary" (onClick)="activateCallback(2)" />
+                  <p-button type="button" [label]="'Ver distribuição' | t" (onClick)="activateCallback(4)" />
                 </div>
               </ng-template>
             </p-step-panel>
@@ -198,14 +200,14 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
               <ng-template pTemplate="content" let-activateCallback="activateCallback">
                 <flora-plot [result]="histogram()" [height]="320" />
                 <div class="actions">
-                  <p-button type="button" label="Voltar" severity="secondary" (onClick)="activateCallback(3)" />
-                  <p-button type="button" label="Confirmar ingestão" (onClick)="activateCallback(5)" />
+                  <p-button type="button" [label]="'Voltar' | t" severity="secondary" (onClick)="activateCallback(3)" />
+                  <p-button type="button" [label]="'Confirmar ingestão' | t" (onClick)="activateCallback(5)" />
                 </div>
               </ng-template>
             </p-step-panel>
             <p-step-panel [value]="5">
               <ng-template pTemplate="content" let-activateCallback="activateCallback">
-                <p>A ingestão só é aceita se metadata, ASV e taxonomia responderem com sucesso.</p>
+                <p>{{ 'A ingestão só é aceita se metadata, ASV e taxonomia responderem com sucesso.' | t }}</p>
                 @if (outcome(); as result) {
                   <ul class="limitations">
                     @for (item of result.steps; track item.step) {
@@ -215,12 +217,12 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
                     }
                   </ul>
                   <p [class]="result.success ? 'status-pass' : 'status-fail'">
-                    {{ result.success ? 'As três etapas foram aceitas.' : result.error }}
+                    {{ result.success ? t('As três etapas foram aceitas.') : result.error }}
                   </p>
                 }
                 <div class="actions">
-                  <p-button type="button" label="Voltar" severity="secondary" (onClick)="activateCallback(4)" />
-                  <p-button type="button" label="Confirmar" icon="pi pi-check" [loading]="busy()" (onClick)="confirm()" />
+                  <p-button type="button" [label]="'Voltar' | t" severity="secondary" (onClick)="activateCallback(4)" />
+                  <p-button type="button" [label]="'Confirmar' | t" icon="pi pi-check" [loading]="busy()" (onClick)="confirm()" />
                 </div>
               </ng-template>
             </p-step-panel>
@@ -231,6 +233,7 @@ import { PlotCardComponent } from '../../shared/plot-card.component';
   `
 })
 export class PipelinePageComponent {
+  protected readonly t = t;
   private readonly repository = inject(FloraRepository);
   private readonly messages = inject(MessageService);
   private readonly fb = inject(FormBuilder);
@@ -244,7 +247,7 @@ export class PipelinePageComponent {
   readonly methods = [
     { label: 'CLR', value: 'clr' },
     { label: 'TSS', value: 'tss' },
-    { label: 'Sem transformação', value: 'none' }
+    { label: t('Sem transformação'), value: 'none' }
   ];
 
   readonly uploadForm = this.fb.nonNullable.group({
@@ -274,7 +277,7 @@ export class PipelinePageComponent {
   histogram() {
     const figure = this.preview()?.histogram;
     if (!figure?.data.length) {
-      return { status: 'empty' as const, error: this.preview()?.warnings[0] ?? 'Distribuição indisponível.' };
+      return { status: 'empty' as const, error: this.preview()?.warnings[0] ?? t('Distribuição indisponível.') };
     }
     return { status: 'ok' as const, figure };
   }
@@ -338,9 +341,9 @@ export class PipelinePageComponent {
     this.busy.set(true);
     try {
       this.pipeline.set(await this.repository.applyNormalization(this.normForm.getRawValue()));
-      this.messages.add({ severity: 'success', summary: 'Normalização', detail: 'A configuração foi registrada.' });
+      this.messages.add({ severity: 'success', summary: t('Normalização'), detail: t('A configuração foi registrada.') });
     } catch (error) {
-      this.messages.add({ severity: 'error', summary: 'Normalização', detail: messageOf(error) });
+      this.messages.add({ severity: 'error', summary: t('Normalização'), detail: messageOf(error) });
     } finally {
       this.busy.set(false);
     }
@@ -361,7 +364,7 @@ export class PipelinePageComponent {
       this.outcome.set(outcome);
       this.messages.add({
         severity: outcome.success ? 'success' : 'error',
-        summary: 'Ingestão',
+        summary: t('Ingestão'),
         detail: outcome.success ? 'Metadata, ASV e taxonomia aceitos.' : outcome.error
       });
       await this.reload();
@@ -387,7 +390,7 @@ export class PipelinePageComponent {
 }
 
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : 'Falha inesperada.';
+  return error instanceof Error ? error.message : t('Falha inesperada.');
 }
 
 function readHeader(file: File): Promise<string[]> {

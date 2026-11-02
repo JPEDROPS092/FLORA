@@ -3,6 +3,7 @@ import { Component, ElementRef, effect, inject, input, viewChild } from '@angula
 import { ChartResult, ThemeMode } from '../core/models/domain';
 import { WorkspaceStore } from '../core/workspace/workspace.store';
 import { PlotlyService } from '../core/plotly/plotly.service';
+import { t } from '../core/i18n/i18n';
 
 @Component({
   selector: 'flora-plot',
@@ -12,7 +13,7 @@ import { PlotlyService } from '../core/plotly/plotly.service';
       @if (result()?.status === 'ok') {
         <div #host class="plot-host"></div>
       } @else {
-        <p class="plot-state">{{ result()?.error || 'A figura ainda não foi pedida.' }}</p>
+        <p class="plot-state">{{ result()?.error || t('A figura ainda não foi pedida.') }}</p>
       }
     </div>
   `,
@@ -25,6 +26,7 @@ import { PlotlyService } from '../core/plotly/plotly.service';
   ]
 })
 export class PlotCardComponent {
+  protected readonly t = t;
   readonly result = input<ChartResult | null>(null);
   readonly theme = input<ThemeMode | null>(null);
   private readonly store = inject(WorkspaceStore);

@@ -10,25 +10,28 @@ import { filter, interval, map, startWith } from 'rxjs';
 import { AgentService } from './core/agents/agent.service';
 import { FloraRepository } from './core/data/flora.repository';
 import { WorkspaceStore } from './core/workspace/workspace.store';
+import { LanguageSwitchComponent } from './core/i18n/language-switch.component';
 import { CommandPaletteComponent } from './shared/command-palette.component';
 import { CopilotComponent } from './shared/copilot.component';
+import { TPipe } from './core/i18n/t.pipe';
+import { t } from './core/i18n/i18n';
 
 type Connection = 'mock' | 'checking' | 'online' | 'offline';
 
 @Component({
   selector: 'flora-root',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, ToastModule, ButtonModule, TooltipModule, CommandPaletteComponent, CopilotComponent],
+  imports: [TPipe, LanguageSwitchComponent, RouterLink, RouterLinkActive, RouterOutlet, ToastModule, ButtonModule, TooltipModule, CommandPaletteComponent, CopilotComponent],
   template: `
-    <a class="skip-link" href="#flora-content">Pular para o conteúdo</a>
+    <a class="skip-link" href="#flora-content">{{ 'Pular para o conteúdo' | t }}</a>
     <div class="shell" [class.collapsed]="!store.sidebarOpen()">
-      <aside class="sidebar" aria-label="Navegação principal">
+      <aside class="sidebar" [attr.aria-label]="'Navegação principal' | t">
         <div class="brand">
           <img class="mark-img" src="branding/logo/badge.webp" alt="" width="34" height="34" />
-          <div class="brand-text"><strong>FLORA</strong><span>Microbiome Research</span></div>
+          <div class="brand-text"><strong>{{ 'FLORA' | t }}</strong><span>{{ 'Microbiome Research' | t }}</span></div>
         </div>
 
-        <nav class="nav" aria-label="Módulos">
+        <nav class="nav" [attr.aria-label]="'Módulos' | t">
           @for (item of primary; track item.path) {
             <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
                [pTooltip]="store.sidebarOpen() ? '' : item.label" tooltipPosition="right">
@@ -38,8 +41,8 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
           }
         </nav>
 
-        <p class="nav-label">Biblioteca</p>
-        <nav class="nav secondary" aria-label="Biblioteca">
+        <p class="nav-label">{{ 'Biblioteca' | t }}</p>
+        <nav class="nav secondary" [attr.aria-label]="'Biblioteca' | t">
           @for (item of library; track item.path) {
             <a [routerLink]="item.path" routerLinkActive="active" [pTooltip]="store.sidebarOpen() ? '' : item.label" tooltipPosition="right">
               <i [class]="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span>
@@ -48,7 +51,7 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
         </nav>
 
         <div class="source" [class]="'conn-' + connection()">
-          <span class="source-kicker">Fonte de dados</span>
+          <span class="source-kicker">{{ 'Fonte de dados' | t }}</span>
           <strong><span class="dot" aria-hidden="true"></span>{{ connectionLabel() }}</strong>
           <span>{{ source.label }}</span>
         </div>
@@ -57,15 +60,16 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
       <div class="workspace-col">
         <header class="topbar">
           <p-button icon="pi pi-bars" [text]="true" [rounded]="true" severity="secondary" (onClick)="store.toggleSidebar()"
-                    ariaLabel="Alternar menu lateral" />
-          <nav class="crumbs" aria-label="Localização"><span>FLORA</span><i class="pi pi-angle-right"></i><strong>{{ title() }}</strong></nav>
-          <button type="button" class="search-btn" (click)="store.openPalette()" aria-label="Abrir paleta de comandos">
-            <i class="pi pi-search"></i><span>Buscar ou executar…</span><kbd>Ctrl K</kbd>
+                    [ariaLabel]="'Alternar menu lateral' | t" />
+          <nav class="crumbs" [attr.aria-label]="'Localização' | t"><span>{{ 'FLORA' | t }}</span><i class="pi pi-angle-right"></i><strong>{{ title() }}</strong></nav>
+          <button type="button" class="search-btn" (click)="store.openPalette()" [attr.aria-label]="'Abrir paleta de comandos' | t">
+            <i class="pi pi-search"></i><span>{{ 'Buscar ou executar…' | t }}</span><kbd>{{ 'Ctrl K' | t }}</kbd>
           </button>
-          <p-button icon="pi pi-sparkles" label="Copiloto" size="small" [outlined]="!store.copilotOpen()"
-                    (onClick)="store.toggleCopilot()" pTooltip="Ctrl+J" tooltipPosition="bottom" />
+          <flora-language-switch />
+          <p-button icon="pi pi-sparkles" [label]="'Copiloto' | t" size="small" [outlined]="!store.copilotOpen()"
+                    (onClick)="store.toggleCopilot()" [pTooltip]="'Ctrl+J' | t" tooltipPosition="bottom" />
           <p-button [icon]="store.dark() ? 'pi pi-sun' : 'pi pi-moon'" [text]="true" [rounded]="true" severity="secondary"
-                    (onClick)="store.toggleDark()" [ariaLabel]="store.dark() ? 'Tema claro' : 'Tema escuro'" />
+                    (onClick)="store.toggleDark()" [ariaLabel]="store.dark() ? t('Tema claro') : t('Tema escuro')" />
         </header>
 
         <main class="workspace" id="flora-content" [class.lab-canvas]="lab()" tabindex="-1">
@@ -79,6 +83,7 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
   `
 })
 export class AppComponent implements OnInit {
+  protected readonly t = t;
   protected readonly store = inject(WorkspaceStore);
   protected readonly agents = inject(AgentService);
   private readonly repository = inject(FloraRepository);
@@ -88,23 +93,23 @@ export class AppComponent implements OnInit {
 
   readonly source = this.repository.source;
   readonly lab = signal(this.router.url.startsWith('/ml'));
-  readonly title = signal('Início');
+  readonly title = signal(t('Início'));
   readonly health = signal<'checking' | 'online' | 'offline'>('checking');
   readonly connection = computed<Connection>(() => (this.source.mocked ? 'mock' : this.health()));
-  readonly connectionLabel = computed(() => ({ mock: 'Mock 16S', checking: 'Conectando…', online: 'API conectada', offline: 'API offline' })[this.connection()]);
+  readonly connectionLabel = computed(() => ({ mock: t('Mock 16S'), checking: t('Conectando…'), online: t('API conectada'), offline: t('API offline') })[this.connection()]);
 
   readonly primary = [
-    { path: '/welcome', label: 'Início', icon: 'pi pi-home' },
-    { path: '/dashboard', label: 'Painel', icon: 'pi pi-th-large' },
-    { path: '/explorer', label: 'Explorer', icon: 'pi pi-chart-scatter' },
-    { path: '/pipeline', label: 'Pipeline', icon: 'pi pi-sitemap' },
-    { path: '/ml', label: 'ML Lab', icon: 'pi pi-microchip' },
-    { path: '/reports', label: 'Relatório', icon: 'pi pi-file' },
-    { path: '/agents', label: 'Agentes IA', icon: 'pi pi-sparkles' }
+    { path: '/welcome', label: t('Início'), icon: 'pi pi-home' },
+    { path: '/dashboard', label: t('Painel'), icon: 'pi pi-th-large' },
+    { path: '/explorer', label: t('Explorer'), icon: 'pi pi-chart-scatter' },
+    { path: '/pipeline', label: t('Pipeline'), icon: 'pi pi-sitemap' },
+    { path: '/ml', label: t('ML Lab'), icon: 'pi pi-microchip' },
+    { path: '/reports', label: t('Relatório'), icon: 'pi pi-file' },
+    { path: '/agents', label: t('Agentes IA'), icon: 'pi pi-sparkles' }
   ];
   readonly library = [
-    { path: '/projects', label: 'Projetos', icon: 'pi pi-folder' },
-    { path: '/downloads', label: 'Downloads', icon: 'pi pi-download' }
+    { path: '/projects', label: t('Projetos'), icon: 'pi pi-folder' },
+    { path: '/downloads', label: t('Downloads'), icon: 'pi pi-download' }
   ];
 
   constructor() {

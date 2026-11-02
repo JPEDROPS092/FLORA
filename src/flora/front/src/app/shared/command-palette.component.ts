@@ -5,21 +5,24 @@ import { DialogModule } from 'primeng/dialog';
 
 import { AgentService } from '../core/agents/agent.service';
 import { WorkspaceStore } from '../core/workspace/workspace.store';
+import { TPipe } from '../core/i18n/t.pipe';
+import { t } from '../core/i18n/i18n';
 
 interface Command {
   id: string;
   label: string;
   hint: string;
   icon: string;
-  group: 'Ir para' | 'Explorer' | 'Agentes' | 'Interface';
+  group: string;
   run: () => void;
 }
 
 /** Ctrl/Cmd+K launcher: navigate, tune the Explorer, talk to agents. */
+
 @Component({
   selector: 'flora-command-palette',
   standalone: true,
-  imports: [FormsModule, DialogModule],
+  imports: [TPipe, FormsModule, DialogModule],
   template: `
     <p-dialog
       [visible]="store.paletteOpen()"
@@ -32,9 +35,9 @@ interface Command {
         <div class="palette-input">
           <i class="pi pi-search" aria-hidden="true"></i>
           <input #input type="text" [ngModel]="query()" (ngModelChange)="setQuery($event)"
-                 (keydown)="onKey($event)" placeholder="Buscar ação, ir para… ou pergunte aos agentes"
-                 aria-label="Paleta de comandos" aria-controls="palette-list" />
-          <kbd>Esc</kbd>
+                 (keydown)="onKey($event)" [placeholder]="'Buscar ação, ir para… ou pergunte aos agentes' | t"
+                 [attr.aria-label]="'Paleta de comandos' | t" aria-controls="palette-list" />
+          <kbd>{{ 'Esc' | t }}</kbd>
         </div>
         <ul id="palette-list" role="listbox" class="palette-list">
           @for (cmd of results(); track cmd.id; let i = $index) {
@@ -46,7 +49,7 @@ interface Command {
               <span class="grp">{{ cmd.group }}</span>
             </li>
           } @empty {
-            <li class="empty">Nada encontrado.</li>
+            <li class="empty">{{ 'Nada encontrado.' | t }}</li>
           }
         </ul>
       </div>
@@ -54,6 +57,7 @@ interface Command {
   `
 })
 export class CommandPaletteComponent {
+  protected readonly t = t;
   protected readonly store = inject(WorkspaceStore);
   private readonly router = inject(Router);
   private readonly agents = inject(AgentService);
@@ -63,21 +67,21 @@ export class CommandPaletteComponent {
   protected readonly active = signal(0);
 
   private readonly commands: Command[] = [
-    this.nav('Painel', '/dashboard', 'pi pi-th-large'),
-    this.nav('Scientific Explorer', '/explorer', 'pi pi-chart-scatter'),
-    this.nav('Data Pipeline Studio', '/pipeline', 'pi pi-sitemap'),
-    this.nav('AI & ML Lab', '/ml', 'pi pi-microchip'),
-    this.nav('Report Builder', '/reports', 'pi pi-file'),
-    this.nav('Agentes de IA', '/agents', 'pi pi-sparkles'),
-    this.nav('Projetos', '/projects', 'pi pi-folder'),
-    this.nav('Downloads', '/downloads', 'pi pi-download'),
-    this.explore('PCoA Bray–Curtis', { view: 'pcoa', distance: 'braycurtis' }),
-    this.explore('Diversidade alfa · Shannon', { view: 'alpha', metric: 'shannon' }),
-    this.explore('Taxonomia por gênero', { view: 'taxonomy', rank: 'genus' }),
-    this.explore('Co-ocorrência entre gêneros', { view: 'relations' }),
-    { id: 'agent-copilot', label: 'Abrir copiloto de IA', hint: 'Ctrl+J', icon: 'pi pi-sparkles', group: 'Agentes', run: () => this.store.copilotOpen.set(true) },
-    { id: 'theme', label: 'Alternar tema claro/escuro', hint: '', icon: 'pi pi-moon', group: 'Interface', run: () => this.store.toggleDark() },
-    { id: 'sidebar', label: 'Recolher/expandir menu lateral', hint: '', icon: 'pi pi-bars', group: 'Interface', run: () => this.store.toggleSidebar() }
+    this.nav(t('Painel'), '/dashboard', 'pi pi-th-large'),
+    this.nav(t('Scientific Explorer'), '/explorer', 'pi pi-chart-scatter'),
+    this.nav(t('Data Pipeline Studio'), '/pipeline', 'pi pi-sitemap'),
+    this.nav(t('AI & ML Lab'), '/ml', 'pi pi-microchip'),
+    this.nav(t('Report Builder'), '/reports', 'pi pi-file'),
+    this.nav(t('Agentes de IA'), '/agents', 'pi pi-sparkles'),
+    this.nav(t('Projetos'), '/projects', 'pi pi-folder'),
+    this.nav(t('Downloads'), '/downloads', 'pi pi-download'),
+    this.explore(t('PCoA Bray–Curtis'), { view: 'pcoa', distance: 'braycurtis' }),
+    this.explore(t('Diversidade alfa · Shannon'), { view: 'alpha', metric: 'shannon' }),
+    this.explore(t('Taxonomia por gênero'), { view: 'taxonomy', rank: 'genus' }),
+    this.explore(t('Co-ocorrência entre gêneros'), { view: 'relations' }),
+    { id: 'agent-copilot', label: t('Abrir copiloto de IA'), hint: 'Ctrl+J', icon: 'pi pi-sparkles', group: t('Agentes'), run: () => this.store.copilotOpen.set(true) },
+    { id: 'theme', label: t('Alternar tema claro/escuro'), hint: '', icon: 'pi pi-moon', group: t('Interface'), run: () => this.store.toggleDark() },
+    { id: 'sidebar', label: t('Recolher/expandir menu lateral'), hint: '', icon: 'pi pi-bars', group: t('Interface'), run: () => this.store.toggleSidebar() }
   ];
 
   protected readonly results = computed<Command[]>(() => {
@@ -86,7 +90,7 @@ export class CommandPaletteComponent {
     if (!q) return matched;
     const ask: Command = {
       id: 'ask', label: `Perguntar aos agentes: “${this.query().trim()}”`, hint: 'roteia ao agente certo',
-      icon: 'pi pi-comment', group: 'Agentes', run: () => { this.store.copilotOpen.set(true); void this.agents.ask(this.query()); }
+      icon: 'pi pi-comment', group: t('Agentes'), run: () => { this.store.copilotOpen.set(true); void this.agents.ask(this.query()); }
     };
     return [...matched, ask];
   });
@@ -111,9 +115,9 @@ export class CommandPaletteComponent {
   }
 
   private nav(label: string, path: string, icon: string): Command {
-    return { id: `nav-${path}`, label, hint: path, icon, group: 'Ir para', run: () => void this.router.navigate([path]) };
+    return { id: `nav-${path}`, label, hint: path, icon, group: t('Ir para'), run: () => void this.router.navigate([path]) };
   }
   private explore(label: string, queryParams: Record<string, string>): Command {
-    return { id: `ex-${label}`, label, hint: '/explorer', icon: 'pi pi-chart-line', group: 'Explorer', run: () => void this.router.navigate(['/explorer'], { queryParams }) };
+    return { id: `ex-${label}`, label, hint: '/explorer', icon: 'pi pi-chart-line', group: t('Explorer'), run: () => void this.router.navigate(['/explorer'], { queryParams }) };
   }
 }
