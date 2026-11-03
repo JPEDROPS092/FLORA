@@ -8,6 +8,7 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { SelectModule } from 'primeng/select';
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
@@ -23,7 +24,7 @@ import { MascotComponent } from '../../shared/mascot.component';
 @Component({
   selector: 'flora-ai-models',
   standalone: true,
-  imports: [TPipe, DecimalPipe, FormsModule, ReactiveFormsModule, PrimeTemplate, TooltipModule, ButtonModule, InputNumberModule, InputTextModule, ProgressBarModule, SelectModule, TableModule, TagModule, ToggleSwitchModule, MascotComponent],
+  imports: [TPipe, DecimalPipe, FormsModule, ReactiveFormsModule, PrimeTemplate, TooltipModule, ButtonModule, InputNumberModule, InputTextModule, ProgressBarModule, SelectModule, SelectButtonModule, TableModule, TagModule, ToggleSwitchModule, MascotComponent],
   template: `
     <section class="page">
       <header class="page-heading">
@@ -43,8 +44,15 @@ import { MascotComponent } from '../../shared/mascot.component';
           <label class="switch"><p-toggleswitch formControlName="enabled" inputId="llmOn" />
             <span>{{ 'Usar o modelo para interpretar as respostas dos agentes' | t }}</span></label>
 
-          <div class="field"><label for="provider">{{ 'Provedor' | t }}</label>
-            <p-select inputId="provider" [options]="providers" formControlName="provider" optionLabel="label" optionValue="id" appendTo="body" [fluid]="true" (onChange)="onProvider($event.value)" /></div>
+          <div class="field"><label id="srcLabel">{{ 'Fonte do modelo' | t }}</label>
+            <p-selectbutton [options]="sources" [ngModel]="source()" [ngModelOptions]="{standalone: true}" optionLabel="label" optionValue="id"
+                            [allowEmpty]="false" ariaLabelledBy="srcLabel" (onChange)="setSource($event.value)" />
+            <small class="note">{{ source() === 'local' ? t('Roda dentro do FLORA, sem servidor externo.') : t('Usa um servidor ou serviço compatível com OpenAI.') }}</small></div>
+
+          @if (source() === 'api') {
+            <div class="field"><label for="provider">{{ 'Provedor' | t }}</label>
+              <p-select inputId="provider" [options]="apiProviders" formControlName="provider" optionLabel="label" optionValue="id" appendTo="body" [fluid]="true" (onChange)="onProvider($event.value)" /></div>
+          }
 
           @if (isNative()) {
             <p class="note native-note"><i class="pi pi-info-circle"></i>
@@ -191,6 +199,12 @@ export class AiModelsPageComponent {
   private readonly messages = inject(MessageService);
   protected readonly t = t;
   protected readonly providers = [...PROVIDERS];
+  protected readonly apiProviders = PROVIDERS.filter((p) => p.id !== 'native');
+  protected readonly sources = [
+    { id: 'api', label: t('API / servidor') },
+    { id: 'local', label: t('llama.cpp local') }
+  ];
+  private lastApi: ProviderId = this.llm.settings().provider === 'native' ? 'ollama' : this.llm.settings().provider as ProviderId;
   protected readonly saving = signal(false);
   protected readonly vram = signal(this.llm.settings().vramGb);
   protected readonly hfRepo = signal('');
@@ -211,6 +225,7 @@ export class AiModelsPageComponent {
   });
   protected readonly providerId = toSignal(this.form.controls.provider.valueChanges, { initialValue: this.form.controls.provider.value });
   protected readonly isNative = computed(() => this.providerId() === 'native');
+  protected readonly source = computed(() => (this.isNative() ? 'local' : 'api'));
 
   protected readonly needsKey = computed(() => {
     const id = this.providerId();
@@ -222,6 +237,18 @@ export class AiModelsPageComponent {
 
   constructor() {
     if (this.llm.settings().baseUrl) void this.llm.test();
+  }
+
+  protected setSource(src: 'api' | 'local'): void {
+    const current = this.form.controls.provider.value;
+    if (src === 'local') {
+      if (current !== 'native') this.lastApi = current;
+      this.form.controls.provider.setValue('native');
+      this.form.controls.baseUrl.setValue('');
+    } else {
+      this.form.controls.provider.setValue(this.lastApi);
+      this.onProvider(this.lastApi);
+    }
   }
 
   protected onProvider(id: ProviderId): void {
