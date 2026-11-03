@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from flora.ui.http import UiHttpError, json_success
@@ -15,7 +16,21 @@ def get_logs(log_buffer: list[str], params: dict):
     return json_success(data={"lines": log_buffer[-count:]})
 
 
-_ARTIFACT_KEYS = {"manifest": "Manifesto", "asv_table": "ASV", "taxonomy": "Taxonomia", "metadata": "Metadata"}
+_ARTIFACT_KEYS = {
+    "manifest": "Manifesto",
+    "asv_table": "ASV",
+    "taxonomy": "Taxonomia",
+    "metadata": "Metadata",
+    "sequences": "Sequências",
+    "sequences_reverse": "Sequências (R2)",
+    "barcodes": "Barcodes",
+    "archive": "Arquivo",
+}
+
+_ACC = r"(?P<acc>[A-Za-z0-9._-]+)"
+_SRC = r"(?P<source>[a-z0-9_-]+)"
+_LIBRARY_META = re.compile(rf"^/api/library/{_SRC}/{_ACC}/metadata$")
+_LIBRARY_DOWNLOAD = re.compile(rf"^/api/library/{_SRC}/{_ACC}/download$")
 
 
 def _store(state):
@@ -68,6 +83,110 @@ def library_search(state, params=None):
     except library.LibraryError as exc:
         raise UiHttpError(str(exc), status=502 if "failed" in str(exc) else 400, code="library_error") from exc
     return json_success(data={"source": source, "studies": studies})
+
+
+def library_route(method: str, path: str) -> tuple[str, dict[str, str]] | None:
+    """Match catalog, metadata and download paths. Exact routes stay in the server table."""
+    if method == "GET" and path == "/api/library/catalog":
+        return "catalog", {}
+    if method == "GET" and (match := _LIBRARY_META.fullmatch(path)):
+        return "metadata", {"source": match["source"], "accession": match["acc"]}
+    if method == "POST" and (match := _LIBRARY_DOWNLOAD.fullmatch(path)):
+        return "download", {"source": match["source"], "accession": match["acc"]}
+    return None
+
+
+def _flag(params: dict | None, key: str) -> bool:
+    return _first(params, key).lower() in {"1", "true", "yes", "on"}
+
+
+def library_catalog(state, params=None):
+    """Curated catalog with biome, host, region, sequence type and free-text filters."""
+    from flora.io.catalog import filter_catalog
+
+    studies = filter_catalog(
+        q=_first(params, "q"),
+        biome=_first(params, "biome"),
+        host=_first(params, "host"),
+        region=_first(params, "region"),
+        seq_type=_first(params, "seq_type"),
+        amazonia=_flag(params, "amazonia"),
+    )
+    return json_success(data={"studies": studies, "count": len(studies)})
+
+
+def library_metadata(state, params=None):
+    """Preview up to 50 metadata rows for a catalogued dataset."""
+    from flora.io.catalog import get_entry
+    from flora.io.library import LibraryError
+    from flora.io.sources import get_source
+
+    source = _first(params, "source")
+    accession = _first(params, "accession")
+    if get_entry(source, accession) is None:
+        raise UiHttpError(
+            f"Dataset {accession} is not in the catalog",
+            status=404,
+            code="not_found",
+        )
+    try:
+        limit = int(_first(params, "limit", "50"))
+    except ValueError as exc:
+        raise UiHttpError("limit must be an integer", code="invalid_params") from exc
+    try:
+        preview = get_source(source).metadata(accession, limit)
+    except LibraryError as exc:
+        raise UiHttpError(str(exc), status=502, code="library_error") from exc
+    return json_success(data={"preview": preview})
+
+
+def _library_output(state, body: dict, source: str, accession: str) -> Path:
+    base = Path(state.workdir).resolve()
+    raw = body.get("output_dir")
+    if not raw:
+        return base / "raw" / source / accession
+    path = Path(str(raw))
+    if not path.is_absolute():
+        path = base / path
+    path = path.resolve()
+    if path != base and base not in path.parents:
+        raise UiHttpError("output_dir must stay inside the workdir", code="invalid_output_dir")
+    return path
+
+
+def library_download(state, body: dict):
+    """Download a catalogued dataset and return artifact paths for ``recorded``."""
+    from flora.core.exceptions import IngestionError
+    from flora.io.catalog import get_entry
+    from flora.io.library import LibraryError
+    from flora.io.sources import get_source
+
+    source = str(body.get("source") or "")
+    accession = str(body.get("accession") or "")
+    entry = get_entry(source, accession)
+    if entry is None:
+        raise UiHttpError(
+            f"Dataset {accession} is not in the catalog",
+            status=404,
+            code="not_found",
+        )
+    if not entry.get("importable", True):
+        raise UiHttpError(f"{accession} is not downloadable", code="not_importable")
+    output_dir = _library_output(state, body, source, accession)
+    try:
+        artifacts = get_source(source).download(
+            accession,
+            output_dir,
+            entry=entry,
+            samples=body.get("samples") or 80,
+            features=body.get("features") or 200,
+            seed=body.get("seed") if body.get("seed") is not None else 42,
+            max_samples=body.get("max_samples") or 200,
+            biome=body.get("biome") or body.get("biome_filter"),
+        )
+    except (LibraryError, IngestionError, OSError, ValueError) as exc:
+        raise UiHttpError(str(exc), code="download_failed") from exc
+    return json_success(data={**artifacts, "output_dir": str(output_dir), "accession": accession})
 
 
 def library_runs(state, params=None):
@@ -147,61 +266,17 @@ def download_emp(state, body: dict):
 
 
 def download_synthetic(state, body: dict):
-    import numpy as np
+    from flora.io.synthetic import write_synthetic
 
     output_dir = Path(body.get("output_dir", str(state.workdir / "raw" / "synthetic")))
-
     sample_count = int(body.get("samples", 80))
     feature_count = int(body.get("features", 200))
     seed = int(body.get("seed", 42))
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(seed)
-    sample_ids = [f"S{i:03d}" for i in range(sample_count)]
-    feature_ids = [f"ASV_{j:04d}" for j in range(feature_count)]
-    biomes = (["Amazon", "Cerrado", "Atlantic_Forest", "Pantanal"] * (sample_count // 4 + 1))[
-        :sample_count
-    ]
-    counts = rng.negative_binomial(n=5, p=0.3, size=(sample_count, feature_count)).astype(int)
-
-    metadata_path = output_dir / "metadata.tsv"
-    with open(metadata_path, "w", encoding="utf-8") as file:
-        file.write("sample_id\tbiome\tlocation\n")
-        for index, sample_id in enumerate(sample_ids):
-            file.write(f"{sample_id}\t{biomes[index]}\tBrazil\n")
-
-    asv_path = output_dir / "asv_table.tsv"
-    with open(asv_path, "w", encoding="utf-8") as file:
-        file.write("sample_id\t" + "\t".join(feature_ids) + "\n")
-        for index, sample_id in enumerate(sample_ids):
-            file.write(sample_id + "\t" + "\t".join(map(str, counts[index])) + "\n")
-
-    phyla = [
-        "Proteobacteria",
-        "Firmicutes",
-        "Bacteroidetes",
-        "Actinobacteria",
-        "Chloroflexi",
-    ]
-    taxonomy_path = output_dir / "taxonomy.tsv"
-    with open(taxonomy_path, "w", encoding="utf-8") as file:
-        file.write("feature_id\tkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies\n")
-        for index, feature_id in enumerate(feature_ids):
-            file.write(
-                f"{feature_id}\tBacteria\t{phyla[index % len(phyla)]}\t"
-                f"Class_{index % 6}\tOrder_{index % 8}\tFamily_{index % 10}\tGenus_{index % 15}\t\n"
-            )
-
+    written = write_synthetic(output_dir, samples=sample_count, features=feature_count, seed=seed)
     logger.info(
         "Synthetic data generated: %d samples, %d features -> %s",
         sample_count,
         feature_count,
         output_dir,
     )
-    return json_success(
-        data={
-            "asv_table": str(asv_path),
-            "taxonomy": str(taxonomy_path),
-            "metadata": str(metadata_path),
-        }
-    )
+    return json_success(data={key: str(path) for key, path in written.items()})

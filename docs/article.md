@@ -162,7 +162,7 @@ The CLI entry point (`flora`) is registered via `pyproject.toml` and provides `u
 
 ## 5. Usage Example
 
-The following example demonstrates a complete workflow on the MGYS00005116 Amazonian forest dataset. The pipeline downloads data, runs denoising and taxonomy through QIIME 2, stores results in DuckDB, trains an XGBoost classifier with CLR normalization, and generates an HTML report.
+The following example demonstrates a complete workflow on MGYS00001352, an amplicon study of Amazonian forest and deforested soil (18 samples, verified in the MGnify API). The pipeline downloads data, runs denoising and taxonomy through QIIME 2, stores results in DuckDB, trains an XGBoost classifier with CLR normalization, and generates an HTML report.
 
 ```python
 from flora.io import MGnifyDownloader
@@ -173,7 +173,7 @@ from flora.reports import FLORAReport
 
 # 1. Download
 dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Forest")
-dl.fetch("MGYS00005116", output_dir="data/raw", max_samples=80)
+dl.fetch("MGYS00001352", output_dir="data/raw", max_samples=18)
 
 # 2. Build pipeline
 pipeline = FLORAPipeline(workdir="results/")
@@ -206,7 +206,7 @@ fig_taxa = plot_taxonomy_barplot(taxon_agg, level="phylum", group_by="biome")
 fig_pcoa = plot_pcoa(pcoa_df, color_by="biome")
 
 # 7. Report
-report = FLORAReport(title="Amazonian Microbiome — MGYS00005116")
+report = FLORAReport(title="Amazon deforestation soil — MGYS00001352")
 report.add_metrics("Results", {
     "Accuracy": f"{result.accuracy:.4f}",
     "F1-macro": f"{result.f1_macro:.4f}",

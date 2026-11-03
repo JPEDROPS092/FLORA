@@ -120,7 +120,7 @@ def main() -> None:
     )
 
     mg = dl_sub.add_parser("mgnify", parents=[duckdb_parent], help="Download from MGnify")
-    mg.add_argument("study", help="MGnify study accession (e.g. MGYS00005116)")
+    mg.add_argument("study", help="MGnify study accession (e.g. MGYS00005779)")
     mg.add_argument("--outdir", default="data/raw", help="Output directory")
     mg.add_argument("--max-samples", type=int, default=50)
     mg.add_argument("--biome", default="root:Environmental:Terrestrial:Forest")

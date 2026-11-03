@@ -80,9 +80,9 @@ dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Forest")
 
 # Fetch by study accession
 manifest = dl.fetch(
-    study_accession="MGYS00005116",
+    study_accession="MGYS00001352",
     output_dir="data/raw",
-    max_samples=80,
+    max_samples=18,
 )
 ```
 
@@ -548,10 +548,13 @@ report.save("results/report.html")
 | POST | `/api/diversity` | `{"sampling_depth": 10000, "metrics": ["shannon"]}` |
 | POST | `/api/ml/classify` | `{"model": "xgboost", "target_column": "biome", "train_filter": "...", "test_filter": "..."}` |
 | POST | `/api/ml/cluster` | `{"method": "kmeans", "n_clusters": 4}` |
-| POST | `/api/download/mgnify` | `{"study_accession": "MGYS00005116", "max_samples": 20}` |
+| POST | `/api/download/mgnify` | `{"study_accession": "MGYS00001352", "max_samples": 18}` |
 | POST | `/api/download/sra` | `{"accessions": ["SRR..."], "n_jobs": 4}` |
 | POST | `/api/download/emp` | `{"output_dir": "...", "biome_filter": "forest", "max_samples": 200}` |
 | POST | `/api/download/synthetic` | `{"output_dir": "...", "samples": 80, "features": 200}` |
+| GET | `/api/library/catalog` | Curated catalog. Filters: `biome`, `host`, `region`, `seq_type`, `q`, `amazonia=1` |
+| GET | `/api/library/{source}/{accession}/metadata?limit=50` | Up to 50 metadata rows |
+| POST | `/api/library/{source}/{accession}/download` | Download a catalog entry and record a job |
 | POST | `/api/report` | `{"title": "...", "output_path": "results/report.html"}` |
 
 Server logs are visible in the terminal where `flora ui` runs. Log level is set via `--log-level`. The `/api/logs` endpoint returns the last 500 lines from the in-memory buffer.

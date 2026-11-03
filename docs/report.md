@@ -306,7 +306,7 @@ Produces `results/report.html` using in-memory synthetic data.
 
 ```bash
 # Step 1: download
-flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80
+flora download mgnify MGYS00001352 --outdir data/raw --max-samples 18
 
 # Step 2: run pipeline from config
 flora run config.yaml --workdir results/

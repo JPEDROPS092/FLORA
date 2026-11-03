@@ -1,7 +1,10 @@
 import {
+  CatalogEntry,
+  CatalogFile,
   ChartResult,
   DifferentialTaxon,
   DownloadJob,
+  MetadataPreview,
   StudyEntry,
   GroupComparison,
   IngestPreview,
@@ -185,6 +188,69 @@ export function toDownload(raw: unknown): DownloadJob {
     artifacts: arr(j['artifacts']).map((a) => ({ label: str(a['label']), path: str(a['path']) })),
     mocked: false,
     createdAt: str(j['created_at'])
+  };
+}
+
+export function toCatalogEntry(raw: unknown): CatalogEntry {
+  const s = obj(raw);
+  return {
+    id: str(s['id']),
+    title: str(s['title']),
+    titlePt: str(s['title_pt']) || str(s['title']),
+    description: str(s['description']),
+    source: str(s['source']),
+    accession: str(s['accession']),
+    biome: str(s['biome']),
+    biomeLabel: str(s['biome_label']) || str(s['biome']),
+    host: str(s['host']),
+    hostLabel: str(s['host_label']) || str(s['host']),
+    region: str(s['region']),
+    regionLabel: str(s['region_label']) || str(s['region']),
+    country: str(s['country']),
+    lat: numOrNull(s['lat']),
+    lon: numOrNull(s['lon']),
+    nSamples: Number(s['n_samples']) || 0,
+    nRuns: s['n_runs'] === null || s['n_runs'] === undefined || s['n_runs'] === '' ? null : Number(s['n_runs']),
+    seqType: str(s['seq_type']),
+    marker: str(s['marker']),
+    markerRegion: str(s['marker_region']),
+    platform: str(s['platform']),
+    license: str(s['license']),
+    licenseNote: str(s['license_note']),
+    citation: str(s['citation']),
+    citationDoi: str(s['citation_doi']),
+    bioproject: str(s['bioproject']),
+    secondary: str(s['secondary']),
+    centre: str(s['centre']),
+    url: str(s['url']),
+    verifiedAt: str(s['verified_at']),
+    importable: s['importable'] !== false,
+    highlight: str(s['highlight']),
+    tags: strings(s['tags']),
+    downloadNote: str(s['download_note']),
+    files: arr(s['files']).map(toCatalogFile)
+  };
+}
+
+export function toCatalogFile(raw: unknown): CatalogFile {
+  const f = obj(raw);
+  return {
+    kind: str(f['kind']),
+    label: str(f['label']),
+    url: str(f['url']),
+    size: numOrNull(f['size'])
+  };
+}
+
+export function toMetadataPreview(raw: unknown): MetadataPreview {
+  const p = obj(raw);
+  return {
+    source: str(p['source']),
+    accession: str(p['accession']),
+    columns: strings(p['columns']),
+    rows: arr(p['rows']).map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value == null ? '' : String(value)]))),
+    rowCount: Number(p['row_count']) || 0,
+    truncated: p['truncated'] === true
   };
 }
 
