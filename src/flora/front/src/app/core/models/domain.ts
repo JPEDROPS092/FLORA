@@ -84,6 +84,47 @@ export interface ResearchProject {
   results: { id: string; title: string; summary: string }[];
   updatedAt: string;
   mocked: boolean;
+  /** empty → raw_downloaded → ingested. Only `ingested` projects can be analysed. */
+  stage?: ProjectStage;
+  synthetic?: boolean;
+  active?: boolean;
+  source?: { type: SyncSourceType; accession: string };
+}
+
+export type ProjectStage = 'empty' | 'raw_downloaded' | 'ingested';
+export type SyncSourceType = 'synthetic' | 'mgnify' | 'sra' | 'emp';
+
+export interface SyncSourceDraft {
+  type: SyncSourceType;
+  accession: string;
+  params?: Record<string, string | number>;
+}
+
+export interface ExampleProject {
+  id: string;
+  name: string;
+  question: string;
+  description: string;
+  biome: string;
+  synthetic: boolean;
+  /** false = accession not yet confirmed at the source. */
+  verified: boolean;
+  installable: boolean;
+  source: SyncSourceDraft;
+}
+
+export type SyncStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface SyncJob {
+  id: string;
+  projectId: string;
+  source: SyncSourceDraft;
+  status: SyncStatus;
+  progress: number;
+  message: string;
+  error: string;
+  log: string[];
+  upToDate: boolean;
 }
 
 export interface ProjectDraft {

@@ -18,7 +18,10 @@ import {
   ModelComparisonRow,
   NormalizationConfig,
   PipelineSnapshot,
+  ExampleProject,
   ProjectDraft,
+  SyncJob,
+  SyncSourceDraft,
   ReportDraft,
   ResearchProject,
   ScientificExport,
@@ -110,6 +113,7 @@ export class MockFloraRepository extends FloraRepository {
   private experimentStore: MlExperiment[] = [this.seedExperiment('random_forest', 42, 0), this.seedExperiment('xgboost', 42, 1)];
   private jobs: DownloadJob[] = this.seedJobs();
   private ingested = true;
+  private readonly syncJobs = new Map<string, { job: SyncJob; polls: number }>();
 
   async dashboard(): Promise<DashboardSnapshot> {
     await wait();
@@ -178,6 +182,61 @@ export class MockFloraRepository extends FloraRepository {
     };
     this.projectStore = [project, ...this.projectStore];
     return project;
+  }
+
+  async examples(): Promise<ExampleProject[]> {
+    await wait();
+    const base = { biome: '', synthetic: false, verified: false, installable: true };
+    return [
+      { ...base, id: 'synthetic-demo', name: 'Synthetic Microbiome Demo', question: t('Os quatro biomas sintéticos diferem em diversidade?'), description: t('80 amostras, 200 ASVs, seed 42. Dados sintéticos, não reais.'),
+        biome: 'synthetic', synthetic: true, verified: true, source: { type: 'synthetic', accession: 'seed-42' } },
+      { ...base, id: 'amazon-forest-mgnify', name: 'Amazonian Forest Microbiome', question: t('Quais táxons caracterizam o solo da floresta amazônica?'), description: t('Template MGnify (MGYS00005116). Ainda não verificado na fonte.'),
+        biome: 'soil', source: { type: 'mgnify', accession: 'MGYS00005116' } },
+      { ...base, id: 'tropical-soil-sra', name: 'Brazilian Tropical Soil', question: t('Como o solo tropical varia entre sítios?'), description: t('Template NCBI SRA (SRP151124). Baixa FASTQ; precisa de processamento.'),
+        biome: 'soil', source: { type: 'sra', accession: 'SRP151124' } }
+    ];
+  }
+
+  async installExample(id: string): Promise<{ project: ResearchProject; job: SyncJob }> {
+    await wait();
+    const example = (await this.examples()).find((e) => e.id === id);
+    if (!example) throw new Error(t('Exemplo desconhecido.'));
+    const project = await this.saveProject({ name: example.name, question: example.question });
+    project.synthetic = example.synthetic;
+    project.source = { type: example.source.type, accession: example.source.accession };
+    return { project, job: await this.startSync(project.id, example.source) };
+  }
+
+  async startSync(projectId: string, source: SyncSourceDraft): Promise<SyncJob> {
+    await wait();
+    const job: SyncJob = { id: `job-${this.syncJobs.size + 1}`, projectId, source, status: 'queued', progress: 0, message: t('Na fila'), error: '', log: [], upToDate: false };
+    this.syncJobs.set(job.id, { job, polls: 0 });
+    return { ...job };
+  }
+
+  async syncJob(jobId: string): Promise<SyncJob> {
+    await wait();
+    const entry = this.syncJobs.get(jobId);
+    if (!entry) throw new Error(t('Job não encontrado.'));
+    if (entry.job.status === 'queued' || entry.job.status === 'running') {
+      entry.polls += 1;
+      entry.job.progress = Math.min(100, entry.polls * 34);
+      entry.job.status = entry.job.progress >= 100 ? 'completed' : 'running';
+      entry.job.message = entry.job.status === 'completed' ? t('Simulação concluída (dados mockados)') : t('Simulando sincronização');
+    }
+    return { ...entry.job };
+  }
+
+  async cancelSync(jobId: string): Promise<SyncJob> {
+    const entry = this.syncJobs.get(jobId);
+    if (!entry) throw new Error(t('Job não encontrado.'));
+    entry.job.status = 'cancelled';
+    entry.job.message = t('Cancelado');
+    return { ...entry.job };
+  }
+
+  async activateProject(): Promise<void> {
+    await wait();
   }
 
   async pipeline(): Promise<PipelineSnapshot> {

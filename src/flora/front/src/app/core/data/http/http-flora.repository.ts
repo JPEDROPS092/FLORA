@@ -23,7 +23,10 @@ import {
   NormalizationConfig,
   PipelineSnapshot,
   PlotFigure,
+  ExampleProject,
   ProjectDraft,
+  SyncJob,
+  SyncSourceDraft,
   Provenance,
   ReportDraft,
   ResearchProject,
@@ -143,7 +146,6 @@ export class HttpFloraRepository extends FloraRepository {
     mocked: false
   };
 
-  private projectStore: ResearchProject[] = [];
   private experimentStore: MlExperiment[] = [];
   private jobs: DownloadJob[] = [];
   private normalization: NormalizationConfig = {
@@ -191,43 +193,79 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async projects(): Promise<ResearchProject[]> {
-    const status = await this.dashboard();
-    const current: ResearchProject = {
-      id: 'workspace',
-      name: 'Workspace atual',
-      question: t('Pergunta ainda não persistida na API.'),
-      status: 'active',
-      datasetName: status.workdir ?? 'workdir',
-      marker: '16S',
-      samples: status.samples,
-      asvs: status.asvs,
-      groups: [],
-      analyses: [],
-      results: [],
-      updatedAt: '',
-      mocked: false
-    };
-    return [current, ...this.projectStore];
+    const res = await this.send<{ projects: Record<string, unknown>[]; active: string }>('GET', '/api/projects');
+    return (res.projects ?? []).map((p) => this.toProject(p, res.active));
   }
 
   async saveProject(draft: ProjectDraft): Promise<ResearchProject> {
-    const project: ResearchProject = {
-      id: `local-${this.projectStore.length + 1}`,
-      name: draft.name.trim(),
-      question: draft.question.trim(),
-      status: 'draft',
-      datasetName: t('Somente nesta sessão'),
-      marker: '16S',
-      samples: 0,
-      asvs: 0,
-      groups: [],
-      analyses: [],
-      results: [],
-      updatedAt: new Date().toISOString(),
-      mocked: false
+    const res = await this.send<{ project: Record<string, unknown> }>('POST', '/api/projects', {
+      body: { name: draft.name.trim(), question: draft.question.trim() }
+    });
+    return this.toProject(res.project, '');
+  }
+
+  async examples(): Promise<ExampleProject[]> {
+    const res = await this.send<{ examples: Record<string, unknown>[] }>('GET', '/api/examples');
+    return (res.examples ?? []).map((e) => ({
+      id: String(e['id']), name: String(e['name']), question: String(e['question']), description: String(e['description']),
+      biome: String(e['biome']), synthetic: !!e['synthetic'], verified: !!e['verified'], installable: !!e['installable'],
+      source: this.toSource(e['source'])
+    }));
+  }
+
+  async installExample(id: string): Promise<{ project: ResearchProject; job: SyncJob }> {
+    const res = await this.send<{ project: Record<string, unknown>; job: Record<string, unknown> }>('POST', '/api/examples/install', { body: { id } });
+    return { project: this.toProject(res.project, String(res.project['id'])), job: this.toJob(res.job) };
+  }
+
+  async startSync(projectId: string, source: SyncSourceDraft): Promise<SyncJob> {
+    const res = await this.send<{ job: Record<string, unknown> }>('POST', '/api/projects/sync', {
+      body: { id: projectId, source: { type: source.type, accession: source.accession, params: source.params ?? {} } }
+    });
+    return this.toJob(res.job);
+  }
+
+  async syncJob(jobId: string): Promise<SyncJob> {
+    const res = await this.send<{ job: Record<string, unknown> }>('GET', '/api/sync-jobs', { params: { id: jobId } });
+    return this.toJob(res.job);
+  }
+
+  async cancelSync(jobId: string): Promise<SyncJob> {
+    const res = await this.send<{ job: Record<string, unknown> }>('POST', '/api/sync-jobs/cancel', { body: { id: jobId } });
+    return this.toJob(res.job);
+  }
+
+  async activateProject(projectId: string): Promise<void> {
+    await this.send('POST', '/api/projects/activate', { body: { id: projectId } });
+  }
+
+  private toSource(raw: unknown): SyncSourceDraft {
+    const r = (raw ?? {}) as Record<string, unknown>;
+    return { type: (r['type'] as SyncSourceDraft['type']) ?? 'synthetic', accession: String(r['accession'] ?? ''), params: (r['params'] as Record<string, string | number>) ?? {} };
+  }
+
+  private toJob(r: Record<string, unknown>): SyncJob {
+    const result = (r['result'] ?? {}) as Record<string, unknown>;
+    return {
+      id: String(r['id']), projectId: String(r['project_id']), source: this.toSource(r['source']), status: r['status'] as SyncJob['status'],
+      progress: Number(r['progress'] ?? 0), message: String(r['message'] ?? ''), error: String(r['error'] ?? ''),
+      log: (r['log'] as string[]) ?? [], upToDate: !!result['up_to_date']
     };
-    this.projectStore = [project, ...this.projectStore];
-    return project;
+  }
+
+  private toProject(p: Record<string, unknown>, active: string): ResearchProject {
+    const stage = (p['stage'] as ResearchProject['stage']) ?? 'empty';
+    const sources = (p['sources'] as Record<string, unknown>[]) ?? [];
+    return {
+      id: String(p['id']), name: String(p['name']), question: String(p['question'] ?? ''),
+      status: stage === 'ingested' ? 'active' : 'draft',
+      datasetName: sources.length ? `${sources[0]['type']}${sources[0]['accession'] ? ' · ' + sources[0]['accession'] : ''}` : t('Ainda sem dataset'),
+      marker: String(p['marker'] ?? '16S'), samples: Number(p['samples'] ?? 0), asvs: Number(p['asvs'] ?? 0),
+      groups: (p['groups'] as string[]) ?? [], analyses: (p['analyses'] as ResearchProject['analyses']) ?? [],
+      results: (p['results'] as ResearchProject['results']) ?? [], updatedAt: String(p['updated_at'] ?? '').slice(0, 16).replace('T', ' '),
+      mocked: false, stage, synthetic: !!p['synthetic'], active: String(p['id']) === active,
+      source: sources.length ? { type: sources[0]['type'] as SyncSourceDraft['type'], accession: String(sources[0]['accession'] ?? '') } : undefined
+    };
   }
 
   async pipeline(): Promise<PipelineSnapshot> {

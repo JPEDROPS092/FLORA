@@ -2,8 +2,6 @@
 export const EN_DATA: Record<string, string> = {
   'A API atual não devolve histórico de execução.': 'The current API does not return run history.',
   'Contagens vindas de /api/status. Qualidade por amostra e projetos não têm endpoint ainda.': 'Counts come from /api/status. Per-sample quality and projects have no endpoint yet.',
-  'Pergunta ainda não persistida na API.': 'Question not yet persisted in the API.',
-  'Somente nesta sessão': 'This session only',
   'Etapas QIIME2/DADA2 são acompanhamento local. A API expõe ingestão, diversidade e matriz.': 'QIIME2/DADA2 steps are tracked locally. The API exposes ingestion, diversity and the matrix.',
   'O QC por amostra chega depois do POST /api/ingest. A API não lista erros por amostra.': 'Per-sample QC arrives after POST /api/ingest. The API does not list per-sample errors.',
   'Aguardando ingestão': 'Waiting for ingestion',

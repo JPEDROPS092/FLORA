@@ -16,7 +16,10 @@ import {
   ModelComparisonRow,
   NormalizationConfig,
   PipelineSnapshot,
+  ExampleProject,
   ProjectDraft,
+  SyncJob,
+  SyncSourceDraft,
   ReportDraft,
   ResearchProject,
   ScientificExport
@@ -29,6 +32,13 @@ export abstract class FloraRepository {
   abstract diagnostics(lines?: number): Promise<DiagnosticEntry[]>;
   abstract projects(): Promise<ResearchProject[]>;
   abstract saveProject(draft: ProjectDraft): Promise<ResearchProject>;
+  abstract examples(): Promise<ExampleProject[]>;
+  /** Creates a project from an example and starts its sync job. */
+  abstract installExample(id: string): Promise<{ project: ResearchProject; job: SyncJob }>;
+  abstract startSync(projectId: string, source: SyncSourceDraft): Promise<SyncJob>;
+  abstract syncJob(jobId: string): Promise<SyncJob>;
+  abstract cancelSync(jobId: string): Promise<SyncJob>;
+  abstract activateProject(projectId: string): Promise<void>;
   abstract pipeline(): Promise<PipelineSnapshot>;
   abstract previewIngest(request: IngestRequest): Promise<IngestPreview>;
   abstract confirmIngest(request: IngestRequest): Promise<IngestOutcome>;

@@ -18,7 +18,7 @@ from flora.ui.frontend import (
     resolve_frontend_asset,
     should_serve_spa_index,
 )
-from flora.ui.handlers import downloads, ingest, llm, ml, report, status, viz
+from flora.ui.handlers import downloads, ingest, llm, ml, projects, report, status, viz
 from flora.ui.http import UiHttpError, read_json_body, send_error, send_html, send_json
 from flora.ui.state import FLORAState
 
@@ -55,6 +55,10 @@ GET_ROUTES = {
     "/api/status": status.get_status,
     "/api/feature_matrix": ingest.get_feature_matrix,
     "/api/report/preview": report.preview_report,
+    "/api/projects": projects.list_projects,
+    "/api/projects/detail": projects.get_project,
+    "/api/sync-jobs": projects.get_job,
+    "/api/examples": projects.list_examples,
     "/api/llm/config": llm.get_config,
     "/api/llm/models": llm.list_models,
     "/api/llm/models/pull": llm.pull_status,
@@ -80,6 +84,12 @@ POST_ROUTES = {
     "/api/download/emp": downloads.download_emp,
     "/api/download/synthetic": downloads.download_synthetic,
     "/api/report": report.generate_report,
+    "/api/projects": projects.create_project,
+    "/api/projects/update": projects.update_project,
+    "/api/projects/activate": projects.activate_project,
+    "/api/projects/sync": projects.start_sync,
+    "/api/sync-jobs/cancel": projects.cancel_job,
+    "/api/examples/install": projects.install_example,
     "/api/llm/config": llm.save_config,
     "/api/llm/test": llm.test_connection,
     "/api/llm/chat": llm.chat,
