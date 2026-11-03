@@ -1,5 +1,8 @@
 /** Data layer: HTTP repository notes, mock study, figures, exports. */
 export const EN_DATA: Record<string, string> = {
+  'Fora do escopo da API (QIIME2/DADA2 rodam fora do FLORA)': 'Outside the API scope (QIIME2/DADA2 run outside FLORA)',
+  'Importação, primers e denoise acontecem fora do FLORA; aqui aparecem ingestão, QC e normalização.': 'Import, primers and denoising happen outside FLORA; ingestion, QC and normalization appear here.',
+  'Download recusado.': 'Download rejected.',
   'A API atual não devolve histórico de execução.': 'The current API does not return run history.',
   'Contagens vindas de /api/status. Qualidade por amostra e projetos não têm endpoint ainda.': 'Counts come from /api/status. Per-sample quality and projects have no endpoint yet.',
   'Etapas QIIME2/DADA2 são acompanhamento local. A API expõe ingestão, diversidade e matriz.': 'QIIME2/DADA2 steps are tracked locally. The API exposes ingestion, diversity and the matrix.',

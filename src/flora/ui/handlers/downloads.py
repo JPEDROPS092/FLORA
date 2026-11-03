@@ -15,6 +15,40 @@ def get_logs(log_buffer: list[str], params: dict):
     return json_success(data={"lines": log_buffer[-count:]})
 
 
+_ARTIFACT_KEYS = {"manifest": "Manifesto", "asv_table": "ASV", "taxonomy": "Taxonomia", "metadata": "Metadata"}
+
+
+def _store(state):
+    from flora.projects.store import RecordStore
+
+    return RecordStore(Path(state.workdir) / "downloads")
+
+
+def recorded(source: str, handler):
+    """Wrap a download handler so every attempt is persisted and returned as a ``job``."""
+    from flora.projects.store import new_id, now_iso
+
+    def inner(state, body: dict):
+        job = {"id": new_id(), "source": source, "created_at": now_iso(), "artifacts": [], "detail": body.get("output_dir", "")}
+        try:
+            payload = handler(state, body)
+        except Exception as exc:
+            job.update(status="failed", detail=str(exc))
+            _store(state).save(job)
+            raise
+        job["artifacts"] = [{"label": label, "path": str(payload[key])} for key, label in _ARTIFACT_KEYS.items() if payload.get(key)]
+        job.update(status="completed", detail=str(payload.get("output_dir") or job["detail"]))
+        _store(state).save(job)
+        return {**payload, "output_dir": job["detail"], "job": job}
+
+    inner.__name__ = f"recorded_{source}"
+    return inner
+
+
+def list_downloads(state, params=None):
+    return json_success(data={"jobs": _store(state).list()})
+
+
 def download_mgnify(state, body: dict):
     from flora.io.downloaders import MGnifyDownloader
 

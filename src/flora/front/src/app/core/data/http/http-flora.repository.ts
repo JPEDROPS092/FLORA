@@ -22,6 +22,7 @@ import {
   ModelComparisonRow,
   NormalizationConfig,
   PipelineSnapshot,
+  PipelineStage,
   PlotFigure,
   ExampleProject,
   ProjectDraft,
@@ -36,7 +37,8 @@ import {
 import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
-import { t } from '../../i18n/i18n';
+import { LANG, t } from '../../i18n/i18n';
+import { Raw, toChart, toComparisons, toDifferential, toDownload, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
 
 interface StatusResponse {
   success: boolean;
@@ -146,8 +148,7 @@ export class HttpFloraRepository extends FloraRepository {
     mocked: false
   };
 
-  private experimentStore: MlExperiment[] = [];
-  private jobs: DownloadJob[] = [];
+  private failedExperiments: MlExperiment[] = [];
   private normalization: NormalizationConfig = {
     rarefactionDepth: 10000,
     method: 'clr',
@@ -160,30 +161,38 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async dashboard(): Promise<DashboardSnapshot> {
-    const status = await this.send<StatusResponse>('GET', '/api/status');
-    const tables = status.tables ?? {};
-    const samples = numberFrom(tables, ['samples', 'metadata']);
-    const asvs = numberFrom(tables, ['taxonomy', 'asv_table', 'features']);
-    const alpha = await settleChart(() => this.loadPlot('/api/viz/alpha', { metric: 'shannon', group_by: 'biome' }));
-    const pcoa = await settleChart(() => this.loadPlot('/api/viz/pcoa', { normalize: 'clr', color_by: 'biome' }));
+    const [status, d] = await Promise.all([
+      this.send<StatusResponse>('GET', '/api/status'),
+      this.send<Raw>('GET', '/api/dashboard', { params: { lang: LANG, min_reads: this.normalization.rarefactionDepth } })
+    ]);
+    const groupBy = String(d['group_by'] ?? 'biome');
+    const q = (d['quality'] ?? {}) as Raw;
+    const alpha = await settleChart(() => this.loadPlot('/api/viz/alpha', { metric: 'shannon', group_by: groupBy }));
+    const pcoa = await settleChart(() => this.loadPlot('/api/viz/pcoa', { normalize: 'clr', color_by: groupBy }));
+    const samples = Number(d['samples'] ?? 0);
     return {
       source: this.source,
-      studyId: 'workspace',
-      studyName: 'Workspace atual',
-      marker: '16S',
+      studyId: String(d['study_id'] ?? 'workspace'),
+      studyName: String(d['study_name'] ?? ''),
+      marker: String(d['marker'] ?? '16S'),
       samples,
-      asvs,
-      groups: 0,
-      groupNames: [],
-      quality: { pass: samples, warn: 0, fail: 0, meanReads: 0, medianReads: 0 },
-      recent: [],
+      asvs: Number(d['asvs'] ?? 0),
+      groups: Number(d['groups'] ?? 0),
+      groupNames: ((d['group_names'] as string[]) ?? []).map(String),
+      quality: {
+        pass: Number(q['pass'] ?? 0),
+        warn: Number(q['warn'] ?? 0),
+        fail: Number(q['fail'] ?? 0),
+        meanReads: Number(q['mean_reads'] ?? 0),
+        medianReads: Number(q['median_reads'] ?? 0)
+      },
+      recent: ((d['recent'] as unknown[]) ?? []).map(toRecent),
       alpha,
       pcoa,
       mocked: false,
-      partial: true,
-      note: t('Contagens vindas de /api/status. Qualidade por amostra e projetos não têm endpoint ainda.'),
-      status: status.status ?? 'unknown',
-      workdir: status.workdir
+      partial: false,
+      status: status.status ?? String(d['status'] ?? 'unknown'),
+      workdir: String(d['workdir'] ?? status.workdir ?? '')
     };
   }
 
@@ -269,36 +278,56 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async pipeline(): Promise<PipelineSnapshot> {
-    const status = await this.send<StatusResponse>('GET', '/api/status');
-    const tables = status.tables ?? {};
-    const hasSamples = numberFrom(tables, ['samples']) > 0;
+    const res = await this.send<Raw>('GET', '/api/pipeline', { params: { lang: LANG, min_reads: this.normalization.rarefactionDepth } });
+    const counts = (res['counts'] ?? {}) as Record<string, number>;
+    const steps = (res['steps'] ?? {}) as Record<string, { status?: string; at?: string; message?: string }>;
+    const ingested = !!res['ingested'];
+    const qc = toPreview(res['qc']);
+    const stage = (key: string, hasData: boolean): PipelineStage['status'] => {
+      const status = steps[key]?.status;
+      if (status === 'failed') return 'failed';
+      return status === 'completed' || hasData ? 'complete' : 'pending';
+    };
+    const external = t('Fora do escopo da API (QIIME2/DADA2 rodam fora do FLORA)');
+    const tableStatus: PipelineStage['status'] = !ingested
+      ? 'pending'
+      : qc.summary.lowDepth + qc.summary.metadataOnly + qc.summary.asvOnly + qc.rows.filter((r) => r.status === 'fail').length > 0
+        ? 'attention'
+        : 'complete';
     return {
-      ingested: hasSamples,
+      ingested,
       mocked: false,
       normalization: { ...this.normalization },
-      note: t('Etapas QIIME2/DADA2 são acompanhamento local. A API expõe ingestão, diversidade e matriz.'),
-      qc: emptyPreview(t('O QC por amostra chega depois do POST /api/ingest. A API não lista erros por amostra.')),
+      note: t('Importação, primers e denoise acontecem fora do FLORA; aqui aparecem ingestão, QC e normalização.'),
+      qc,
       stages: [
-        { id: 'import', tool: 'QIIME2', name: 'Importar', detail: 'Fora deste esqueleto', status: 'pending' },
-        { id: 'cutadapt', tool: 'QIIME2', name: 'Primers', detail: 'Fora deste esqueleto', status: 'pending' },
-        { id: 'dada2', tool: 'DADA2', name: 'Denoise', detail: 'Fora deste esqueleto', status: 'pending' },
-        { id: 'taxonomy', tool: 'FLORA', name: 'Taxonomia', detail: hasSamples ? t('Tabela presente') : t('Aguardando ingestão'), status: hasSamples ? 'complete' : 'pending' },
-        { id: 'table', tool: 'FLORA', name: t('Tabela'), detail: t('{n} amostras', { n: numberFrom(tables, ['samples']) }), status: hasSamples ? 'attention' : 'pending' },
-        { id: 'norm', tool: 'FLORA', name: t('Normalizar'), detail: this.normalization.method.toUpperCase(), status: hasSamples ? 'complete' : 'pending' }
+        { id: 'import', tool: 'QIIME2', name: t('Importar'), detail: external, status: 'pending' },
+        { id: 'cutadapt', tool: 'QIIME2', name: t('Primers'), detail: external, status: 'pending' },
+        { id: 'dada2', tool: 'DADA2', name: t('Denoise'), detail: external, status: 'pending' },
+        { id: 'taxonomy', tool: 'FLORA', name: t('Taxonomia'), detail: t('{n} linhas de taxonomia', { n: counts['taxa'] ?? 0 }), status: stage('ingest_taxonomy', (counts['taxa'] ?? 0) > 0) },
+        { id: 'table', tool: 'FLORA', name: t('Tabela'), detail: t('{n} amostras · {a} ASVs', { n: counts['samples'] ?? 0, a: counts['asvs'] ?? 0 }), status: tableStatus },
+        {
+          id: 'norm', tool: 'FLORA', name: t('Normalizar'),
+          detail: t('Rarefação {d} · {m}', { d: this.normalization.rarefactionDepth, m: this.normalization.method.toUpperCase() }),
+          status: ingested ? 'complete' : 'pending'
+        }
       ]
     };
   }
 
   async previewIngest(request: IngestRequest): Promise<IngestPreview> {
-    const warnings = [t('Validação estrutural local. A correspondência de amostras só é confirmada pelos endpoints de ingestão.')];
-    if (request.metadataColumns?.length && !request.metadataColumns.includes(request.sampleColumn)) {
-      warnings.push(t('A coluna "{col}" não está no arquivo enviado.', { col: request.sampleColumn }));
-    }
-    return {
-      ...emptyPreview(warnings[0]),
-      columns: request.metadataColumns ?? [],
-      warnings
-    };
+    const res = await this.send<Raw>('POST', '/api/ingest/preview', {
+      body: {
+        metadata_path: request.metadataPath,
+        asv_path: request.asvPath,
+        sample_col: request.sampleColumn,
+        group_col: request.groupColumn,
+        wide_format: request.wideFormat,
+        min_reads: this.normalization.rarefactionDepth,
+        lang: LANG
+      }
+    });
+    return toPreview(res);
   }
 
   async confirmIngest(request: IngestRequest): Promise<IngestOutcome> {
@@ -351,14 +380,10 @@ export class HttpFloraRepository extends FloraRepository {
       settleChart(() => this.loadPlot('/api/viz/taxonomy', { level: query.rank, group_by: group })),
       settleChart(() => this.loadPlot('/api/viz/network', { level: 'genus', top_n: query.topN, threshold: 0.35 }))
     ]);
-    let note = t('Figuras pedidas em separado a /api/viz. A árvore taxonômica estruturada e os testes diferenciais não têm endpoint.');
-    try {
-      await this.send<DiversityResponse>('POST', '/api/diversity', {
-        body: { sampling_depth: this.normalization.rarefactionDepth, metrics: ['shannon', 'observed_features', 'chao1'] }
-      });
-    } catch (error) {
-      note = `${note} Diversidade: ${error instanceof Error ? error.message : 'falhou'}.`;
-    }
+    const summary = await this.send<Raw>('GET', '/api/explore/summary', {
+      params: { lang: LANG, group_by: group, groups: query.groups.join(','), rank: query.rank, min_reads: this.normalization.rarefactionDepth }
+    });
+    const notes = ((summary['notes'] as string[]) ?? []).join(' ');
     return {
       query,
       pcoa,
@@ -366,90 +391,40 @@ export class HttpFloraRepository extends FloraRepository {
       beta,
       taxonomy,
       relations,
-      tree: [],
-      comparisons: [],
-      differential: [],
+      tree: toTree(summary['tree']),
+      comparisons: toComparisons(summary['comparisons']),
+      differential: toDifferential(summary['differential']),
       distanceNote: t('Métrica pedida ao endpoint /api/viz/beta_heatmap.'),
-      sampleCount: 0,
-      asvCount: 0,
+      sampleCount: Number(summary['sample_count'] ?? 0),
+      asvCount: Number(summary['asv_count'] ?? 0),
       mocked: false,
-      note
+      note: notes || undefined
     };
   }
 
   async experiments(): Promise<MlExperiment[]> {
-    return this.experimentStore.map((experiment) => ({ ...experiment }));
+    const res = await this.send<{ experiments: unknown[] }>('GET', '/api/ml/experiments');
+    return [...this.failedExperiments, ...(res.experiments ?? []).map(toExperiment)];
   }
 
   async trainModel(request: TrainRequest): Promise<MlExperiment> {
     try {
-      const response = await this.send<ClassifyResponse>('POST', '/api/ml/classify', {
+      const response = await this.send<{ success: boolean; error?: string; experiment?: unknown }>('POST', '/api/ml/classify', {
         body: {
           model: request.model,
           target_column: request.targetColumn,
           train_filter: request.trainFilter,
           test_filter: request.testFilter,
           normalize: request.normalize === 'none' ? null : request.normalize,
-          cv_folds: request.cvFolds
+          cv_folds: request.cvFolds,
+          seed: request.seed,
+          lang: LANG
         }
       });
-      if (!response.success) {
+      if (!response.success || !response.experiment) {
         throw new Error(response.error ?? t('Classificação recusada.'));
       }
-      const importances = (response.top_features ?? []).map((row, index) => ({
-        feature: String(row['feature'] ?? row['feature_id'] ?? `feature_${index + 1}`),
-        value: Number(row['importance'] ?? row['value'] ?? 0)
-      }));
-      const experiment: MlExperiment = {
-        id: `http-${Date.now()}`,
-        name: response.model ?? request.model,
-        model: response.model ?? request.model,
-        status: 'completed',
-        createdAt: new Date().toISOString(),
-        accuracy: response.accuracy ?? 0,
-        f1Macro: response.f1_macro ?? 0,
-        rocAuc: response.roc_auc ?? null,
-        cvAccuracyMean: response.cv_accuracy_mean ?? 0,
-        trainN: 0,
-        testN: 0,
-        features: importances.length,
-        importanceKind: 'impurity',
-        confusion: { status: 'empty', error: t('A API não devolve a matriz de confusão.') },
-        roc: { status: 'empty', error: t('A API não devolve a curva ROC.') },
-        importance:
-          importances.length > 0
-            ? {
-                status: 'ok',
-                figure: {
-                  data: [{ type: 'bar', orientation: 'h', x: importances.map((item) => item.value), y: importances.map((item) => item.feature) }],
-                  layout: { margin: { l: 120, t: 16, r: 16, b: 40 }, showlegend: false }
-                }
-              }
-            : { status: 'empty', error: t('Sem importâncias na resposta.') },
-        labels: [],
-        matrix: [],
-        importances,
-        config: [
-          { label: 'Modelo', value: request.model },
-          { label: 'Alvo', value: request.targetColumn },
-          { label: 'Treino', value: request.trainFilter },
-          { label: 'Teste', value: request.testFilter },
-          { label: 'CV', value: String(request.cvFolds) },
-          { label: 'Seed', value: String(request.seed) }
-        ],
-        limitations: [
-          t('O endpoint /api/ml/classify devolve métricas e top_features, não SHAP, ROC nem matriz de confusão.'),
-          response.classification_report ? t('Há um classification_report textual na resposta.') : t('Sem classification_report.')
-        ],
-        provenance: {
-          ...EMPTY_PROVENANCE,
-          seed: request.seed,
-          parameters: [{ label: 'Modelo', value: request.model }]
-        },
-        mocked: false
-      };
-      this.experimentStore = [experiment, ...this.experimentStore];
-      return experiment;
+      return toExperiment(response.experiment);
     } catch (error) {
       const message = error instanceof Error ? error.message : t('Falha no treino.');
       const failed: MlExperiment = {
@@ -457,7 +432,7 @@ export class HttpFloraRepository extends FloraRepository {
         name: request.model,
         model: request.model,
         status: 'failed',
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
         accuracy: 0,
         f1Macro: 0,
         rocAuc: null,
@@ -478,7 +453,7 @@ export class HttpFloraRepository extends FloraRepository {
         error: message,
         mocked: false
       };
-      this.experimentStore = [failed, ...this.experimentStore];
+      this.failedExperiments = [failed, ...this.failedExperiments];
       return failed;
     }
   }
@@ -489,7 +464,8 @@ export class HttpFloraRepository extends FloraRepository {
         body: {
           method: request.method,
           n_clusters: request.nClusters,
-          normalize: request.normalize
+          normalize: request.normalize,
+          seed: request.seed
         }
       });
       if (!response.success) {
@@ -528,58 +504,38 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async comparison(): Promise<ModelComparisonRow[]> {
-    return this.experimentStore
-      .filter((experiment) => experiment.status === 'completed')
-      .map((experiment) => ({
-        model: experiment.model,
-        experimentId: experiment.id,
-        accuracy: experiment.accuracy,
-        f1Macro: experiment.f1Macro,
-        rocAuc: experiment.rocAuc,
-        cvAccuracyMean: experiment.cvAccuracyMean,
-        seed: experiment.provenance.seed,
-        features: experiment.features
-      }));
+    const latest = new Map<string, MlExperiment>();
+    for (const experiment of await this.experiments()) {
+      if (experiment.status === 'completed' && !latest.has(experiment.model)) {
+        latest.set(experiment.model, experiment);
+      }
+    }
+    return [...latest.values()].map((experiment) => ({
+      model: experiment.model,
+      experimentId: experiment.id,
+      accuracy: experiment.accuracy,
+      f1Macro: experiment.f1Macro,
+      rocAuc: experiment.rocAuc,
+      cvAccuracyMean: experiment.cvAccuracyMean,
+      seed: experiment.provenance.seed,
+      features: experiment.features
+    }));
   }
 
   async reportDraft(): Promise<ReportDraft> {
-    const status = await this.dashboard();
+    const res = await this.send<Raw>('GET', '/api/report/draft', { params: { lang: LANG } });
+    const figures: ReportDraft['figures'] = {};
+    for (const [key, fig] of Object.entries((res['figures'] ?? {}) as Raw)) {
+      figures[key as keyof ReportDraft['figures']] = toFigure(fig);
+    }
     return {
-      title: t('Relatório FLORA'),
-      projectId: 'workspace',
+      title: String(res['title'] ?? t('Relatório FLORA')),
+      projectId: String(res['project_id'] ?? 'workspace'),
       mocked: false,
       note: t('O HTML/PDF local usa o texto editado. O backend gera outro artefato em POST /api/report.'),
-      parameters: [
-        { label: 'Workdir', value: status.workdir ?? 'n/d' },
-        { label: t('Amostras'), value: String(status.samples) },
-        { label: 'ASVs', value: String(status.asvs) }
-      ],
-      figures: {},
-      sections: [
-        {
-          id: 'summary',
-          title: 'Resumo',
-          included: true,
-          figure: null,
-          narrative: t('Descreva o desenho do estudo. Os números do workspace vêm de /api/status.'),
-          table: {
-            columns: ['Campo', 'Valor'],
-            rows: [
-              [t('Amostras'), String(status.samples)],
-              ['ASVs', String(status.asvs)],
-              ['Status', status.status]
-            ]
-          }
-        },
-        {
-          id: 'methods',
-          title: t('Métodos'),
-          included: true,
-          figure: null,
-          narrative: t('Registre rarefação, transformação, distância e modelo. A API ainda não devolve esses parâmetros.'),
-          table: null
-        }
-      ]
+      parameters: ((res['parameters'] as { label: string; value: string }[]) ?? []).map((p) => ({ label: String(p.label), value: String(p.value) })),
+      figures,
+      sections: toSections(res['sections'])
     };
   }
 
@@ -598,9 +554,7 @@ export class HttpFloraRepository extends FloraRepository {
       const response = await this.send<ReportResponse>('POST', '/api/report', {
         body: {
           title: request.title,
-          output_path: 'results/report.html',
           output_format: request.format === 'both' ? 'both' : request.format,
-          pdf_path: 'results/report.pdf',
           group_by: request.groupBy || null
         }
       });
@@ -631,7 +585,8 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async downloads(): Promise<DownloadJob[]> {
-    return this.jobs.map((job) => ({ ...job }));
+    const res = await this.send<{ jobs: unknown[] }>('GET', '/api/downloads');
+    return (res.jobs ?? []).map(toDownload);
   }
 
   async requestDownload(request: DownloadRequest): Promise<DownloadJob> {
@@ -657,29 +612,14 @@ export class HttpFloraRepository extends FloraRepository {
               }
             : { output_dir: request.outputDir, accessions: request.accessions ?? [] };
     try {
-      const response = await this.send<DownloadResponse>('POST', path, { body });
-      if (!response.success) {
-        throw new Error(response.error ?? 'Download recusado.');
+      const response = await this.send<DownloadResponse & { job?: unknown }>('POST', path, { body });
+      if (!response.success || !response.job) {
+        throw new Error(response.error ?? t('Download recusado.'));
       }
-      const artifacts = [
-        artifact('Manifesto', response.manifest),
-        artifact('ASV', response.asv_table),
-        artifact('Taxonomia', response.taxonomy),
-        artifact('Metadata', response.metadata)
-      ].filter((item): item is { label: string; path: string } => item !== null);
-      const job: DownloadJob = {
-        id: `http-${Date.now()}`,
-        source: request.source,
-        status: 'completed',
-        detail: response.output_dir ?? request.outputDir,
-        artifacts,
-        mocked: false,
-        createdAt: new Date().toISOString()
-      };
-      this.jobs = [job, ...this.jobs];
-      return job;
+      return toDownload(response.job);
     } catch (error) {
-      const job: DownloadJob = {
+      // The server records failed attempts too, so this local object is only the immediate answer.
+      return {
         id: `http-failed-${Date.now()}`,
         source: request.source,
         status: 'failed',
@@ -688,8 +628,6 @@ export class HttpFloraRepository extends FloraRepository {
         mocked: false,
         createdAt: new Date().toISOString()
       };
-      this.jobs = [job, ...this.jobs];
-      return job;
     }
   }
 
@@ -766,10 +704,6 @@ function emptyPreview(warning: string): IngestPreview {
     mocked: false,
     warnings: [warning]
   };
-}
-
-function artifact(label: string, path: string | undefined): { label: string; path: string } | null {
-  return path ? { label, path } : null;
 }
 
 function apiMetric(metric: ExplorationQuery['metric']): string {

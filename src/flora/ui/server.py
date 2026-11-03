@@ -18,7 +18,7 @@ from flora.ui.frontend import (
     resolve_frontend_asset,
     should_serve_spa_index,
 )
-from flora.ui.handlers import downloads, ingest, llm, ml, projects, report, status, viz
+from flora.ui.handlers import downloads, ingest, llm, ml, projects, report, status, viz, workspace
 from flora.ui.http import UiHttpError, read_json_body, send_error, send_html, send_json
 from flora.ui.state import FLORAState
 
@@ -53,6 +53,12 @@ def _install_buffer_handler() -> None:
 
 GET_ROUTES = {
     "/api/status": status.get_status,
+    "/api/dashboard": workspace.get_dashboard,
+    "/api/pipeline": workspace.get_pipeline,
+    "/api/explore/summary": workspace.explore_summary,
+    "/api/ml/experiments": ml.list_experiments,
+    "/api/downloads": downloads.list_downloads,
+    "/api/report/draft": report.report_draft,
     "/api/feature_matrix": ingest.get_feature_matrix,
     "/api/report/preview": report.preview_report,
     "/api/projects": projects.list_projects,
@@ -79,10 +85,11 @@ POST_ROUTES = {
     "/api/diversity": ingest.compute_diversity,
     "/api/ml/classify": ml.classify,
     "/api/ml/cluster": ml.cluster,
-    "/api/download/mgnify": downloads.download_mgnify,
-    "/api/download/sra": downloads.download_sra,
-    "/api/download/emp": downloads.download_emp,
-    "/api/download/synthetic": downloads.download_synthetic,
+    "/api/ingest/preview": workspace.preview_ingest,
+    "/api/download/mgnify": downloads.recorded("mgnify", downloads.download_mgnify),
+    "/api/download/sra": downloads.recorded("sra", downloads.download_sra),
+    "/api/download/emp": downloads.recorded("emp", downloads.download_emp),
+    "/api/download/synthetic": downloads.recorded("synthetic", downloads.download_synthetic),
     "/api/report": report.generate_report,
     "/api/projects": projects.create_project,
     "/api/projects/update": projects.update_project,

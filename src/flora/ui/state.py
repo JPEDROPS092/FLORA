@@ -53,5 +53,17 @@ class FLORAState:
         return self._pipeline
 
     @property
+    def data_dir(self) -> Path:
+        """Directory owning the analysis artefacts: the active project's, else the workdir."""
+        active = self.projects.active_id()
+        return self.projects.dir(active) if active else Path(self.workdir)
+
+    @property
+    def experiments(self):
+        from flora.projects.store import RecordStore
+
+        return RecordStore(self.data_dir / "experiments")
+
+    @property
     def db(self):
         return self.pipeline.db

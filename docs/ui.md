@@ -83,19 +83,29 @@ The server exposes a REST-like JSON API consumed by the frontend:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/status` | Pipeline status and database stats |
+| `GET` | `/api/dashboard` | Active project summary: counts, groups, sample QC totals, recent runs |
+| `GET` | `/api/pipeline` | Ingestion steps, counts and per-sample QC (`min_reads`, `group_by`) |
+| `POST` | `/api/ingest/preview` | Dry-run match of metadata × ASV files (nothing is written) |
+| `GET` | `/api/explore/summary` | Taxonomic tree, per-group alpha stats, differential taxa (Kruskal–Wallis + BH) |
+| `GET` | `/api/report/draft` | Editable report sections and figures built from the project data |
+| `GET` | `/api/downloads` | Persisted download attempts |
 | `POST` | `/api/ingest/metadata` | Ingest a metadata file |
 | `POST` | `/api/ingest/asv` | Ingest an ASV table |
 | `POST` | `/api/ingest/taxonomy` | Ingest a taxonomy file |
 | `POST` | `/api/diversity` | Compute alpha diversity |
 | `GET` | `/api/feature_matrix` | Get feature matrix (CLR/TSS/raw) |
-| `POST` | `/api/ml/classify` | Train a classifier |
+| `POST` | `/api/ml/classify` | Train a classifier; persists the experiment (confusion matrix, ROC, importances, provenance) per project |
+| `GET` | `/api/ml/experiments` | Experiments persisted for the active project |
 | `POST` | `/api/ml/cluster` | Run clustering |
 | `GET` | `/api/viz/taxonomy` | Taxonomy barplot JSON |
 | `GET` | `/api/viz/pcoa` | PCoA plot JSON |
 | `GET` | `/api/viz/alpha` | Alpha diversity plot JSON |
 | `POST` | `/api/download/mgnify` | Download from MGnify |
 | `POST` | `/api/download/sra` | Download from NCBI SRA |
-| `POST` | `/api/report` | Generate HTML report |
+| `POST` | `/api/report` | Generate HTML report (written under `<project>/reports`) |
+
+Endpoints that produce text (`/api/dashboard`, `/api/pipeline`, `/api/report/draft`, `/api/ml/classify`) accept `lang=pt|en`.
+The production SPA build (`environment.prod.ts`) uses this API; `ng serve` keeps the mock study.
 
 ---
 

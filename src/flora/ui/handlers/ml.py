@@ -2,26 +2,60 @@
 
 from __future__ import annotations
 
-from flora.core.exceptions import DatabaseError, ValidationError
+import json
+import re
+
+from flora.core.exceptions import DatabaseError, MLError, ValidationError
 from flora.ui.http import UiHttpError, json_success
 
 
-def classify(state, body: dict):
-    from flora.ml.classification.classifier import MicrobiomeClassifier
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_FORBIDDEN = re.compile(r";|--|/\*|\*/|\b(drop|delete|insert|update|alter|create|attach|copy|pragma)\b", re.IGNORECASE)
+_MODELS = {"random_forest", "xgboost", "svm"}
 
+
+def _safe_filter(value: str, name: str) -> str:
+    """The filters are interpolated into a WHERE clause: allow one plain predicate only."""
+    value = (value or "").strip()
+    if not value:
+        raise UiHttpError("train_filter and test_filter are required", code="missing_filters")
+    if _FORBIDDEN.search(value):
+        raise UiHttpError(f"{name} must be a single SQL predicate (no ';', comments or DDL/DML).", code="invalid_filter")
+    return value
+
+
+def _fig(fig) -> dict:
+    return {"status": "ok", "figure": json.loads(fig.to_json())}
+
+
+def _chart_error(message: str) -> dict:
+    return {"status": "empty", "error": message}
+
+
+def classify(state, body: dict):
+    import numpy as np
+    import polars as pl
+    from sklearn.metrics import confusion_matrix
+
+    from flora.ml.classification.classifier import MicrobiomeClassifier
+    from flora.projects.store import new_id, now_iso
+    from flora.ui.i18n import lang_of, tr
+    from flora.ui.provenance import build_provenance
+    from flora.viz.ml_plots import plot_confusion_matrix, plot_feature_importance, plot_roc_curve
+
+    lang = lang_of(body)
     try:
         model_type = body.get("model", "random_forest")
+        if model_type not in _MODELS:
+            raise UiHttpError(f"Unknown model: {model_type}", code="invalid_model")
         target = body.get("target_column", "biome")
-        train_filter = body.get("train_filter", "")
-        test_filter = body.get("test_filter", "")
-        cv_folds = int(body.get("cv_folds", 5))
+        if not _IDENT.match(str(target)):
+            raise UiHttpError("target_column must be a plain column name.", code="invalid_target")
+        train_filter = _safe_filter(body.get("train_filter", ""), "train_filter")
+        test_filter = _safe_filter(body.get("test_filter", ""), "test_filter")
+        cv_folds = max(2, int(body.get("cv_folds", 5)))
+        seed = int(body.get("seed", 42))
         normalize = body.get("normalize", "clr")
-
-        if not train_filter or not test_filter:
-            raise UiHttpError(
-                "train_filter and test_filter are required",
-                code="missing_filters",
-            )
 
         train, test = state.db.slice(
             train_filter=train_filter,
@@ -33,31 +67,109 @@ def classify(state, body: dict):
         classifier = MicrobiomeClassifier(
             model=model_type,
             target_column=target,
-            random_state=42,
+            random_state=seed,
             mlflow_tracking_uri=None,
         )
         result = classifier.fit(train, test, cv_folds=cv_folds)
 
         scores = result.cv_scores["accuracy"]
-        top_features = []
+        importances = []
         if result.feature_importances is not None:
-            top_features = result.feature_importances.head(10).to_pandas().to_dict(orient="records")
+            importances = [
+                {"feature": r["feature"], "value": float(r["importance"])}
+                for r in result.feature_importances.head(10).iter_rows(named=True)
+            ]
+        labels = [str(label) for label in result.label_encoder.classes_]
+        matrix = confusion_matrix(result.y_true, result.y_pred, labels=labels).tolist()
 
+        confusion = _chart_error("empty")
+        try:
+            confusion = _fig(plot_confusion_matrix(result.y_true, result.y_pred, label_names=labels, normalize=False))
+        except Exception as exc:  # noqa: BLE001 - one chart must not sink the experiment
+            confusion = {"status": "error", "error": str(exc)}
+        roc = _chart_error(tr(lang, "ml.lim.no_proba"))
+        if result.y_proba is not None:
+            try:
+                roc = _fig(plot_roc_curve(result))
+            except Exception as exc:  # noqa: BLE001
+                roc = {"status": "error", "error": str(exc)}
+        importance = _chart_error(tr(lang, "ml.lim.impurity"))
+        if importances:
+            importance = _fig(plot_feature_importance(pl.DataFrame(importances).rename({"value": "importance"}), top_n=10))
+
+        n_test = len(test)
+        limitations = [tr(lang, "ml.lim.split"), tr(lang, "ml.lim.compositional")]
+        if n_test < 30:
+            limitations.insert(0, tr(lang, "ml.lim.small_test", n=n_test))
+        if importances:
+            limitations.append(tr(lang, "ml.lim.impurity"))
+        if result.y_proba is None:
+            limitations.append(tr(lang, "ml.lim.no_proba"))
+
+        params = [
+            {"label": tr(lang, "ml.param.model"), "value": model_type},
+            {"label": tr(lang, "ml.param.target"), "value": target},
+            {"label": tr(lang, "ml.param.train"), "value": train_filter},
+            {"label": tr(lang, "ml.param.test"), "value": test_filter},
+            {"label": "CV", "value": str(cv_folds)},
+            {"label": "Seed", "value": str(seed)},
+            {"label": tr(lang, "ml.param.norm"), "value": str(normalize or "none").upper()},
+        ]
+        stamp = now_iso()
+        experiment = {
+            "id": new_id(),
+            "name": tr(lang, "ml.name", model=model_type, target=target),
+            "model": model_type,
+            "status": "completed",
+            "created_at": stamp,
+            "accuracy": result.accuracy,
+            "f1_macro": result.f1_macro,
+            "roc_auc": result.roc_auc,
+            "cv_accuracy_mean": float(np.mean(scores)),
+            "train_n": len(train),
+            "test_n": n_test,
+            "features": len(result.feature_names),
+            "importance_kind": "impurity",
+            "confusion": confusion,
+            "roc": roc,
+            "importance": importance,
+            "labels": labels,
+            "matrix": matrix,
+            "importances": importances,
+            "config": params,
+            "limitations": limitations,
+            "classification_report": result.classification_report_str,
+            "provenance": build_provenance(
+                state, seed=seed, parameters=params,
+                history=[{"at": stamp[:16].replace("T", " "), "event": tr(lang, "ml.event.trained", model=model_type, seed=seed)}],
+            ),
+        }
+        state.experiments.save(experiment)
+
+        # Legacy flat keys stay for existing API consumers.
         return json_success(
             data={
+                "experiment": experiment,
                 "model": model_type,
                 "accuracy": result.accuracy,
                 "f1_macro": result.f1_macro,
                 "roc_auc": result.roc_auc,
-                "cv_accuracy_mean": sum(scores) / len(scores),
+                "cv_accuracy_mean": experiment["cv_accuracy_mean"],
                 "classification_report": result.classification_report_str,
-                "top_features": top_features,
+                "top_features": [{"feature": i["feature"], "importance": i["value"]} for i in importances],
             }
         )
     except Exception as exc:
-        if isinstance(exc, (DatabaseError, ValidationError, ValueError)):
+        if isinstance(exc, UiHttpError):
+            raise
+        if isinstance(exc, (DatabaseError, ValidationError, ValueError, MLError)):
             raise UiHttpError(str(exc), status=400, code="ml_classification_failed") from exc
         raise
+
+
+def list_experiments(state, params=None):
+    """Experiments persisted for the active project, newest first."""
+    return json_success(data={"experiments": state.experiments.list()})
 
 
 def cluster(state, body: dict):
@@ -95,7 +207,7 @@ def cluster(state, body: dict):
         clusterer = MicrobiomeClusterer(
             method=method,
             n_clusters=n_clusters,
-            random_state=42,
+            random_state=int(body.get("seed", 42)),
         )
         result = clusterer.fit(pcoa_wide)
 
