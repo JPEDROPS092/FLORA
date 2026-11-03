@@ -42,6 +42,8 @@ export const EN_SETTINGS: Record<string, string> = {
   'Direto do navegador': 'Direct from the browser',
   'Usar o modelo para interpretar as respostas dos agentes': 'Use the model to interpret the agents\' answers',
   'Provedor': 'Provider',
+  'Papel: interpreta os resultados calculados.': 'Role: interprets the computed results.',
+  'Papel: escolhe qual agente responde. Vazio = roteamento por palavras-chave.': 'Role: picks which agent answers. Empty = keyword routing.',
   'Fonte do modelo': 'Model source',
   'API / servidor': 'API / server',
   'llama.cpp local': 'Local llama.cpp',

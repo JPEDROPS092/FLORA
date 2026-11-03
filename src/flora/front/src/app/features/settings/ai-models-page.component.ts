@@ -76,9 +76,11 @@ import { MascotComponent } from '../../shared/mascot.component';
 
           <div class="two">
             <div class="field"><label for="model">{{ 'Modelo principal' | t }}</label>
-              <p-select inputId="model" [options]="modelOptions()" formControlName="model" [editable]="true" appendTo="body" [fluid]="true" [placeholder]="'qwen3:4b'" /></div>
+              <p-select inputId="model" [options]="modelOptions()" formControlName="model" [editable]="true" appendTo="body" [fluid]="true" [placeholder]="'qwen3:4b'" />
+              <small class="note">{{ 'Papel: interpreta os resultados calculados.' | t }}</small></div>
             <div class="field"><label for="router">{{ 'Modelo leve (roteamento)' | t }}</label>
-              <p-select inputId="router" [options]="modelOptions()" formControlName="routerModel" [editable]="true" appendTo="body" [fluid]="true" [showClear]="true" [placeholder]="'qwen3:1.7b'" /></div>
+              <p-select inputId="router" [options]="modelOptions()" formControlName="routerModel" [editable]="true" appendTo="body" [fluid]="true" [showClear]="true" [placeholder]="'qwen3:1.7b'" />
+              <small class="note">{{ 'Papel: escolhe qual agente responde. Vazio = roteamento por palavras-chave.' | t }}</small></div>
           </div>
 
           @if (isNative()) {

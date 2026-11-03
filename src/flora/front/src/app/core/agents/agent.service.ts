@@ -37,7 +37,7 @@ export class AgentService {
   async ask(prompt: string): Promise<void> {
     const text = prompt.trim();
     if (!text || this.busy()) return;
-    const agentId = routeAgent(text, this.selected());
+    const agentId = await this.pickAgent(text);
     const pending: AgentMessage = { id: nextId('msg'), role: 'agent', agentId, text: '', pending: true, at: new Date() };
     this.push({ id: nextId('msg'), role: 'user', text, at: new Date() }, pending);
     this.busy.set(true);
@@ -70,6 +70,18 @@ export class AgentService {
 
   agentName(id: AgentId | undefined): string {
     return id ? agentById(id).name : t('Agente');
+  }
+
+  /** Keyword routing; with a light model configured, it classifies the intent instead. */
+  private async pickAgent(text: string): Promise<AgentId> {
+    const keyword = routeAgent(text, this.selected());
+    if (this.selected() !== 'auto' || !this.llm.ready() || !this.llm.settings().routerModel || text.length < 4) return keyword;
+    try {
+      const id = await this.llm.classify(text, AGENTS.map((a) => ({ id: a.id, role: a.role })));
+      return (id as AgentId | null) ?? keyword;
+    } catch {
+      return keyword;
+    }
   }
 
   /** Optional step: a model explains the facts; failure never blocks the computed answer. */

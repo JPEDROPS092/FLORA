@@ -12,6 +12,8 @@ from flora.llm.native import NativeClient, models_dir
 from flora.ui.http import UiHttpError, json_success
 
 _ALLOWED_ROLES = {"system", "user", "assistant"}
+#: Model roles: "interpretation" uses the main model, "routing" the light ``router_model``.
+_MODEL_ROLES = {"interpretation", "routing"}
 _MAX_MESSAGES = 24
 _MAX_CHARS = 24_000
 
@@ -80,8 +82,16 @@ def chat(state, body: dict[str, Any]) -> dict[str, Any]:
     if total > _MAX_CHARS:
         raise UiHttpError("Conversation too long.", status=413, code="payload_too_large")
     model = body.get("model") if isinstance(body.get("model"), str) and body.get("model") else None
+    temperature, max_tokens = body.get("temperature"), body.get("max_tokens")
+    role = body.get("role", "interpretation")
+    if role not in _MODEL_ROLES:
+        raise UiHttpError("Unknown model role.", code="invalid_role")
+    if role == "routing":
+        # Light model for intent classification: deterministic and short. Falls back to the main model.
+        model = settings.router_model or model
+        temperature, max_tokens = 0, min(int(max_tokens or 32), 32)
     try:
-        result = _client(state, settings).chat(clean, model=model, temperature=body.get("temperature"), max_tokens=body.get("max_tokens"))
+        result = _client(state, settings).chat(clean, model=model, temperature=temperature, max_tokens=max_tokens)
     except LlmError as exc:
         raise UiHttpError(str(exc), status=502, code="llm_error") from exc
     return json_success(data=result)

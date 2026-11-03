@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { FloraRepository } from '../data/flora.repository';
 import { LANG, t } from '../i18n/i18n';
 import { PROVIDERS } from './llm.catalog';
-import { ChatMessage, ChatResult, LlmSettings, LlmStatus, PullJob } from './llm.models';
+import { ChatMessage, ChatResult, LlmSettings, LlmStatus, ModelRole, PullJob } from './llm.models';
 
 const KEY = 'flora.llm';
 const DEFAULTS: LlmSettings = {
@@ -120,18 +120,34 @@ export class LlmService {
   }
 
   // ---- chat --------------------------------------------------------------
-  async chat(messages: ChatMessage[], model?: string): Promise<ChatResult> {
+  async chat(messages: ChatMessage[], model?: string, role: ModelRole = 'interpretation'): Promise<ChatResult> {
     const s = this.settings();
+    const routing = role === 'routing';
     if (this.mode === 'proxy') {
       const r = await this.post<{ model: string; text: string; elapsed_ms: number }>('/api/llm/chat', {
-        messages, model: model || undefined, temperature: s.temperature, max_tokens: s.maxTokens });
+        messages, role, model: model || undefined, temperature: s.temperature, max_tokens: s.maxTokens });
       return { model: r.model, text: r.text, elapsedMs: r.elapsed_ms };
     }
     if (s.provider === 'native') throw new Error(t('O llama.cpp embutido exige o backend FLORA (flora ui). Sem backend, use o Ollama ou outro servidor.'));
     const started = performance.now();
+    const used = model || (routing && s.routerModel) || s.model;
     const body = await this.direct<{ choices: { message: { content: string } }[] }>(s, '/chat/completions', {
-      model: model || s.model, messages, temperature: s.temperature, max_tokens: s.maxTokens, stream: false });
-    return { model: model || s.model, text: stripReasoning(body.choices?.[0]?.message?.content ?? ''), elapsedMs: Math.round(performance.now() - started) };
+      model: used, messages, temperature: routing ? 0 : s.temperature, max_tokens: routing ? 32 : s.maxTokens, stream: false });
+    return { model: used, text: stripReasoning(body.choices?.[0]?.message?.content ?? ''), elapsedMs: Math.round(performance.now() - started) };
+  }
+
+  /**
+   * Light model picks which agent should answer. Returns one of `ids` or null; the caller
+   * keeps the keyword router as fallback, so a bad or slow answer never blocks the user.
+   */
+  async classify(question: string, options: { id: string; role: string }[]): Promise<string | null> {
+    const list = options.map((o) => `${o.id}: ${o.role}`).join('\n');
+    const out = await this.chat([
+      { role: 'system', content: `Classify the user's question into exactly one agent id. Reply with the id only.\n${list}` },
+      { role: 'user', content: question }
+    ], undefined, 'routing');
+    const word = out.text.toLowerCase().match(/[a-z]+/)?.[0];
+    return options.find((o) => o.id === word)?.id ?? null;
   }
 
   /** Ask the model to explain facts that deterministic tools already computed. */

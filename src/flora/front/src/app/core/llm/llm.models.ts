@@ -26,6 +26,9 @@ export interface ProviderPreset {
   local: boolean;
 }
 
+/** `interpretation` uses the main model; `routing` the light model (intent classification). */
+export type ModelRole = 'interpretation' | 'routing';
+
 export type LlmStatus = 'idle' | 'testing' | 'ok' | 'error';
 
 export interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string }

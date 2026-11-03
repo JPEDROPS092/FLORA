@@ -18,6 +18,7 @@ from flora.ui.http import UiHttpError
 
 class _FakeOpenAI(BaseHTTPRequestHandler):
     seen_auth: list[str | None] = []
+    seen_requests: list[dict] = []
 
     def log_message(self, *a):  # silence
         pass
@@ -40,6 +41,7 @@ class _FakeOpenAI(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
         req = json.loads(self.rfile.read(n))
+        type(self).seen_requests.append(req)
         if req["model"] == "boom":
             self._send(500, {"error": "model crashed"})
             return
@@ -50,6 +52,7 @@ class _FakeOpenAI(BaseHTTPRequestHandler):
 @pytest.fixture()
 def server():
     _FakeOpenAI.seen_auth = []
+    _FakeOpenAI.seen_requests = []
     httpd = HTTPServer(("127.0.0.1", 0), _FakeOpenAI)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_port}/v1"
@@ -272,3 +275,20 @@ def test_pull_cancel_and_single_job(hub):
     handlers.pull_cancel(hub, {"id": job["id"]})
     assert _wait(hub, job["id"])["status"] == "cancelled"
     assert not list((hub.workdir / "models").glob("slow.gguf*"))
+
+
+def test_routing_role_uses_the_light_model_deterministically(tmp_path, server):
+    state = SimpleNamespace(workdir=tmp_path)
+    handlers.save_config(state, {"enabled": True, "provider": "custom", "base_url": server, "model": "big", "router_model": "tiny", "max_tokens": 700})
+    handlers.chat(state, {"messages": [{"role": "user", "content": "a"}]})
+    handlers.chat(state, {"role": "routing", "messages": [{"role": "user", "content": "b"}]})
+    main, routed = _FakeOpenAI.seen_requests
+    assert main["model"] == "big" and main["max_tokens"] == 700
+    assert routed["model"] == "tiny" and routed["temperature"] == 0 and routed["max_tokens"] <= 32
+    with pytest.raises(UiHttpError) as e:
+        handlers.chat(state, {"role": "admin", "messages": [{"role": "user", "content": "c"}]})
+    assert e.value.code == "invalid_role"
+    # Without a light model, routing falls back to the main one.
+    handlers.save_config(state, {"router_model": ""})
+    handlers.chat(state, {"role": "routing", "messages": [{"role": "user", "content": "d"}]})
+    assert _FakeOpenAI.seen_requests[-1]["model"] == "big"
