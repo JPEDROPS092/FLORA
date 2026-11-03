@@ -2,6 +2,7 @@ import { Component, ElementRef, HostListener, afterNextRender, inject, signal, v
 import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 
+import { TooltipModule } from 'primeng/tooltip';
 import { WorkspaceStore } from '../../core/workspace/workspace.store';
 import { INSTITUTIONS, TECH_GROUPS } from '../../shared/brand.data';
 import { MascotComponent } from '../../shared/mascot.component';
@@ -16,7 +17,7 @@ interface Slide { id: string; label: string }
 @Component({
   selector: 'flora-welcome',
   standalone: true,
-  imports: [TPipe, RouterLink, ButtonModule, MascotComponent, TechBadgeComponent],
+  imports: [TPipe, RouterLink, ButtonModule, TooltipModule, MascotComponent, TechBadgeComponent],
   template: `
     <div class="deck" #deck (scroll)="onScroll()" tabindex="0" [attr.aria-label]="'Apresentação do FLORA' | t">
       <!-- 1 · Hero -->
@@ -40,7 +41,10 @@ interface Slide { id: string; label: string }
           <p class="lede">{{ 'Cada etapa deixa proveniência: parâmetros, versões e seed.' | t }}</p></header>
         <ol class="flow">
           @for (s of flow; track s.t; let i = $index) {
-            <li><span class="n">{{ i + 1 }}</span><i [class]="s.i"></i><strong>{{ s.t }}</strong><small>{{ s.d }}</small></li>
+            <li><span class="n">{{ i + 1 }}</span><i [class]="s.i"></i><strong>{{ s.t }}</strong><small>{{ s.d }}</small>
+              <button type="button" class="help" (click)="store.openDocs(s.k)" [attr.aria-label]="'Ler a documentação de {step}' | t: { step: s.t }" [pTooltip]="'Como funciona' | t" tooltipPosition="top">
+                <i class="pi pi-question-circle" aria-hidden="true"></i>
+              </button></li>
           }
         </ol>
         <flora-mascot class="corner" name="binoculars" [size]="190" />
@@ -133,11 +137,11 @@ export class WelcomePageComponent {
     { id: 's-ai', label: t('Agentes de IA') }, { id: 's-stack-1', label: t('Bibliotecas: interface e dados') }, { id: 's-stack-2', label: t('Bibliotecas: IA e pipeline') }, { id: 's-data', label: t('Fontes de dados') }, { id: 's-end', label: t('Começar') }
   ];
   protected readonly flow = [
-    { i: 'pi pi-upload', t: t('Ingestão'), d: t('Metadata, tabela de ASVs e taxonomia reconciliadas, com QC por amostra.') },
-    { i: 'pi pi-sliders-h', t: t('Normalização'), d: t('Rarefação, TSS ou CLR com os parâmetros registrados.') },
-    { i: 'pi pi-chart-scatter', t: t('Exploração'), d: t('Alfa, beta, PCoA e taxonomia com filtros sincronizados.') },
-    { i: 'pi pi-microchip', t: t('Modelagem'), d: t('Random Forest e XGBoost, ROC e SHAP com ressalvas explícitas.') },
-    { i: 'pi pi-file', t: t('Relatório'), d: t('Seções editáveis, métodos e exportação HTML/PDF.') }
+    { k: 'ingestion', i: 'pi pi-upload', t: t('Ingestão'), d: t('Metadata, tabela de ASVs e taxonomia reconciliadas, com QC por amostra.') },
+    { k: 'normalization', i: 'pi pi-sliders-h', t: t('Normalização'), d: t('Rarefação, TSS ou CLR com os parâmetros registrados.') },
+    { k: 'exploration', i: 'pi pi-chart-scatter', t: t('Exploração'), d: t('Alfa, beta, PCoA e taxonomia com filtros sincronizados.') },
+    { k: 'modelling', i: 'pi pi-microchip', t: t('Modelagem'), d: t('Random Forest e XGBoost, ROC e SHAP com ressalvas explícitas.') },
+    { k: 'report', i: 'pi pi-file', t: t('Relatório'), d: t('Seções editáveis, métodos e exportação HTML/PDF.') }
   ];
   protected readonly modules = [
     { to: '/dashboard', i: 'pi pi-th-large', t: t('Painel'), d: t('Visão geral do estudo e diagnóstico.') },

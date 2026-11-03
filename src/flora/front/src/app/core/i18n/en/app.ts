@@ -1,5 +1,13 @@
 /** Shell, navigation, routes, command palette and global UI. */
 export const EN_APP: Record<string, string> = {
+  'Documentação': 'Documentation',
+  'Abrir a documentação': 'Open the documentation',
+  'Tópicos': 'Topics',
+  'Visão geral': 'Overview',
+  'Carregando…': 'Loading…',
+  'Não foi possível carregar este documento.': 'Could not load this document.',
+  'Ler a documentação de {step}': 'Read the documentation for {step}',
+  'Como funciona': 'How it works',
   'Pular para o conteúdo': 'Skip to content',
   'Navegação principal': 'Main navigation',
   'FLORA': 'FLORA',

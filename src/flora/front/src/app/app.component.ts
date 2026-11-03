@@ -13,15 +13,16 @@ import { WorkspaceStore } from './core/workspace/workspace.store';
 import { LanguageSwitchComponent } from './core/i18n/language-switch.component';
 import { CommandPaletteComponent } from './shared/command-palette.component';
 import { CopilotComponent } from './shared/copilot.component';
+import { DocsDialogComponent } from './shared/docs-dialog.component';
 import { TPipe } from './core/i18n/t.pipe';
-import { t } from './core/i18n/i18n';
+import { LOCALE, t } from './core/i18n/i18n';
 
 type Connection = 'mock' | 'checking' | 'online' | 'offline';
 
 @Component({
   selector: 'flora-root',
   standalone: true,
-  imports: [TPipe, LanguageSwitchComponent, RouterLink, RouterLinkActive, RouterOutlet, ToastModule, ButtonModule, TooltipModule, CommandPaletteComponent, CopilotComponent],
+  imports: [TPipe, LanguageSwitchComponent, RouterLink, RouterLinkActive, RouterOutlet, ToastModule, ButtonModule, TooltipModule, CommandPaletteComponent, CopilotComponent, DocsDialogComponent],
   template: `
     <a class="skip-link" href="#flora-content">{{ 'Pular para o conteúdo' | t }}</a>
     <div class="shell" [class.collapsed]="!store.sidebarOpen()">
@@ -51,9 +52,17 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
         </nav>
 
         <div class="source" [class]="'conn-' + connection()">
-          <span class="source-kicker">{{ 'Fonte de dados' | t }}</span>
-          <strong><span class="dot" aria-hidden="true"></span>{{ connectionLabel() }}</strong>
-          <span>{{ source.label }}</span>
+          <div class="source-head">
+            <span class="source-kicker">{{ 'Fonte de dados' | t }}</span>
+            <time class="source-clock" [attr.datetime]="now().toISOString()">{{ clock() }}</time>
+          </div>
+          <strong class="source-status"><span class="dot" aria-hidden="true"></span>{{ connectionLabel() }}</strong>
+          <span class="source-label">{{ source.label }}</span>
+          <span class="source-date">{{ dateLabel() }}</span>
+          <button type="button" class="docs-btn" (click)="store.openDocs()" [pTooltip]="store.sidebarOpen() ? '' : t('Documentação')" tooltipPosition="right"
+                  [attr.aria-label]="'Abrir a documentação' | t">
+            <i class="pi pi-book" aria-hidden="true"></i><span>{{ 'Documentação' | t }}</span>
+          </button>
         </div>
       </aside>
 
@@ -79,6 +88,7 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
     </div>
     <flora-copilot />
     <flora-command-palette />
+    <flora-docs-dialog />
     <p-toast />
   `
 })
@@ -92,6 +102,9 @@ export class AppComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly source = this.repository.source;
+  readonly now = signal(new Date());
+  readonly clock = computed(() => this.now().toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  readonly dateLabel = computed(() => this.now().toLocaleDateString(LOCALE, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }));
   readonly lab = signal(this.router.url.startsWith('/ml'));
   readonly title = signal(t('Início'));
   readonly health = signal<'checking' | 'online' | 'offline'>('checking');
@@ -124,6 +137,7 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    interval(1000).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.now.set(new Date()));
     if (this.source.mocked) return;
     interval(15_000).pipe(startWith(0), takeUntilDestroyed(this.destroyRef)).subscribe(() =>
       this.http.get(`${this.source.apiBaseUrl}/api/status`).subscribe({

@@ -10,6 +10,8 @@ export class WorkspaceStore {
   readonly sidebarOpen = signal(this.read(SIDEBAR_KEY) !== 'closed');
   readonly copilotOpen = signal(false);
   readonly paletteOpen = signal(false);
+  readonly docsOpen = signal(false);
+  readonly docsTopic = signal('overview');
 
   constructor() {
     effect(() => {
@@ -24,6 +26,7 @@ export class WorkspaceStore {
   toggleSidebar(): void { this.sidebarOpen.update((v) => !v); }
   toggleCopilot(): void { this.copilotOpen.update((v) => !v); }
   openPalette(): void { this.paletteOpen.set(true); }
+  openDocs(topic = 'overview'): void { this.docsTopic.set(topic); this.docsOpen.set(true); }
 
   private read(key: string): string | null {
     try { return localStorage.getItem(key); } catch { return null; }
