@@ -49,6 +49,38 @@ def list_downloads(state, params=None):
     return json_success(data={"jobs": _store(state).list()})
 
 
+def _first(params: dict | None, key: str, default: str = "") -> str:
+    return ((params or {}).get(key) or [default])[0]
+
+
+def library_search(state, params=None):
+    """Discover studies (accession codes, title, biome…) before downloading anything."""
+    from flora.io import library
+
+    source = _first(params, "source", "curated")
+    try:
+        limit = int(_first(params, "limit", "20"))
+        page = int(_first(params, "page", "1"))
+    except ValueError as exc:
+        raise UiHttpError("limit and page must be integers", code="invalid_params") from exc
+    try:
+        studies = library.search(source, _first(params, "q"), _first(params, "biome"), limit, page)
+    except library.LibraryError as exc:
+        raise UiHttpError(str(exc), status=502 if "failed" in str(exc) else 400, code="library_error") from exc
+    return json_success(data={"source": source, "studies": studies})
+
+
+def library_runs(state, params=None):
+    """Run accessions of an ENA/SRA study, to hand to the SRA downloader."""
+    from flora.io import library
+
+    try:
+        runs = library.resolve_runs(_first(params, "study"), int(_first(params, "limit", "10")))
+    except (library.LibraryError, ValueError) as exc:
+        raise UiHttpError(str(exc), status=400, code="library_error") from exc
+    return json_success(data={"runs": runs})
+
+
 def download_mgnify(state, body: dict):
     from flora.io.downloaders import MGnifyDownloader
 

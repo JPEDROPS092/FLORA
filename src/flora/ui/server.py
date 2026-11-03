@@ -58,6 +58,8 @@ GET_ROUTES = {
     "/api/explore/summary": workspace.explore_summary,
     "/api/ml/experiments": ml.list_experiments,
     "/api/downloads": downloads.list_downloads,
+    "/api/downloads/library": downloads.library_search,
+    "/api/downloads/library/runs": downloads.library_runs,
     "/api/report/draft": report.report_draft,
     "/api/feature_matrix": ingest.get_feature_matrix,
     "/api/report/preview": report.preview_report,

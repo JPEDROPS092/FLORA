@@ -7,6 +7,8 @@ import {
   DiagnosticEntry,
   DownloadJob,
   DownloadRequest,
+  LibrarySource,
+  StudyEntry,
   ExplorationBundle,
   ExplorationQuery,
   ExportRequest,
@@ -384,6 +386,26 @@ export class MockFloraRepository extends FloraRepository {
   async downloads(): Promise<DownloadJob[]> {
     await wait();
     return this.jobs.map((job) => ({ ...job }));
+  }
+
+  async searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]> {
+    await wait();
+    const q = query.trim().toLowerCase();
+    const base = { description: '', biome: '', samples: 0, centre: '', bioproject: '', secondary: '', updated: '', origin: 'curated' as const, importable: true };
+    const all: StudyEntry[] = [
+      { ...base, source: 'synthetic', accession: 'SYNTHETIC', title: t('Coorte sintética'), description: t('Gerada localmente com seed; quatro biomas brasileiros. Dados não reais.'), biome: 'Synthetic', samples: 80, centre: 'FLORA', url: '' },
+      { ...base, source: 'emp', accession: 'EMP-R1', title: 'Earth Microbiome Project — Release 1', biome: 'Global', samples: 2000, centre: 'EMP · Qiita / UCSD', url: 'https://doi.org/10.5281/zenodo.890000' },
+      { ...base, source: 'mgnify', accession: 'MGYS00005116', title: t('Solo de floresta amazônica (MGnify)'), biome: 'Amazonian Forest', samples: 80, centre: 'MGnify', url: 'https://www.ebi.ac.uk/metagenomics/studies/MGYS00005116' },
+      { ...base, source: 'ena', accession: 'SRP151124', title: t('Solo tropical brasileiro (NCBI SRA)'), biome: 'Brazilian Tropical Soil', samples: 60, centre: 'NCBI SRA', url: 'https://www.ncbi.nlm.nih.gov/sra/?term=SRP151124' },
+      { ...base, source: 'ena', accession: 'ERP009703', title: t('Rizosfera amazônica'), biome: 'Amazonian Rhizosphere', samples: 120, centre: 'ENA', url: 'https://www.ebi.ac.uk/ena/browser/view/ERP009703' }
+    ];
+    const pool = source === 'curated' ? all : all.filter((e) => e.source === source);
+    return pool.filter((e) => !q || `${e.accession} ${e.title} ${e.biome}`.toLowerCase().includes(q));
+  }
+
+  async resolveRuns(): Promise<string[]> {
+    await wait();
+    return [];
   }
 
   async requestDownload(request: DownloadRequest): Promise<DownloadJob> {

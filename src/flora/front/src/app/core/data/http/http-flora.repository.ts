@@ -11,6 +11,8 @@ import {
   DiagnosticEntry,
   DownloadJob,
   DownloadRequest,
+  LibrarySource,
+  StudyEntry,
   ExplorationBundle,
   ExplorationQuery,
   ExportRequest,
@@ -38,7 +40,7 @@ import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
 import { LANG, t } from '../../i18n/i18n';
-import { Raw, toChart, toComparisons, toDifferential, toDownload, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
+import { Raw, toChart, toComparisons, toDifferential, toDownload, toStudy, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
 
 interface StatusResponse {
   success: boolean;
@@ -587,6 +589,16 @@ export class HttpFloraRepository extends FloraRepository {
   async downloads(): Promise<DownloadJob[]> {
     const res = await this.send<{ jobs: unknown[] }>('GET', '/api/downloads');
     return (res.jobs ?? []).map(toDownload);
+  }
+
+  async searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]> {
+    const res = await this.send<{ studies: unknown[] }>('GET', '/api/downloads/library', { params: { source, q: query, limit: 20 } });
+    return (res.studies ?? []).map(toStudy);
+  }
+
+  async resolveRuns(studyAccession: string): Promise<string[]> {
+    const res = await this.send<{ runs: string[] }>('GET', '/api/downloads/library/runs', { params: { study: studyAccession, limit: 10 } });
+    return res.runs ?? [];
   }
 
   async requestDownload(request: DownloadRequest): Promise<DownloadJob> {

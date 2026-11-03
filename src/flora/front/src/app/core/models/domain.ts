@@ -374,6 +374,25 @@ export interface DownloadRequest {
   accessions?: string[];
 }
 
+export type LibrarySource = 'curated' | 'mgnify' | 'ena';
+
+/** A public study listed in the library; `accession` is the code used to download it. */
+export interface StudyEntry {
+  source: string;
+  accession: string;
+  title: string;
+  description: string;
+  biome: string;
+  samples: number;
+  centre: string;
+  bioproject: string;
+  secondary: string;
+  updated: string;
+  url: string;
+  origin: 'curated' | 'live';
+  importable: boolean;
+}
+
 export interface DownloadJob {
   id: string;
   source: string;

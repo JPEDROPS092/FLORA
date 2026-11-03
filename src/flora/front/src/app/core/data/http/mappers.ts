@@ -2,6 +2,7 @@ import {
   ChartResult,
   DifferentialTaxon,
   DownloadJob,
+  StudyEntry,
   GroupComparison,
   IngestPreview,
   MlExperiment,
@@ -184,5 +185,24 @@ export function toDownload(raw: unknown): DownloadJob {
     artifacts: arr(j['artifacts']).map((a) => ({ label: str(a['label']), path: str(a['path']) })),
     mocked: false,
     createdAt: str(j['created_at'])
+  };
+}
+
+export function toStudy(raw: unknown): StudyEntry {
+  const s = obj(raw);
+  return {
+    source: str(s['source']),
+    accession: str(s['accession']),
+    title: str(s['title']),
+    description: str(s['description']),
+    biome: str(s['biome']),
+    samples: Number(s['samples']) || 0,
+    centre: str(s['centre']),
+    bioproject: str(s['bioproject']),
+    secondary: str(s['secondary']),
+    updated: str(s['updated']),
+    url: str(s['url']),
+    origin: s['origin'] === 'live' ? 'live' : 'curated',
+    importable: s['importable'] !== false
   };
 }

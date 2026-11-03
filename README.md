@@ -1,245 +1,134 @@
-# FLORA
+<p align="center">
+  <img src="docs/assets/branding/logos/logo-3-wordmark.jpg" alt="FLORA" width="420">
+</p>
 
-**Feature Learning and Omics Research Analytics**
+<p align="center">
+  <img src="docs/assets/branding/mascot/transparent/flora-mascot-wave.png" alt="FLORA mascot" width="160">
+</p>
 
-A Python library for 16S rRNA amplicon microbiome analysis, combining QIIME2/DADA2 processing, DuckDB analytics, Polars-based feature engineering, and scikit-learn/XGBoost ML pipelines.
+<h3 align="center">Feature Learning and Omics Research Analytics</h3>
+
+<p align="center">
+  🇺🇸 English · <a href="README.pt-BR.md">🇧🇷 Português</a>
+</p>
+
+<p align="center">
+  Python framework for 16S rRNA microbiome analysis: public data ingestion, DuckDB analytics,
+  feature engineering, machine learning and reporting, with a web interface.
+</p>
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white">
+  <img alt="DuckDB" src="https://img.shields.io/badge/DuckDB-FFF000?logo=duckdb&logoColor=black">
+  <img alt="Polars" src="https://img.shields.io/badge/Polars-CD792C?logo=polars&logoColor=white">
+  <img alt="Apache Parquet" src="https://img.shields.io/badge/Parquet-50ABF1?logo=apache&logoColor=white">
+  <img alt="scikit-learn" src="https://img.shields.io/badge/scikit--learn-F7931E?logo=scikitlearn&logoColor=white">
+  <img alt="XGBoost" src="https://img.shields.io/badge/XGBoost-017CEE?logo=xgboost&logoColor=white">
+  <img alt="Angular" src="https://img.shields.io/badge/Angular-21-DD0031?logo=angular&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
+  <img alt="MkDocs" src="https://img.shields.io/badge/MkDocs-526CFE?logo=materialformkdocs&logoColor=white">
+  <img alt="MIT License" src="https://img.shields.io/badge/License-MIT-green">
+</p>
 
 ---
 
-## Architecture
+## Overview
 
-```
-[QIIME2 / DADA2]
-      |
-[Export: BIOM / TSV]
-      |
-[DuckDB + Parquet — core analytics layer]
-      |
-[Feature Engineering SQL + Python/Polars]
-      |
-[ML Pipeline (sklearn / XGBoost / SHAP)]
-      |
-[Visualization + HTML Report]
-```
+<p align="center">
+  <img src="docs/draw/arch.png" alt="FLORA architecture: connectors, local disk, ingestion and DuckDB" width="900">
+</p>
 
-**Key design decisions:**
+Flow: **public sources → connectors → raw files → ingestion → DuckDB/Parquet → features → ML → visualization and report**.
 
-- DuckDB is the central query engine between ingestion and ML. All analytical joins, aggregations, and feature matrix generation happen via SQL.
-- Polars handles high-performance tabular transformations.
-- Parquet is the intermediate storage format. DuckDB reads Parquet directly without loading everything into memory.
-- No file-based temp state leaks between pipeline stages.
+- **DuckDB** is the central query engine between ingestion and ML.
+- **Polars** handles high-performance tabular transformations.
+- **Parquet** is the intermediate format; no temporary state leaks between stages.
+- Each **project** has its own DuckDB, raw files and manifest.
+
+Details: [Architecture](docs/architecture.md) · [ADRs](docs/adr/) · [Capability matrix](docs/architecture/capability-matrix.md)
 
 ---
 
 ## Installation
 
 ```bash
-pip install flora-bio
-```
-
-For development:
-
-```bash
-git clone https://github.com/flora-bio/flora
-cd flora
-pip install -e ".[dev]"
-```
-
-Conda environment:
-
-```bash
-conda env create -f environment.yml
+pip install flora-bio                      # usage
+git clone https://github.com/flora-bio/flora && cd flora
+pip install -e ".[dev]"                    # development
+conda env create -f environment.yml        # conda alternative
 conda activate flora
 ```
 
----
-
-## Quick Start
-
-```python
-from flora.pipelines import FLORAPipeline
-from flora.ml import MicrobiomeClassifier
-from flora.viz import plot_pcoa, plot_taxonomy_barplot
-from flora.reports import FLORAReport
-
-# Initialize pipeline (file-backed DuckDB)
-pipeline = FLORAPipeline(workdir="results/")
-
-# Ingest data
-pipeline.ingest_metadata("data/raw/metadata.tsv")
-pipeline.ingest_asv_table("data/raw/asv_table.tsv", wide_format=True)
-pipeline.ingest_taxonomy("data/raw/taxonomy.tsv")
-
-# Compute diversity
-diversity = pipeline.compute_diversity(sampling_depth=10000)
-
-# Get CLR-normalized feature matrix for ML
-feature_matrix = pipeline.get_feature_matrix(normalize="clr", min_prevalence=0.1)
-
-# ML: classification
-from flora.db import FloraDB
-db = pipeline.db
-
-train_df, test_df = db.slice(
-    train_filter="biome = 'Amazon'",
-    test_filter="biome = 'Cerrado'",
-    features="clr",
-    target_column="biome",
-)
-
-clf = MicrobiomeClassifier(model="random_forest", target_column="biome")
-result = clf.fit(train_df, test_df, cv_folds=5)
-print(f"Accuracy: {result.accuracy:.4f}  F1-macro: {result.f1_macro:.4f}")
-
-# Visualization
-taxon_agg = db.aggregate_by_taxon(level="phylum", group_by="biome")
-fig = plot_taxonomy_barplot(taxon_agg, level="phylum", group_by="biome")
-
-# Report
-report = FLORAReport(title="Amazonian Microbiome Analysis")
-report.add_metrics("Pipeline Summary", {
-    "Samples": len(feature_matrix),
-    "ASVs": len(feature_matrix.columns) - 1,
-    "Accuracy": f"{result.accuracy:.4f}",
-})
-report.add_plot("Taxonomic Composition", fig)
-report.save("results/report.html")
-```
+Requires Python 3.11+. Step-by-step guide and optional dependencies: [Installation](docs/installation.md).
 
 ---
 
-## DuckDB Analytics Core
+## Commands
 
-FloraDB exposes SQL over your data without loading it into memory:
+| Command | What it does |
+|---|---|
+| `flora ui` | Starts the web interface |
+| `flora download mgnify` | Downloads studies from MGnify |
+| `flora download sra` | Downloads runs from NCBI SRA (requires `sra-tools`) |
+| `flora download emp` | Downloads the Earth Microbiome Project (Release 1) |
+| `flora download synthetic` | Generates synthetic data, no internet needed |
+| `flora ingest [dir]` | Loads `metadata.tsv` / `manifest.tsv` into DuckDB |
+| `flora run config.yaml` | Runs the pipeline from a config file |
 
-```python
-from flora.db import FloraDB
+See each command's options with `flora <command> --help`.
 
-db = FloraDB.connect("results/flora.duckdb")
-
-# Ad-hoc SQL
-df = db.query("""
-    SELECT t.phylum, AVG(a.abundance) AS mean_abundance, COUNT(DISTINCT a.sample_id) AS n_samples
-    FROM asv a
-    JOIN taxonomy t USING(feature_id)
-    JOIN samples s USING(sample_id)
-    WHERE s.biome = 'Amazon'
-    GROUP BY t.phylum
-    ORDER BY mean_abundance DESC
-""").to_polars()
-
-# High-level helpers
-wide_matrix = db.pivot_asv(normalize="clr")
-taxon_summary = db.aggregate_by_taxon(level="genus", group_by="biome")
-train, test = db.slice("biome='Amazon'", "biome='Cerrado'", features="clr")
-```
-
----
-
-## Downloaders
-
-```python
-from flora.io import MGnifyDownloader, NCBISRADownloader
-
-# MGnify
-dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Forest")
-manifest = dl.fetch("MGYS00005116", output_dir="data/raw", max_samples=80)
-
-# NCBI SRA (requires sra-tools)
-sra = NCBISRADownloader(n_jobs=4)
-manifest = sra.fetch(["SRR12345678", "SRR12345679"], output_dir="data/raw")
-```
-
----
-
-## Feature Engineering
-
-```python
-from flora.feature_engineering import clr_transform, tss_transform, rarefy
-from flora.feature_engineering import filter_by_prevalence, select_by_importance
-from flora.feature_engineering import compute_pcoa, compute_umap
-
-# Normalize
-clr_df = clr_transform(wide_asv_df)
-tss_df = tss_transform(wide_asv_df)
-rarefied = rarefy(wide_asv_df, depth=10000)
-
-# Filter
-filtered = filter_by_prevalence(clr_df, min_prevalence=0.1)
-
-# Dimensionality reduction
-pcoa_df = compute_pcoa(tss_df, metric="braycurtis", n_components=3)
-umap_df = compute_umap(clr_df, n_components=2)
-```
-
----
-
-## Machine Learning
-
-```python
-from flora.ml import MicrobiomeClassifier, MicrobiomeClusterer, MicrobiomeRegressor
-from flora.ml import SHAPAnalyzer, HyperparameterTuner
-
-# Classification
-clf = MicrobiomeClassifier(model="xgboost", target_column="sample_type")
-result = clf.fit(train_df, test_df, cv_folds=5)
-
-# SHAP explanability
-shap = SHAPAnalyzer(model=result.model, feature_names=result.feature_names)
-shap_result = shap.explain(test_df)
-fig = shap.summary_plot(shap_result)
-
-# Hyperparameter tuning
-tuner = HyperparameterTuner("random_forest", task="classification", n_trials=50)
-best = tuner.tune(train_df)
-clf2 = MicrobiomeClassifier(model_params=best.best_params)
-
-# Clustering
-clusterer = MicrobiomeClusterer(method="hdbscan")
-clusters = clusterer.fit(pcoa_wide_df)
-
-# Regression (diversity index prediction)
-reg = MicrobiomeRegressor(model="random_forest", target_column="shannon")
-reg_result = reg.fit(train_df, test_df)
-```
-
----
-
-## Testing
+### Getting started in 3 steps
 
 ```bash
-pytest tests/ -v --cov=flora --cov-report=html
+flora download synthetic        # 1. example data
+flora ingest data/raw           # 2. ingest into DuckDB
+flora ui                        # 3. opens the UI at http://127.0.0.1:8765
 ```
 
-All tests use DuckDB in-memory. No external files or services required.
+Useful UI options: `--host`, `--port`, `--workdir`, `--config`, `--no-browser`, `--log-level`.
+
+Full guides: [Quick Start](docs/quickstart.md) · [User guide](docs/user_guide.md)
 
 ---
 
-## Web Interface
+## Web interface
 
-The current UI entrypoint remains:
+**Angular** SPA (`src/flora/front/`), served by `flora ui`. If the build is missing, the command shows a page explaining
+how to generate it.
 
 ```bash
-flora ui --host 127.0.0.1 --port 8765 --workdir results/ --log-level INFO
+cd src/flora/front && npm install && npm run build
 ```
 
-FLORA now serves a single frontend:
-
-- Angular SPA built from `src/flora/front/` and served from `src/flora/front/dist/`
-
-If the Angular build is absent, `flora ui` returns an explicit build-missing page with instructions instead of silently falling back to the legacy embedded UI.
-
-See `docs/architecture.md` and `docs/development.md` for the migration plan and frontend integration strategy.
+Documentation: [Interface](docs/ui.md) · [Projects and data sources](docs/projects.md) · [Graph guide](docs/graph_guide.md) · [Development](docs/development.md)
 
 ---
 
-## Supported Public Datasets
+## Tests
 
-| Dataset      | Source   | Biome                   | Samples |
-| ------------ | -------- | ----------------------- | ------- |
-| MGYS00005116 | MGnify   | Amazonian Forest        | ~80     |
-| SRP151124    | NCBI SRA | Brazilian Tropical Soil | ~60     |
-| ERP009703    | MGnify   | Amazonian Rhizosphere   | ~120    |
+```bash
+pytest tests/ -v --cov=flora
+```
+
+Tests use in-memory DuckDB, with no external files or services.
+
+---
+
+## Documentation
+
+Detailed documentation lives in `docs/` (browse it with `mkdocs serve`):
+
+| Topic | Document |
+|---|---|
+| Architecture and decisions | [architecture.md](docs/architecture.md), [adr/](docs/adr/) |
+| Installation and troubleshooting | [installation.md](docs/installation.md), [troubleshooting.md](docs/troubleshooting.md) |
+| Usage | [quickstart.md](docs/quickstart.md), [user_guide.md](docs/user_guide.md) |
+| Projects and source sync | [projects.md](docs/projects.md) |
+| Public datasets | [datasets.md](docs/datasets.md) |
+| Methods (normalization, diversity, ML) | [methods.md](docs/methods.md) |
+| Experimental evaluation and reports | [experimental_evaluation.md](docs/experimental_evaluation.md), [emp_report.md](docs/emp_report.md), [report.md](docs/report.md) |
+| Article | [article.md](docs/article.md) |
+| Contributing | [contributing.md](docs/contributing.md), [development.md](docs/development.md) |
 
 ---
 

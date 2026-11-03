@@ -4,6 +4,8 @@ import {
   DiagnosticEntry,
   DownloadJob,
   DownloadRequest,
+  LibrarySource,
+  StudyEntry,
   ExplorationBundle,
   ExplorationQuery,
   ClusterRequest,
@@ -52,4 +54,6 @@ export abstract class FloraRepository {
   abstract exportReport(request: ExportRequest): Promise<ScientificExport>;
   abstract downloads(): Promise<DownloadJob[]>;
   abstract requestDownload(request: DownloadRequest): Promise<DownloadJob>;
+  abstract searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]>;
+  abstract resolveRuns(studyAccession: string): Promise<string[]>;
 }
