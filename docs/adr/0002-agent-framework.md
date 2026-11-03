@@ -1,6 +1,6 @@
 # ADR 0002 — FLORA Scientific Agent Framework (proposta adaptada ao repositório)
 
-- **Status:** Proposto
+- **Status:** Proposto (revisão 2: Scientific Runtime)
 - **Data:** 2026-11-02
 - **Origem:** proposta LangGraph + FastMCP + Nextflow, auditada contra `dev` (`7e6cf01`)
 - **Princípio:** agentes decidem sobre workflows; a execução científica permanece
@@ -34,20 +34,69 @@ O primeiro entregável deve, portanto, reaproveitar o 16S já funcional.
 
 ## 2. Decisões
 
-1. **Não criar segunda infraestrutura.** Ferramentas MCP são *adaptadores finos*
-   sobre os casos de uso existentes (`FLORAPipeline`, `ml/`, `viz/`, `reports/`).
-2. **Contratos antes de agentes.** Modelos Pydantic de entrada/saída viram a fonte
-   única para: rotas HTTP (#5), schema das tools MCP e tipos do front.
-3. **Um fluxo vertical primeiro, em 16S** (já temos QC, taxonomia, alfa/beta, ML e
-   relatório): *registrar dataset → QC → diversidade/taxonomia → estatística →
-   interpretação → relatório*. Metagenômica shotgun (taxprofiler) vem depois.
-4. **LangGraph + FastMCP**, como proposto, mas atrás de uma interface `AgentBackend`
-   para que o motor simulado do front continue funcionando sem LLM nem rede.
-5. **Nextflow só quando houver etapa externa pesada.** No 16S em processo, o executor
-   é um `JobManager` local (thread/process pool) com o mesmo contrato que o executor
-   Nextflow terá.
-6. **Ferramentas recebem IDs de datasets registrados**, nunca caminhos ou shell
-   arbitrários do agente.
+1. **Scientific Runtime primeiro; agentes são consumidores.** A execução científica
+   (contratos, registry, políticas, jobs, proveniência) funciona sem LLM. UI, CLI, REST,
+   agente (LangGraph) e clientes MCP chamam o mesmo caminho computacional.
+2. **Sem segunda infraestrutura.** Ferramentas são *adaptadores finos* sobre `FLORAPipeline`,
+   `ml/`, `viz/` e `reports/`. Os módulos existentes não são movidos agora.
+3. **Contratos antes de agentes.** Pydantic v2 + JSON Schema são a fonte única para rotas
+   HTTP (#5), tools e tipos do front. Quatro entidades: `DatasetRef`, `ToolSpec`,
+   `ExecutionPlan`, `ExecutionRecord`.
+4. **O agente escolhe uma capacidade registrada, nunca uma função Python.** O runtime valida
+   compatibilidade e política antes de executar, e intermedeia toda chamada (inclusive de
+   modelos confiáveis). Ferramentas recebem IDs de datasets, nunca caminhos ou shell.
+5. **LangGraph e FastMCP opcionais**, atrás de `AgentBackend` (extras `agents`, `mcp`,
+   `local-llm`, `workflows`). O motor simulado do front continua sem LLM nem rede.
+6. **Coordenação em SQLite (WAL); DuckDB/Parquet só para análise.** Planos, aprovações,
+   jobs, eventos e checkpoints ficam em SQLite com um coordenador de escrita. Arquivos e
+   artefatos no filesystem gerenciado, referenciados por ID.
+7. **Jobs em processos isolados.** Cancelar precisa interromper o processo de fato;
+   `idempotency_key`, leases, heartbeats e reconciliação após reinício. Um job que perdeu
+   o processo nunca é marcado como concluído nem reexecutado sem verificar seus efeitos.
+   Retomar um grafo LangGraph e retomar um processo científico são estados distintos.
+8. **Primeiro domínio: 16S.** Shotgun, RNA-seq e multiômica entram depois como módulos
+   opcionais; o núcleo não vira framework genérico na v1. Nextflow só com a primeira etapa
+   externa pesada.
+9. **Local-first com `ModelRouter`.** Provedores Ollama, llama.cpp (embutido ou servidor) e
+   APIs compatíveis com OpenAI, escolhidos por papel (roteamento/metadados, planejamento e
+   seleção de ferramentas, interpretação) e por orçamento de VRAM. Dados saem da máquina
+   apenas por política explícita (`external_data_transfer: deny_by_default`,
+   `remote_fallback: approval_required`). A camada `flora.llm` e a tela *Modelos de IA* já
+   cobrem provedor e modelo; falta o roteamento por papel.
+10. **Modelo de implantação:** usuário local confiável. O servidor HTTP **não** é seguro para
+    exposição pública; auth, autorização e isolamento são pré-requisito (#6).
+
+### Correções específicas
+
+- `differential_taxa` só é implementada com método estatístico adequado a dados
+  composicionais (ex.: ANCOM-BC2), com versão e pressupostos documentados. Não é um teste
+  convencional sobre abundâncias relativas.
+- Cancelamento e retomada seguem a decisão 7.
+
+### Validação em três camadas
+
+| Camada | Tipo | Exemplos |
+|---|---|---|
+| Contratual | Determinística | schema, tipos, parâmetros, integridade de arquivos |
+| Científica | Determinística | replicatas, desenho, FDR, composicionalidade, vazamento treino/teste, dispersão (PERMANOVA) |
+| Interpretativa | Assistida por LLM | explicações, hipóteses, limitações; sempre rotulada como interpretação |
+
+O agente pode recomendar um método; o validador rejeita configurações incompatíveis.
+Cada número de relatório aponta para o artefato, método e execução que o produziram.
+
+### Modelos locais de partida (RTX 3050 6 GB; segunda GPU de 4 GB opcional)
+
+Avaliar nas mesmas ferramentas do FLORA, medindo `tool_call_success_rate`,
+`structured_output_validity`, `tokens_per_second` e `peak_vram_mb`:
+
+| Ordem | Modelo | Papel sugerido |
+|---|---|---|
+| 1 | Qwen3.5 4B | agente principal: planejamento e chamada de ferramentas |
+| 2 | IBM Granite 4.2 3B | validar argumentos e gerar JSON estruturado |
+| 3 | Phi-4-mini | extração de metadados, classificação de tarefas |
+
+Com duas GPUs, um servidor por GPU (modelo leve na de 4 GB, científico na de 6 GB) antes de
+tentar dividir um modelo. Tags Ollama e consumo de VRAM acima são **hipóteses a medir**.
 
 ## 3. Estrutura proposta (mapeada ao pacote atual)
 
@@ -98,19 +147,31 @@ com logs/cancelar, e **painel de proveniência** por resultado.
 
 ## 6. Roadmap ajustado
 
-| Fase | Entregável | Prior. | Depende de |
-|---|---|---|---|
-| 0 | Modelos Pydantic das rotas existentes + testes de contrato | P0 | #5 |
-| 1 | `agent_tools` registry + adapters 16S (QC, diversidade, taxonomia, ML, relatório) | P0 | 0 |
-| 2 | `JobManager` local + estado persistido + manifesto de proveniência | P0 | 1 |
-| 3 | Grafo LangGraph com checkpoints e aprovação; `/api/agent/*`; front troca simulado por HTTP | P0 | 1, 2 |
-| 4 | Segurança mínima (auth, CORS, sandbox de paths, limites) | P0 | #6, antes de expor 3 |
-| 5 | Servidor FastMCP (mesmas tools) para clientes externos | P1 | 1 |
-| 6 | MCP de bancos (NCBI/SRA/GEO/UniProt/PubMed) com cache e limites | P1 | 3 |
-| 7 | Validador científico + relatório com RO-Crate | P1 | 2, 3 |
-| 8 | Metagenômica shotgun via `nf-core/taxprofiler` + executor Nextflow | P1 | 2 |
-| 9 | Benchmark reprodutível de agentes (casos com resposta conhecida no mock) | P1 | 3 |
-| 10 | RNA-seq (`nf-core/rnaseq`, DESeq2), metatranscriptômica, multiômica | P2 | 8 |
+| Etapa | Entrega | Critério de aceite |
+|---|---|---|
+| P0.1 | Inventário das 15 rotas + contratos Pydantic | compatibilidade HTTP preservada |
+| P0.2 | `DatasetRef`, `ToolSpec`, `ExecutionPlan` | schemas e testes completos |
+| P0.3 | Registry com ferramentas 16S existentes | execução sem LLM |
+| P0.4 | SQLite + JobManager | persistência, cancelamento e recuperação testados |
+| P0.5 | Manifesto incremental e hashes | cada resultado rastreável |
+| P0.6 | Política de segurança | auth, escopo, paths e aprovação testados (#6) |
+| P0.7 | LangGraph + backend simulado | mesmo contrato para ambos |
+| P0.8 | `ModelRouter` por papel sobre `flora.llm` | modelo local executa chamadas válidas |
+| P0.9 | Integração com a UI existente | plano, aprovação, status e artefatos reais |
+| P0.10 | Benchmark 16S | casos conhecidos, resultados reproduzíveis |
+| P1.1 | FastMCP | ferramentas externas com autenticação |
+| P1.2 | Bases científicas (NCBI, ENA, GEO, UniProt) | cache e limites |
+| P1.3 | RO-Crate | exportação verificável |
+| P1.4 | Nextflow | primeiro pipeline externo |
+| P2 | Shotgun, RNA-seq, multiômica | extensões independentes por domínio |
+
+PRs pequenas: contratos e compatibilidade primeiro; registry e adaptadores 16S em outra.
+Não criar vários agentes nem dezenas de MCPs antes de uma execução vertical 16S verificável.
+
+**Definition of Done (v1):** análise 16S completa sem LLM; mesmo workflow pedido por agente
+ou UI; ferramenta inválida rejeitada antes de executar; etapas caras exigem aprovação; jobs
+canceláveis e recuperáveis; resultados com hash, versões, parâmetros e proveniência; front
+mostra planos, logs e artefatos reais; testes protegem os casos 16S atuais.
 
 ## 7. Riscos e perguntas em aberto
 
