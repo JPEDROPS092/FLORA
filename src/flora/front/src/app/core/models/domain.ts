@@ -567,3 +567,45 @@ export interface WorkspaceInfo {
   dbPath: string;
   persistent: boolean;
 }
+
+export interface TreeStatus {
+  present: boolean;
+  valid?: boolean;
+  tips: number;
+  overlap: number;
+  features: number;
+  error?: string;
+}
+
+/** Result table of an R workflow (ALDEx2, ANCOM-BC2, vegan) plus an optional volcano plot. */
+export interface EngineResults {
+  kind: string;
+  columns: string[];
+  rows: Record<string, string>[];
+  total: number;
+  plot: { data: Record<string, unknown>[]; layout: Record<string, unknown> } | null;
+}
+
+/** A conda environment found on disk that contains QIIME 2 and/or R's DADA2. */
+export interface EngineEnvironment {
+  name: string;
+  prefix: string;
+  qiime: string | null;
+  python: string | null;
+  rscript: string | null;
+  qiime2PythonApi: boolean;
+  dada2RPackage: boolean;
+}
+
+/** Executables FLORA uses for QIIME 2 (`qiime`, `python`) and R (`rscript`); empty means "whatever is on PATH". */
+export interface EngineConfig {
+  qiime?: string;
+  python?: string;
+  rscript?: string;
+}
+
+export interface EngineEnvironments {
+  environments: EngineEnvironment[];
+  config: EngineConfig;
+  effective: EngineConfig;
+}

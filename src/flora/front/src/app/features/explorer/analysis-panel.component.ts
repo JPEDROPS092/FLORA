@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { CheckboxModule } from 'primeng/checkbox';
 import { MessageService, PrimeTemplate } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -9,7 +10,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 
 import { FloraRepository } from '../../core/data/flora.repository';
-import { AnalysisKind, ChartResult, GroupColumn } from '../../core/models/domain';
+import { ChartResult, GroupColumn, TreeStatus } from '../../core/models/domain';
 import { TPipe } from '../../core/i18n/t.pipe';
 import { t } from '../../core/i18n/i18n';
 import { PlotCardComponent } from '../../shared/plot-card.component';
@@ -24,7 +25,7 @@ const toChart = (plot: Json | undefined): ChartResult =>
 @Component({
   selector: 'flora-analysis-panel',
   standalone: true,
-  imports: [DecimalPipe, FormsModule, TPipe, PrimeTemplate, ButtonModule, InputNumberModule, SelectModule, TableModule, TagModule, PlotCardComponent],
+  imports: [DecimalPipe, FormsModule, CheckboxModule, TPipe, PrimeTemplate, ButtonModule, InputNumberModule, SelectModule, TableModule, TagModule, PlotCardComponent],
   template: `
     @if (mode() !== 'qc') {
       <div class="bar">
@@ -84,11 +85,30 @@ const toChart = (plot: Json | undefined): ChartResult =>
           <p-inputnumber [(ngModel)]="permutations" [min]="99" [max]="9999" [step]="100" [attr.aria-label]="'Permutações' | t" />
           <p-button type="button" [label]="'Rodar PERMANOVA + PERMDISP' | t" [loading]="busyBeta()" (onClick)="runBeta()" />
         </div>
+        @if (isTreeMetric()) {
+          <div class="tree-box">
+            @if (tree(); as tr) {
+              @if (tr.present && tr.valid !== false) {
+                <span class="ok">{{ 'Árvore carregada:' | t }} {{ tr.tips | number }} {{ 'pontas' | t }}, {{ tr.overlap | number }} {{ 'de' | t }} {{ tr.features | number }} {{ 'features encontradas.' | t }}</span>
+              } @else if (tr.present) {
+                <span class="field-error">{{ tr.error }}</span>
+              } @else {
+                <span class="muted">{{ 'UniFrac precisa de uma árvore filogenética (Newick) cujas pontas tenham os IDs das features.' | t }}</span>
+              }
+            }
+            <label class="file-btn">{{ 'Enviar árvore (.nwk)' | t }}<input type="file" accept=".nwk,.newick,.tree,.tre,.txt" (change)="onTree($event)" /></label>
+          </div>
+        }
+        <div class="inline">
+          <p-checkbox inputId="xcheck" [(ngModel)]="crosscheck" [binary]="true" />
+          <label for="xcheck">{{ 'Conferir a PERMANOVA com o scikit-bio (se instalado)' | t }}</label>
+        </div>
         @if (beta(); as b) {
           <div class="chips">
             <span>PERMANOVA: F=<strong>{{ b['permanova'].f | number:'1.2-2' }}</strong> · R²=<strong>{{ b['permanova'].r2 | number:'1.3-3' }}</strong> · p=<strong [class.sig]="b['permanova'].p < 0.05">{{ b['permanova'].p | number:'1.4-4' }}</strong></span>
             <span>PERMDISP: F=<strong>{{ b['permdisp'].f | number:'1.2-2' }}</strong> · p=<strong [class.sig]="b['permdisp'].p < 0.05">{{ b['permdisp'].p | number:'1.4-4' }}</strong></span>
             <span>{{ 'permutações:' | t }} {{ b['permanova'].permutations }}</span>
+            @if (b['crosscheck']; as x) { <span>{{ x.backend }}: F=<strong>{{ x.f | number:'1.2-2' }}</strong> · p=<strong>{{ x.p | number:'1.4-4' }}</strong></span> }
           </div>
           @for (n of b['notes']; track n) { <p class="note">{{ n }}</p> }
           <flora-plot [result]="betaChart()" [height]="340" />
@@ -121,6 +141,11 @@ const toChart = (plot: Json | undefined): ChartResult =>
     .muted { color: var(--flora-muted); font-size: .84rem; }
     .sig { color: var(--flora-ok); font-weight: 700; }
     h3 { margin: 18px 0 4px; font-size: 1rem; }
+    .tree-box { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: .84rem; margin: 6px 0; }
+    .tree-box .ok { color: var(--flora-ok); }
+    .file-btn { border: 1px solid var(--flora-border); border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+    .file-btn input { display: none; }
+    .inline { display: flex; gap: 8px; align-items: center; font-size: .84rem; margin: 6px 0; }
   `
 })
 export class AnalysisPanelComponent {
@@ -145,6 +170,8 @@ export class AnalysisPanelComponent {
   readonly busyBeta = signal(false);
   readonly busyVolcano = signal(false);
 
+  crosscheck = false;
+  readonly tree = signal<TreeStatus | null>(null);
   metric = 'bray_curtis';
   permutations = 999;
   rank = 'genus';
@@ -154,7 +181,8 @@ export class AnalysisPanelComponent {
     { label: 'Bray–Curtis', value: 'bray_curtis' },
     { label: 'Jaccard', value: 'jaccard' },
     { label: 'Aitchison (CLR)', value: 'aitchison' },
-    { label: t('UniFrac (exige árvore, via QIIME 2)'), value: 'unifrac' }
+    { label: t('UniFrac não ponderado (árvore)'), value: 'unifrac' },
+    { label: t('UniFrac ponderado (árvore)'), value: 'weighted_unifrac' }
   ];
   readonly ranks = [
     { label: t('Filo'), value: 'phylum' },
@@ -175,6 +203,22 @@ export class AnalysisPanelComponent {
         void this.load(mode);
       });
     });
+  }
+
+  isTreeMetric(): boolean {
+    return this.metric === 'unifrac' || this.metric === 'weighted_unifrac';
+  }
+
+  async onTree(event: Event): Promise<void> {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    try {
+      await this.repository.saveTree(await file.text());
+      this.messages.add({ severity: 'success', summary: t('Árvore'), detail: t('Árvore salva no projeto.') });
+      this.tree.set(await this.repository.treeStatus());
+    } catch (error) {
+      this.messages.add({ severity: 'error', summary: t('Árvore'), detail: error instanceof Error ? error.message : t('Falha inesperada.') });
+    }
   }
 
   values(): string[] {
@@ -207,7 +251,10 @@ export class AnalysisPanelComponent {
     try {
       if (mode === 'qc') this.qc.set(await this.repository.analysis('qc', { min_reads: this.minReads() }));
       else if (mode === 'rarefaction') this.rare.set(await this.repository.analysis('rarefaction', { group_by: this.groupBy(), depth: this.minReads() }));
-      else this.alpha.set(await this.repository.analysis('alpha_stats', { group_by: this.groupBy() }));
+      else {
+        this.alpha.set(await this.repository.analysis('alpha_stats', { group_by: this.groupBy() }));
+        this.tree.set(await this.repository.treeStatus().catch(() => null));
+      }
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : t('Falha inesperada.'));
     } finally {
@@ -219,7 +266,9 @@ export class AnalysisPanelComponent {
     this.busyBeta.set(true);
     this.error.set('');
     try {
-      this.beta.set(await this.repository.analysis('beta_stats', { group_by: this.groupBy(), metric: this.metric, permutations: this.permutations }));
+      const params: Record<string, string | number> = { group_by: this.groupBy(), metric: this.metric, permutations: this.permutations };
+      if (this.crosscheck) params['backend'] = 'skbio';
+      this.beta.set(await this.repository.analysis('beta_stats', params));
     } catch (error) {
       this.beta.set(null);
       this.error.set(error instanceof Error ? error.message : t('Falha inesperada.'));

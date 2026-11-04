@@ -7,7 +7,11 @@ import {
   DownloadJob,
   DownloadRequest,
   AnalysisKind,
+  EngineConfig,
+  EngineEnvironments,
   EngineInfo,
+  EngineResults,
+  TreeStatus,
   EngineJob,
   WorkspaceInfo,
   DatasetTable,
@@ -74,6 +78,11 @@ export abstract class FloraRepository {
   abstract applyQc(body: Record<string, unknown>): Promise<Record<string, unknown>>;
   abstract analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }>;
   abstract saveTaxonomyDb(value: string): Promise<void>;
+  abstract treeStatus(): Promise<TreeStatus>;
+  abstract saveTree(newick: string): Promise<{ tips: number; overlap: number; features: number }>;
+  abstract engineResults(id: string): Promise<EngineResults>;
+  abstract engineEnvironments(): Promise<EngineEnvironments>;
+  abstract saveEngineEnvironment(config: EngineConfig): Promise<EngineInfo[]>;
   abstract engines(fresh?: boolean): Promise<EngineInfo[]>;
   abstract runEngine(body: Record<string, unknown>): Promise<EngineJob>;
   abstract engineJobs(): Promise<EngineJob[]>;

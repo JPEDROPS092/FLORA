@@ -13,7 +13,11 @@ import {
   ExploreSchema,
   TablePage,
   AnalysisKind,
+  EngineConfig,
+  EngineEnvironments,
   EngineInfo,
+  EngineResults,
+  TreeStatus,
   EngineJob,
   WorkspaceInfo,
   LibrarySource,
@@ -316,6 +320,26 @@ export class MockFloraRepository extends FloraRepository {
 
   async saveTaxonomyDb(): Promise<void> {
     await wait();
+  }
+
+  async treeStatus(): Promise<TreeStatus> {
+    return { present: false, tips: 0, overlap: 0, features: 0 };
+  }
+
+  async saveTree(): Promise<{ tips: number; overlap: number; features: number }> {
+    throw new Error(t('Esta análise só está disponível com a API conectada.'));
+  }
+
+  async engineResults(): Promise<EngineResults> {
+    throw new Error(t('Os motores externos só estão disponíveis com a API conectada.'));
+  }
+
+  async engineEnvironments(): Promise<EngineEnvironments> {
+    return { environments: [], config: {}, effective: {} };
+  }
+
+  async saveEngineEnvironment(_config: EngineConfig): Promise<EngineInfo[]> {
+    throw new Error(t('Os motores externos só estão disponíveis com a API conectada.'));
   }
 
   async engines(): Promise<EngineInfo[]> {

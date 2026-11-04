@@ -17,7 +17,11 @@ import {
   ExploreSchema,
   TablePage,
   AnalysisKind,
+  EngineConfig,
+  EngineEnvironments,
   EngineInfo,
+  EngineResults,
+  TreeStatus,
   EngineJob,
   WorkspaceInfo,
   LibrarySource,
@@ -171,11 +175,33 @@ export class HttpFloraRepository extends FloraRepository {
     minAbundance: 0
   };
 
+  /** True once the user chose a depth; until then the default follows the data. */
+  private depthChosen = false;
+  private depthChecked = false;
+
   constructor(private readonly http: HttpClient) {
     super();
   }
 
+  /**
+   * The default rarefaction depth (10 000 reads) is larger than every sample of a shallow dataset, which would
+   * silently drop all of them. Until the user picks a depth, cap it to the shallowest sample, rounded down.
+   */
+  private async fitDepth(): Promise<void> {
+    if (this.depthChosen || this.depthChecked) return;
+    try {
+      const reads = (await this.exploreSchema()).reads;
+      if (reads && reads.min > 0) {
+        this.normalization.rarefactionDepth = Math.min(this.normalization.rarefactionDepth, Math.max(Math.floor(reads.min / 100) * 100, 100));
+        this.depthChecked = true; // only once data exists: an empty workspace is checked again next time
+      }
+    } catch {
+      /* without a reachable schema the default stays */
+    }
+  }
+
   async dashboard(): Promise<DashboardSnapshot> {
+    await this.fitDepth();
     const [status, d] = await Promise.all([
       this.send<StatusResponse>('GET', '/api/status'),
       this.send<Raw>('GET', '/api/dashboard', { params: { lang: LANG, min_reads: this.normalization.rarefactionDepth } })
@@ -293,6 +319,7 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async pipeline(): Promise<PipelineSnapshot> {
+    await this.fitDepth();
     const res = await this.send<Raw>('GET', '/api/pipeline', { params: { lang: LANG, min_reads: this.normalization.rarefactionDepth } });
     const counts = (res['counts'] ?? {}) as Record<string, number>;
     const steps = (res['steps'] ?? {}) as Record<string, { status?: string; at?: string; message?: string }>;
@@ -361,6 +388,7 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async applyNormalization(config: NormalizationConfig): Promise<PipelineSnapshot> {
+    this.depthChosen = true;
     this.normalization = { ...config };
     try {
       await this.send<MatrixResponse>('GET', '/api/feature_matrix', {
@@ -403,6 +431,36 @@ export class HttpFloraRepository extends FloraRepository {
 
   async saveTaxonomyDb(value: string): Promise<void> {
     await this.send('POST', '/api/analysis/settings', { body: { taxonomy_db: value } });
+  }
+
+  async treeStatus(): Promise<TreeStatus> {
+    return this.send<TreeStatus>('GET', '/api/analysis/tree');
+  }
+
+  async saveTree(newick: string): Promise<{ tips: number; overlap: number; features: number }> {
+    return this.send('POST', '/api/analysis/tree', { body: { newick } });
+  }
+
+  async engineResults(id: string): Promise<EngineResults> {
+    return this.send<EngineResults>('GET', '/api/engines/jobs/results', { params: { id } });
+  }
+
+  async engineEnvironments(): Promise<EngineEnvironments> {
+    const res = await this.send<{ environments: Record<string, unknown>[]; config: EngineConfig; effective: EngineConfig }>('GET', '/api/engines/environments');
+    return {
+      environments: (res.environments ?? []).map((e) => ({
+        name: String(e['name']), prefix: String(e['prefix']),
+        qiime: (e['qiime'] as string | null) ?? null, python: (e['python'] as string | null) ?? null, rscript: (e['rscript'] as string | null) ?? null,
+        qiime2PythonApi: e['qiime2_python_api'] === true, dada2RPackage: e['dada2_r_package'] === true
+      })),
+      config: res.config ?? {},
+      effective: res.effective ?? {}
+    };
+  }
+
+  async saveEngineEnvironment(config: EngineConfig): Promise<EngineInfo[]> {
+    const res = await this.send<{ engines: EngineInfo[] }>('POST', '/api/engines/config', { body: config });
+    return res.engines ?? [];
   }
 
   async engines(fresh = false): Promise<EngineInfo[]> {
@@ -448,6 +506,7 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async exploration(query: ExplorationQuery): Promise<ExplorationBundle> {
+    await this.fitDepth();
     const group = query.groupBy || 'biome';
     const [pcoa, alpha, beta, taxonomy, relations] = await Promise.all([
       settleChart(() => this.loadPlot('/api/viz/pcoa', { normalize: query.normalize, color_by: group })),
