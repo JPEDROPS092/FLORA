@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 import requests
 
@@ -64,3 +66,27 @@ def test_remote_failure_becomes_http_error(monkeypatch):
     assert err.value.status == 502
     with pytest.raises(UiHttpError):
         downloads.library_search(None, {"source": ["nope"]})
+
+
+def test_mgnify_without_fastq_is_reported_as_failure(tmp_path, monkeypatch):
+    from flora.io import downloaders
+
+    def fake_fetch(self, study_accession, output_dir, max_samples):
+        manifest = tmp_path / "manifest.tsv"
+        manifest.write_text("sample-id\tforward-absolute-filepath\treverse-absolute-filepath\n")
+        return manifest
+
+    monkeypatch.setattr(downloaders.MGnifyDownloader, "fetch", fake_fetch)
+    with pytest.raises(UiHttpError) as err:
+        downloads.download_mgnify(SimpleNamespace(workdir=tmp_path), {"study_accession": "MGYS1", "output_dir": str(tmp_path)})
+    assert err.value.code == "no_fastq"
+
+
+def test_send_json_ignores_disconnected_client():
+    from flora.ui.http import send_json
+
+    class Handler:
+        def send_response(self, *_):
+            raise BrokenPipeError
+
+    send_json(Handler(), {"ok": True})  # must not raise

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler
 from typing import Any
+
+logger = logging.getLogger("flora.ui.http")
 
 
 @dataclass(slots=True)
@@ -47,12 +50,16 @@ def json_error(error: UiHttpError) -> dict[str, Any]:
 def send_json(handler: BaseHTTPRequestHandler, data: dict[str, Any], *, status: int = 200) -> None:
     """Send a JSON response."""
     body = json.dumps(data, default=str).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.end_headers()
-    handler.wfile.write(body)
+    try:
+        handler.send_response(status)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.end_headers()
+        handler.wfile.write(body)
+    except (BrokenPipeError, ConnectionResetError):
+        # The browser navigated away or cancelled the request; nobody is left to answer.
+        logger.debug("Client disconnected before the response was sent")
 
 
 def send_html(handler: BaseHTTPRequestHandler, html: str, *, status: int = 200) -> None:

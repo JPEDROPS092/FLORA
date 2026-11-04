@@ -221,6 +221,17 @@ def download_mgnify(state, body: dict):
     except Exception as exc:
         raise UiHttpError(str(exc), code="download_failed") from exc
 
+    with open(manifest, encoding="utf-8") as fh:
+        n_files = max(sum(1 for _ in fh) - 1, 0)
+    if n_files == 0:
+        # MGnify serves processed analyses, not raw reads: the sample metadata was saved but no FASTQ exists here.
+        raise UiHttpError(
+            f"MGnify has no FASTQ files for {study}. Sample metadata was saved in {output_dir}, "
+            "but the manifest is empty. Raw reads live in ENA: pick the study under ENA / SRA to download them.",
+            code="no_fastq",
+            details={"metadata": str(Path(output_dir) / "metadata.tsv")},
+        )
+
     return json_success(data={"manifest": str(manifest), "output_dir": output_dir})
 
 
