@@ -54,6 +54,8 @@ def _describe(folder: Path, origin: str, root: Path) -> dict | None:
     meta = found.get("metadata")
     missing = [k for k in _FILES if k not in found]
     newest = max((p.stat().st_mtime for p in found.values()), default=folder.stat().st_mtime)
+    raw_reads_only = bool(has_fastq and "asv" not in found)
+    metadata_only = bool(meta and "asv" not in found and not raw_reads_only)
     return {
         "id": str(folder),
         "label": str(folder.relative_to(root)) if folder != root else folder.name,
@@ -62,7 +64,9 @@ def _describe(folder: Path, origin: str, root: Path) -> dict | None:
         "files": {k: str(v) for k, v in found.items()},
         "missing": missing,
         "complete": not missing,
-        "raw_reads_only": bool(has_fastq and not found),
+        "raw_reads_only": raw_reads_only,
+        "metadata_only": metadata_only,
+        "analyzable": not missing and not raw_reads_only,
         "samples": _rows(meta) if meta else 0,
         "columns": _header(meta) if meta else [],
         "modified": datetime.fromtimestamp(newest, timezone.utc).isoformat(timespec="seconds"),

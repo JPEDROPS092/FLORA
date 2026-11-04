@@ -17,6 +17,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "preview.biom": {"pt": "Arquivo BIOM: a correspondência de amostras só é conferida após a ingestão.", "en": "BIOM file: sample matching is only checked after ingestion."},
     "preview.no_overlap": {"pt": "Nenhuma amostra coincide entre metadados e tabela ASV.", "en": "No sample matches between metadata and ASV table."},
     "preview.read_error": {"pt": "Não foi possível ler {what}: {err}", "en": "Could not read {what}: {err}"},
+    "preview.threshold_above_max": {
+        "pt": "O limiar de {cut} reads está acima de todas as amostras deste arquivo (máximo {max}). A sugestão é {suggested} (mínimo) — amostras abaixo dele seriam descartadas na rarefação.",
+        "en": "The {cut}-read threshold is above every sample in this file (maximum {max}). The suggestion is {suggested} (the minimum) — samples below it would be dropped at rarefaction.",
+    },
     # --- explorer --------------------------------------------------------
     "explore.distance_note": {"pt": "Métrica pedida: {metric}. Valores calculados sobre {n} amostras.", "en": "Requested metric: {metric}. Values computed over {n} samples."},
     "explore.few_groups": {"pt": "Testes diferenciais exigem pelo menos dois grupos com 2+ amostras.", "en": "Differential tests need at least two groups with 2+ samples."},
@@ -27,6 +31,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "ml.lim.impurity": {"pt": "A importância vem da impureza do modelo (não SHAP); descreve o modelo, não um efeito biológico.", "en": "Importance comes from model impurity (not SHAP); it describes the model, not a biological effect."},
     "ml.lim.no_proba": {"pt": "O modelo não devolveu probabilidades: sem curva ROC.", "en": "The model returned no probabilities: no ROC curve."},
     "ml.lim.split": {"pt": "A divisão treino/teste é a dos filtros SQL informados, sem reamostragem.", "en": "The train/test split is the one given by the SQL filters, with no resampling."},
+    "ml.lim.auto_split": {"pt": "Divisão automática estratificada ({pct}% teste), uma porção de cada classe.", "en": "Automatic stratified split ({pct}% test), one share of each class."},
     "ml.lim.compositional": {"pt": "Dados composicionais esparsos: transformações como CLR comprimem zeros e podem inflar correlações.", "en": "Sparse compositional data: transforms such as CLR compress zeros and can inflate correlations."},
     "ml.param.model": {"pt": "Modelo", "en": "Model"},
     "ml.param.target": {"pt": "Alvo", "en": "Target"},

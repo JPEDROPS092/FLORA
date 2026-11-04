@@ -126,7 +126,11 @@ export function toPreview(raw: unknown): IngestPreview {
       metadataOnly: num(s['metadata_only']),
       asvOnly: num(s['asv_only']),
       lowDepth: num(s['low_depth']),
-      totalAsvs: num(s['total_asvs'])
+      totalAsvs: num(s['total_asvs']),
+      readsMin: num(s['reads_min']),
+      readsMedian: num(s['reads_median']),
+      readsMax: num(s['reads_max']),
+      suggestedDepth: num(s['suggested_depth'])
     },
     histogram: toFigure(p['histogram']),
     mocked: false,
@@ -295,6 +299,8 @@ export function toLocalDataset(raw: unknown): LocalDataset {
     missing: arr(d['missing']).map((m) => String(m)),
     complete: d['complete'] === true,
     rawReadsOnly: d['raw_reads_only'] === true,
+    metadataOnly: d['metadata_only'] === true,
+    analyzable: d['analyzable'] !== false && d['complete'] === true && d['raw_reads_only'] !== true,
     samples: Number(d['samples']) || 0,
     columns: arr(d['columns']).map((c) => String(c)),
     modified: str(d['modified'])

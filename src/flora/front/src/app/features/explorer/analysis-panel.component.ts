@@ -69,6 +69,14 @@ const toChart = (plot: Json | undefined): ChartResult =>
         }
       }
       @case ('stats') {
+        @if (alpha()?.['caution']; as caution) {
+          @if (caution.length) { <p class="note" role="status">{{ caution.join(' ') }}</p> }
+        }
+        @if (values().length > 2) {
+          <p class="note" role="status">{{ 'Há {n} grupos. O volcano compara só dois: escolha o grupo A e o grupo B.' | t: { n: values().length } }}</p>
+        } @else if (values().length === 1) {
+          <p class="note" role="status">{{ 'É preciso pelo menos 2 grupos para Kruskal-Wallis, PERMANOVA e volcano.' | t }}</p>
+        }
         <h3>{{ 'Diversidade alfa' | t }}</h3>
         @if (alpha(); as a) {
           <p-table [value]="a['tests']">
@@ -197,8 +205,9 @@ export class AnalysisPanelComponent {
       const mode = this.mode();
       const initial = this.initialGroup();
       const columns = this.groupColumns();
+      const readsCut = this.minReadsInput();
       untracked(() => {
-        this.minReads.set(this.minReadsInput());
+        this.minReads.set(readsCut);
         if (!this.groupBy() || !columns.some((c) => c.name === this.groupBy())) this.groupBy.set(initial || columns[0]?.name || '');
         void this.load(mode);
       });
@@ -263,6 +272,12 @@ export class AnalysisPanelComponent {
   }
 
   async runBeta(): Promise<void> {
+    const samples = Number(this.alpha()?.['n_samples'] ?? 0);
+    if (this.values().length < 2) {
+      this.error.set(t('É preciso pelo menos 2 grupos para comparar. Escolha outra coluna.'));
+      return;
+    }
+    if (samples > 0 && samples < 6 && !window.confirm(t('Há só {n} amostras. Testes com menos de 6 têm pouco poder. Continuar mesmo assim?', { n: samples }))) return;
     this.busyBeta.set(true);
     this.error.set('');
     try {
@@ -278,6 +293,10 @@ export class AnalysisPanelComponent {
   }
 
   async runVolcano(): Promise<void> {
+    if (this.values().length > 2 && (!this.contrastA || !this.contrastB || this.contrastA === this.contrastB)) {
+      this.error.set(t('Há {n} grupos. Escolha dois diferentes para o volcano.', { n: this.values().length }));
+      return;
+    }
     this.busyVolcano.set(true);
     this.error.set('');
     try {

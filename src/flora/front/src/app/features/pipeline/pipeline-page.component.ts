@@ -14,7 +14,7 @@ import { TagModule } from 'primeng/tag';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 
 import { FloraRepository } from '../../core/data/flora.repository';
-import { IngestOutcome, IngestPreview, LocalDataset, PipelineSnapshot, UploadKind } from '../../core/models/domain';
+import { ExploreSchema, IngestOutcome, IngestPreview, LocalDataset, PipelineSnapshot, UploadKind } from '../../core/models/domain';
 import { PlotCardComponent } from '../../shared/plot-card.component';
 import { TPipe } from '../../core/i18n/t.pipe';
 import { t } from '../../core/i18n/i18n';
@@ -52,6 +52,15 @@ import { t } from '../../core/i18n/i18n';
         </div>
       </header>
 
+      <article class="surface project-bar">
+        @if (schema()?.project; as project) {
+          <p>{{ 'Projeto ativo' | t }}: <strong>{{ project.name }}</strong> · {{ stageLabel(project.stage) }} · <strong>{{ currentSamples() | number }}</strong> {{ 'amostras já no banco' | t }}</p>
+        } @else {
+          <p>{{ 'Nenhum projeto ativo. A ingestão grava no banco da pasta de trabalho.' | t }}</p>
+        }
+        <p-button type="button" severity="danger" [outlined]="true" icon="pi pi-trash" [label]="'Limpar dados do projeto' | t" [disabled]="currentSamples() === 0 || busy()" (onClick)="clearData()" />
+      </article>
+
       <ol class="workflow">
         @for (stage of pipeline()?.stages ?? []; track stage.id) {
           <li [class]="stage.status">
@@ -62,6 +71,51 @@ import { t } from '../../core/i18n/i18n';
         }
       </ol>
 
+      <article class="surface">
+        <div class="section-title">
+          <h2>{{ 'Rodar tudo' | t }}</h2>
+          <p>{{ 'QC, diversidade, rarefação, Kruskal-Wallis, PERMANOVA e volcano, com o tempo de cada etapa.' | t }}</p>
+        </div>
+        @if (groupValues().length > 2) {
+          <p class="note" role="status">{{ 'Há {n} grupos. O volcano compara só dois: escolha o grupo A e o grupo B.' | t: { n: groupValues().length } }}</p>
+          <div class="contrast">
+            <label>{{ 'Grupo A' | t }}
+              <select [value]="contrastA()" (change)="contrastA.set(selectValue($event))">
+                <option value="">{{ 'escolher' | t }}</option>
+                @for (group of groupValues(); track group) { <option [value]="group">{{ group }}</option> }
+              </select>
+            </label>
+            <label>{{ 'Grupo B' | t }}
+              <select [value]="contrastB()" (change)="contrastB.set(selectValue($event))">
+                <option value="">{{ 'escolher' | t }}</option>
+                @for (group of groupValues(); track group) { <option [value]="group">{{ group }}</option> }
+              </select>
+            </label>
+          </div>
+        }
+        @if (currentSamples() > 0 && currentSamples() < 6) {
+          <p class="note" role="status">{{ 'Há só {n} amostras. Testes com menos de 6 têm pouco poder.' | t: { n: currentSamples() } }}</p>
+        }
+        @if (groupValues().length > 0 && groupValues().length < 2) {
+          <p class="note" role="status">{{ 'É preciso pelo menos 2 grupos para Kruskal-Wallis, PERMANOVA e volcano.' | t }}</p>
+        }
+        <div class="actions">
+          <p-button type="button" icon="pi pi-play" [label]="'Rodar tudo' | t" [loading]="running()" [disabled]="!pipeline()?.ingested" (onClick)="runAll()" />
+        </div>
+        @if (runLog().length) {
+          <ol class="run-log">
+            @for (step of runLog(); track step.id) {
+              <li [class]="step.status">
+                <strong>{{ step.label }}</strong>
+                <span>{{ step.status === 'running' ? ('em andamento' | t) : step.status }}</span>
+                @if (step.ms) { <span>{{ step.ms | number }} ms</span> }
+                @if (step.detail) { <em>{{ step.detail }}</em> }
+              </li>
+            }
+          </ol>
+        }
+      </article>
+
       <section class="split">
         <article class="surface">
           <div class="section-title">
@@ -71,9 +125,12 @@ import { t } from '../../core/i18n/i18n';
           <form class="filters" [formGroup]="normForm" (ngSubmit)="applyNorm()">
             <div class="field">
               <label for="depth">{{ 'Rarefação (reads)' | t }}</label>
-              <p-inputnumber inputId="depth" formControlName="rarefactionDepth" [min]="1000" [fluid]="true" />
+              <p-inputnumber inputId="depth" formControlName="rarefactionDepth" [min]="1" [fluid]="true" />
+              @if (reads(); as depth) {
+                <small class="note">{{ 'Reads por amostra: mínimo {min}, mediana {med}, máximo {max}. Sugestão: {sug} (o mínimo, para não descartar amostras).' | t: { min: depth.min, med: depth.median, max: depth.max, sug: suggestedDepth() } }}</small>
+              }
               @if (normForm.controls.rarefactionDepth.invalid && normForm.controls.rarefactionDepth.touched) {
-                <small class="field-error">{{ 'Informe uma profundidade de pelo menos 1.000 reads.' | t }}</small>
+                <small class="field-error">{{ 'Informe uma profundidade de pelo menos 1 read.' | t }}</small>
               }
             </div>
             <div class="field">
@@ -128,8 +185,11 @@ import { t } from '../../core/i18n/i18n';
                   @switch (origin()) {
                     @case ('library') {
                       <p class="note">{{ 'Datasets já baixados no projeto ativo ou na pasta de trabalho. Só os completos (metadata, ASV e taxonomia) podem ser ingeridos.' | t }}</p>
+                      @if (hiddenDatasetCount()) {
+                        <p class="note">{{ '{n} datasets só com metadata ou só com leituras brutas ficam ocultos: processe-os no QIIME 2 ou DADA2 antes de ingerir.' | t: { n: hiddenDatasetCount() } }}</p>
+                      }
                       <div class="ds-list">
-                        @for (ds of datasets(); track ds.id) {
+                        @for (ds of analyzableDatasets(); track ds.id) {
                           <button type="button" class="ds" [class.picked]="selectedDataset() === ds.id" [disabled]="!ds.complete" (click)="chooseDataset(ds)">
                             <span class="ds-head"><strong>{{ ds.label }}</strong>
                               <p-tag [value]="originLabel(ds.origin)" severity="secondary" />
@@ -215,6 +275,7 @@ import { t } from '../../core/i18n/i18n';
                   <div class="field">
                     <label for="wide">{{ 'Tabela ASV larga' | t }}</label>
                     <p-toggleswitch inputId="wide" formControlName="wideFormat" />
+                    <small class="note">{{ 'O formato (largo ou longo) é detectado pelo cabeçalho. O interruptor só vale quando os dois são possíveis.' | t }}</small>
                   </div>
                   <div class="actions">
                     <p-button type="button" [label]="'Voltar' | t" severity="secondary" (onClick)="activateCallback(1)" />
@@ -300,6 +361,16 @@ import { t } from '../../core/i18n/i18n';
     .ds-meta span.ok { color: var(--flora-ok); border-color: var(--flora-ok); }
     .warn { color: var(--flora-warn); }
     .replace-note { color: var(--flora-warn); border-left: 3px solid var(--flora-warn); padding-left: 8px; font-size: .86rem; }
+    .project-bar { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .project-bar p { margin: 0; }
+    .contrast { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
+    .contrast label { display: grid; gap: 4px; font-size: .82rem; color: var(--flora-muted); }
+    .contrast select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--flora-border); background: var(--flora-surface); color: inherit; }
+    .run-log { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+    .run-log li { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; font-size: .86rem; border-left: 3px solid var(--flora-border); padding-left: 8px; }
+    .run-log li.ok { border-color: var(--flora-ok); }
+    .run-log li.erro, .run-log li.ignorado { border-color: var(--flora-warn); }
+    .run-log em { color: var(--flora-muted); font-style: normal; }
     .chosen { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: .82rem; margin: 6px 0 0; }
     .chosen dt { color: var(--flora-muted); }
     .chosen dd { margin: 0; word-break: break-all; }
@@ -314,6 +385,11 @@ export class PipelinePageComponent {
   readonly pipeline = signal<PipelineSnapshot | null>(null);
   readonly preview = signal<IngestPreview | null>(null);
   readonly outcome = signal<IngestOutcome | null>(null);
+  readonly schema = signal<ExploreSchema | null>(null);
+  readonly running = signal(false);
+  readonly runLog = signal<{ id: string; label: string; status: string; ms: number; detail: string }[]>([]);
+  readonly contrastA = signal('');
+  readonly contrastB = signal('');
   readonly columns = signal<string[]>(['sample_id', 'group', 'host', 'site']);
   readonly step = signal(1);
   readonly busy = signal(false);
@@ -344,7 +420,7 @@ export class PipelinePageComponent {
   });
 
   readonly normForm = this.fb.nonNullable.group({
-    rarefactionDepth: [10000, [Validators.required, Validators.min(1000)]],
+    rarefactionDepth: [10000, [Validators.required, Validators.min(1)]],
     method: this.fb.nonNullable.control<'clr' | 'tss' | 'none'>('clr', Validators.required),
     minPrevalence: [0.05, [Validators.required, Validators.min(0), Validators.max(1)]],
     minAbundance: [10, [Validators.required, Validators.min(0)]]
@@ -353,6 +429,38 @@ export class PipelinePageComponent {
   constructor() {
     void this.reload();
     void this.loadDatasets();
+  }
+
+  reads(): ExploreSchema['reads'] {
+    return this.schema()?.reads ?? null;
+  }
+
+  suggestedDepth(): number {
+    const depth = this.reads();
+    return depth && depth.min > 0 ? Math.max(1, Math.floor(depth.min)) : this.normForm.controls.rarefactionDepth.value;
+  }
+
+  stageLabel(stage: string): string {
+    return stage === 'ingested' ? t('Pronto para análise') : stage === 'raw_downloaded' ? t('Arquivos brutos') : t('Sem dados');
+  }
+
+  analyzableDatasets(): LocalDataset[] {
+    return this.datasets().filter((ds) => ds.analyzable !== false && ds.complete && !ds.rawReadsOnly && !ds.metadataOnly);
+  }
+
+  hiddenDatasetCount(): number {
+    return this.datasets().length - this.analyzableDatasets().length;
+  }
+
+  groupValues(): string[] {
+    const columns = this.schema()?.groupColumns ?? [];
+    const wanted = this.uploadForm.controls.groupColumn.value;
+    const column = columns.find((item) => item.name === wanted) ?? columns[0];
+    return column?.values.map((value) => value.value) ?? [];
+  }
+
+  selectValue(event: Event): string {
+    return (event.target as HTMLSelectElement).value;
   }
 
   originLabel(origin: LocalDataset['origin']): string {
@@ -469,6 +577,78 @@ export class PipelinePageComponent {
     }
   }
 
+  async clearData(): Promise<void> {
+    const count = this.currentSamples();
+    const ok = window.confirm(t('Apagar metadata, ASV, taxonomia e diversidade das {n} amostras do projeto ativo? Os arquivos baixados permanecem.', { n: count }));
+    if (!ok) return;
+    this.busy.set(true);
+    try {
+      await this.repository.clearProjectData();
+      this.outcome.set(null);
+      this.messages.add({ severity: 'success', summary: t('Dados limpos'), detail: t('O banco do projeto foi esvaziado. Os arquivos baixados continuam na pasta.') });
+      await this.reload();
+    } catch (error) {
+      this.messages.add({ severity: 'error', summary: t('Limpar dados'), detail: messageOf(error) });
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async runAll(): Promise<void> {
+    if (!this.pipeline()?.ingested) {
+      this.messages.add({ severity: 'warn', summary: t('Rodar tudo'), detail: t('Ingira metadata, ASV e taxonomia antes de rodar a análise.') });
+      return;
+    }
+    const samples = this.currentSamples();
+    const groups = this.groupValues();
+    if (samples > 0 && samples < 6) {
+      const ok = window.confirm(t('Há só {n} amostras. Testes com menos de 6 têm pouco poder. Continuar mesmo assim?', { n: samples }));
+      if (!ok) return;
+    }
+    if (groups.length > 2 && (!this.contrastA() || !this.contrastB() || this.contrastA() === this.contrastB())) {
+      this.messages.add({ severity: 'warn', summary: t('Volcano'), detail: t('Há {n} grupos. Escolha dois diferentes para o volcano antes de rodar tudo.', { n: groups.length }) });
+      return;
+    }
+    const columns = this.schema()?.groupColumns ?? [];
+    const wanted = this.uploadForm.controls.groupColumn.value;
+    const group = columns.find((column) => column.name === wanted)?.name ?? columns[0]?.name ?? (wanted || 'biome');
+    const depth = this.normForm.controls.rarefactionDepth.value;
+    const steps: { id: string; label: string; run: () => Promise<unknown> }[] = [
+      { id: 'qc', label: t('Controle de qualidade'), run: () => this.repository.analysis('qc', { min_reads: depth }) },
+      { id: 'diversity', label: t('Diversidade'), run: () => this.repository.computeDiversity(depth) },
+      { id: 'rarefaction', label: t('Curvas de rarefação'), run: () => this.repository.analysis('rarefaction', { group_by: group, depth }) },
+      { id: 'alpha', label: t('Kruskal-Wallis'), run: () => this.repository.analysis('alpha_stats', { group_by: group }) },
+      { id: 'beta', label: t('PERMANOVA + PERMDISP'), run: () => this.repository.analysis('beta_stats', { group_by: group, permutations: 199 }) },
+      {
+        id: 'volcano', label: t('Volcano'), run: () => this.repository.analysis('volcano', {
+          group_by: group, rank: 'genus', a: this.contrastA() || groups[0] || '', b: this.contrastB() || groups[1] || ''
+        })
+      }
+    ];
+    this.running.set(true);
+    const log: { id: string; label: string; status: string; ms: number; detail: string }[] = [];
+    try {
+      for (const step of steps) {
+        if (step.id !== 'qc' && step.id !== 'diversity' && step.id !== 'rarefaction' && groups.length < 2) {
+          log.push({ id: step.id, label: step.label, status: 'ignorado', ms: 0, detail: t('É preciso pelo menos 2 grupos.') });
+          this.runLog.set([...log]);
+          continue;
+        }
+        const started = performance.now();
+        this.runLog.set([...log, { id: step.id, label: step.label, status: 'running', ms: 0, detail: '' }]);
+        try {
+          const result = await step.run() as Record<string, unknown>;
+          log.push({ id: step.id, label: step.label, status: 'ok', ms: Math.round(performance.now() - started), detail: summarizeStep(step.id, result) });
+        } catch (error) {
+          log.push({ id: step.id, label: step.label, status: 'erro', ms: Math.round(performance.now() - started), detail: messageOf(error) });
+        }
+        this.runLog.set([...log]);
+      }
+    } finally {
+      this.running.set(false);
+    }
+  }
+
   async confirm(): Promise<void> {
     if (this.uploadForm.invalid) {
       this.uploadForm.markAllAsTouched();
@@ -494,11 +674,18 @@ export class PipelinePageComponent {
   }
 
   private async reload(): Promise<void> {
-    void this.repository.exploreSchema().then((schema) => this.currentSamples.set(schema.counts.samples)).catch(() => this.currentSamples.set(0));
-    const pipeline = await this.repository.pipeline();
+    const [schema, pipeline] = await Promise.all([
+      this.repository.exploreSchema().catch(() => null),
+      this.repository.pipeline()
+    ]);
+    this.schema.set(schema);
+    this.currentSamples.set(schema?.counts.samples ?? 0);
     this.pipeline.set(pipeline);
     this.preview.set(pipeline.qc);
+    const depth = this.normForm.controls.rarefactionDepth;
+    const pristine = depth.pristine;
     this.normForm.patchValue(pipeline.normalization);
+    if (pristine) depth.markAsPristine();
     if (pipeline.qc.columns.length) {
       this.columns.set(pipeline.qc.columns);
     }
@@ -511,5 +698,33 @@ export class PipelinePageComponent {
 }
 
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : t('Falha inesperada.');
+  const text = error instanceof Error ? error.message : t('Falha inesperada.');
+  if (text.includes('Traceback') || text.length > 400) {
+    return t('A etapa falhou. Confira se o projeto tem tabela ASV e pelo menos dois grupos. Detalhe: {d}', { d: text.split('\n')[0].slice(0, 180) });
+  }
+  return text;
+}
+
+function summarizeStep(id: string, result: Record<string, unknown>): string {
+  if (id === 'qc') {
+    const summary = (result['summary'] ?? {}) as Record<string, unknown>;
+    return t('{n} amostras, corte {c}, {b} abaixo', { n: Number(summary['samples'] ?? 0), c: Number(summary['min_reads'] ?? 0), b: Number(summary['below_depth'] ?? 0) });
+  }
+  if (id === 'diversity') {
+    const reads = (result['reads'] ?? {}) as Record<string, unknown>;
+    return t('profundidade {d} ({s}), {k} mantidas, {x} descartadas', {
+      d: Number(result['sampling_depth'] ?? 0), s: String(result['depth_source'] ?? ''), k: Number(result['retained'] ?? 0), x: Number(result['dropped_count'] ?? 0)
+    }) + (reads['min'] ? t(' · reads {min}–{max}', { min: Number(reads['min']), max: Number(reads['max']) }) : '');
+  }
+  if (id === 'alpha') {
+    const tests = (result['tests'] as unknown[]) ?? [];
+    const caution = ((result['caution'] as string[]) ?? []).join(' ');
+    return t('{n} testes', { n: tests.length }) + (caution ? ` · ${caution}` : '');
+  }
+  if (id === 'beta') {
+    const perm = (result['permanova'] ?? {}) as Record<string, unknown>;
+    return `PERMANOVA p=${Number(perm['p'] ?? 0).toFixed(4)}`;
+  }
+  if (id === 'volcano') return `${result['a'] ?? ''} vs ${result['b'] ?? ''}`;
+  return '';
 }

@@ -184,15 +184,21 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   /**
-   * The default rarefaction depth (10 000 reads) is larger than every sample of a shallow dataset, which would
-   * silently drop all of them. Until the user picks a depth, cap it to the shallowest sample, rounded down.
+   * Until the user picks a depth, use the saved project threshold or the shallowest sample.
+   * A fixed 10 000 drops every sample of a study whose maximum is a few thousand reads.
    */
   private async fitDepth(): Promise<void> {
     if (this.depthChosen || this.depthChecked) return;
     try {
+      const settings = await this.analysisSettings();
+      if (settings.minReads && settings.minReads > 0) {
+        this.normalization.rarefactionDepth = settings.minReads;
+        this.depthChecked = true;
+        return;
+      }
       const reads = (await this.exploreSchema()).reads;
       if (reads && reads.min > 0) {
-        this.normalization.rarefactionDepth = Math.min(this.normalization.rarefactionDepth, Math.max(Math.floor(reads.min / 100) * 100, 100));
+        this.normalization.rarefactionDepth = Math.max(1, Math.floor(reads.min));
         this.depthChecked = true; // only once data exists: an empty workspace is checked again next time
       }
     } catch {
@@ -397,6 +403,11 @@ export class HttpFloraRepository extends FloraRepository {
     this.depthChosen = true;
     this.normalization = { ...config };
     try {
+      await this.send('POST', '/api/analysis/settings', { body: { min_reads: config.rarefactionDepth } });
+    } catch {
+      /* the local threshold still applies to the requests this screen sends */
+    }
+    try {
       await this.send<MatrixResponse>('GET', '/api/feature_matrix', {
         params: {
           normalize: config.method,
@@ -430,9 +441,21 @@ export class HttpFloraRepository extends FloraRepository {
     return this.send<Record<string, unknown>>('POST', '/api/analysis/qc/apply', { body });
   }
 
-  async analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }> {
+  async clearProjectData(): Promise<void> {
+    await this.send('POST', '/api/ingest/clear', { body: { confirm: true } });
+    this.depthChecked = false;
+    this.depthChosen = false;
+  }
+
+  async computeDiversity(depth?: number | null): Promise<Record<string, unknown>> {
+    return this.send('POST', '/api/diversity', { body: { sampling_depth: depth ?? null } });
+  }
+
+  async analysisSettings(): Promise<{ taxonomyDb: string; options: string[]; minReads: number | null }> {
     const res = await this.send<{ settings: Record<string, string>; taxonomy_db_options: string[] }>('GET', '/api/analysis/settings');
-    return { taxonomyDb: res.settings?.['taxonomy_db'] ?? '', options: res.taxonomy_db_options ?? [] };
+    const raw = res.settings?.['min_reads'];
+    const minReads = raw ? Number(raw) : null;
+    return { taxonomyDb: res.settings?.['taxonomy_db'] ?? '', options: res.taxonomy_db_options ?? [], minReads: Number.isFinite(minReads) ? minReads : null };
   }
 
   async saveTaxonomyDb(value: string): Promise<void> {
@@ -560,8 +583,10 @@ export class HttpFloraRepository extends FloraRepository {
         body: {
           model: request.model,
           target_column: request.targetColumn,
-          train_filter: request.trainFilter,
-          test_filter: request.testFilter,
+          split: request.autoSplit === false ? 'sql' : 'auto',
+          test_size: request.testSize ?? 0.25,
+          train_filter: request.autoSplit === false ? request.trainFilter : '',
+          test_filter: request.autoSplit === false ? request.testFilter : '',
           normalize: request.normalize === 'none' ? null : request.normalize,
           cv_folds: request.cvFolds,
           seed: request.seed,

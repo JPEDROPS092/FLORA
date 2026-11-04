@@ -76,7 +76,9 @@ export abstract class FloraRepository {
   abstract workspaceInfo(): Promise<WorkspaceInfo>;
   abstract analysis(kind: AnalysisKind, params: Record<string, string | number>): Promise<Record<string, unknown>>;
   abstract applyQc(body: Record<string, unknown>): Promise<Record<string, unknown>>;
-  abstract analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }>;
+  abstract clearProjectData(): Promise<void>;
+  abstract computeDiversity(depth?: number | null): Promise<Record<string, unknown>>;
+  abstract analysisSettings(): Promise<{ taxonomyDb: string; options: string[]; minReads: number | null }>;
   abstract saveTaxonomyDb(value: string): Promise<void>;
   abstract treeStatus(): Promise<TreeStatus>;
   abstract saveTree(newick: string): Promise<{ tips: number; overlap: number; features: number }>;

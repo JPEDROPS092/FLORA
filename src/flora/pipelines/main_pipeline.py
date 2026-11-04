@@ -159,7 +159,7 @@ class FLORAPipeline:
     def ingest_asv_table(
         self,
         path: str | Path,
-        wide_format: bool = False,
+        wide_format: bool | None = None,
     ) -> int:
         """Ingest an ASV feature table (BIOM or TSV) into DuckDB.
 
@@ -167,8 +167,8 @@ class FLORAPipeline:
         ----------
         path : str or Path
             Path to BIOM file or TSV ASV table.
-        wide_format : bool
-            If True, treat TSV as wide format (samples x features).
+        wide_format : bool or None
+            Hint only. ``None`` detects wide, long or QIIME-style tables from the header.
 
         Returns
         -------

@@ -268,11 +268,15 @@ def _read_table(path: str, what: str, lang: str) -> pl.DataFrame:
 
 
 def preview_ingest(state, body: dict):
+    from flora.db.ingestion import asv_frame_to_long
+    from flora.ui.reads import configured_min_reads
+
     lang = lang_of(body)
     sample_col = body.get("sample_col") or "sample_id"
     group_col = body.get("group_col") or "biome"
-    min_reads = int(body.get("min_reads") or _DEFAULT_MIN_READS)
-    wide = bool(body.get("wide_format", True))
+    explicit = body.get("min_reads")
+    min_reads = int(explicit) if explicit else (configured_min_reads(state.db) or 0)
+    wide = None if "wide_format" not in body else bool(body.get("wide_format"))
     warnings: list[str] = []
 
     meta = _read_table(body.get("metadata_path", ""), "metadata", lang)
@@ -291,20 +295,22 @@ def preview_ingest(state, body: dict):
         warnings.append(tr(lang, "preview.biom"))
     elif asv_path:
         asv = _read_table(asv_path, "ASV", lang)
-        id_col = sample_col if sample_col in asv.columns else asv.columns[0]
-        if wide:
-            numeric = asv.select(pl.exclude(id_col).cast(pl.Float64, strict=False)).fill_null(0)
-            totals = numeric.sum_horizontal().to_list()
-            reads = dict(zip((str(v) for v in asv[id_col].to_list()), totals, strict=True))
-            total_asvs = len(numeric.columns)
+        try:
+            long, _layout = asv_frame_to_long(asv, sample_col=sample_col, wide_format=wide, drop_zeros=False)
+        except Exception as exc:  # noqa: BLE001 - the preview explains the file instead of failing the page
+            warnings.append(tr(lang, "preview.read_error", what="ASV", err=str(exc)))
         else:
-            feat, ab = ("feature_id", "abundance")
-            if {id_col, feat, ab} <= set(asv.columns):
-                agg = asv.group_by(id_col).agg(pl.col(ab).sum().alias("reads"))
-                reads = {str(a): float(b) for a, b in agg.iter_rows()}
-                total_asvs = asv[feat].n_unique()
-            else:
-                warnings.append(tr(lang, "preview.read_error", what="ASV", err="feature_id/abundance"))
+            agg = long.group_by("sample_id").agg(pl.col("abundance").sum().alias("reads"))
+            reads = {str(a): float(b) for a, b in agg.iter_rows()}
+            total_asvs = int(long["feature_id"].n_unique())
+
+    if not min_reads and reads:
+        min_reads = max(1, int(min(reads.values())))
+    elif not min_reads:
+        min_reads = _DEFAULT_MIN_READS
+    if reads and min_reads > max(reads.values()):
+        warnings.append(tr(lang, "preview.threshold_above_max", cut=min_reads, max=int(max(reads.values())), suggested=max(1, int(min(reads.values())))))
+    suggested = max(1, int(min(reads.values()))) if reads else min_reads
 
     ids = list(dict.fromkeys([*meta_ids, *reads]))
     in_meta, in_asv = set(meta_ids), set(reads)
@@ -325,6 +331,10 @@ def preview_ingest(state, body: dict):
         summary={
             "matched": len(in_meta & in_asv), "metadata_only": len(in_meta - in_asv) if reads else 0, "asv_only": len(in_asv - in_meta),
             "low_depth": sum(1 for v in reads.values() if 0 < v < min_reads), "total_asvs": total_asvs,
+            "min_reads": min_reads, "suggested_depth": suggested,
+            "reads_min": int(min(reads.values())) if reads else 0,
+            "reads_median": int(statistics.median(reads.values())) if reads else 0,
+            "reads_max": int(max(reads.values())) if reads else 0,
         },
         warnings=warnings))
 

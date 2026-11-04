@@ -116,13 +116,143 @@ def ingest_biom(
     return count
 
 
+_SAMPLE_ALIASES = {"sample_id", "sample-id", "sample id", "sampleid", "sample"}
+_FEATURE_ALIASES = {"feature_id", "feature-id", "feature id", "featureid", "otu id", "otu_id", "asv", "asv_id", "asv id"}
+_ABUNDANCE_ALIASES = {"abundance", "count", "counts", "reads", "frequency"}
+
+
+def _header_key(name: str) -> str:
+    return name.lower().strip().lstrip("#")
+
+
+def _match_column(columns: list[str], aliases: set[str]) -> str | None:
+    for column in columns:
+        if _header_key(column) in aliases:
+            return column
+    return None
+
+
+def detect_asv_layout(columns: list[str]) -> str:
+    """``long`` (sample, feature, abundance), ``wide`` (samples as rows) or ``features_by_sample`` (QIIME-style)."""
+    feature = _match_column(columns, _FEATURE_ALIASES)
+    abundance = _match_column(columns, _ABUNDANCE_ALIASES)
+    sample = _match_column(columns, _SAMPLE_ALIASES)
+    if feature and abundance:
+        return "long"
+    if feature and len(columns) > 1 and sample is None:
+        return "features_by_sample"
+    if len(columns) > 1 and (sample or not feature):
+        return "wide"
+    raise ValidationError(
+        "Não foi possível ler a tabela ASV. Use o formato longo (colunas sample_id, feature_id e abundance) "
+        "ou o largo (uma linha por amostra e as features nas outras colunas). A primeira linha precisa ser o cabeçalho.",
+        context={"columns": list(columns)[:12]},
+    )
+
+
+def choose_asv_layout(columns: list[str], wide_format: bool | None) -> str:
+    """Honor an explicit wide/long hint only when that layout's columns are actually present."""
+    detected = detect_asv_layout(columns)
+    if wide_format is None:
+        return detected
+    if wide_format and detected == "long" and _match_column(columns, _SAMPLE_ALIASES):
+        # A long table also has a sample column; forcing wide would melt feature_id and abundance.
+        return "long"
+    if wide_format is False and detected != "long":
+        return detected
+    if wide_format and detected == "features_by_sample":
+        return "features_by_sample"
+    return "wide" if wide_format else "long"
+
+
+def asv_frame_to_long(
+    df: pl.DataFrame,
+    *,
+    sample_col: str = "sample_id",
+    feature_col: str = "feature_id",
+    abundance_col: str = "abundance",
+    wide_format: bool | None = None,
+    drop_zeros: bool = True,
+) -> tuple[pl.DataFrame, str]:
+    """Melt any supported ASV table into ``sample_id, feature_id, abundance``. Returns the layout used."""
+    layout = choose_asv_layout(list(df.columns), wide_format)
+    if layout == "long":
+        sample_name = _match_column(list(df.columns), _SAMPLE_ALIASES) or sample_col
+        feature_name = _match_column(list(df.columns), _FEATURE_ALIASES) or feature_col
+        abundance_name = _match_column(list(df.columns), _ABUNDANCE_ALIASES) or abundance_col
+        missing = {name for name in (sample_name, feature_name, abundance_name) if name not in df.columns}
+        if missing:
+            raise ValidationError(
+                "A tabela ASV longa precisa das colunas sample_id, feature_id e abundance "
+                f"(não encontrei {sorted(missing)}). Se as amostras estão nas linhas e as features nas colunas, "
+                "não marque o arquivo como formato longo.",
+                context={"columns": list(df.columns)[:12]},
+            )
+        long = df.select([
+            pl.col(sample_name).cast(pl.Utf8).alias("sample_id"),
+            pl.col(feature_name).cast(pl.Utf8).alias("feature_id"),
+            pl.col(abundance_name).cast(pl.Float64, strict=False).alias("abundance"),
+        ])
+    elif layout == "features_by_sample":
+        feature_name = _match_column(list(df.columns), _FEATURE_ALIASES) or df.columns[0]
+        long = df.unpivot(index=feature_name, on=[c for c in df.columns if c != feature_name], variable_name="sample_id", value_name="abundance").select([
+            pl.col("sample_id").cast(pl.Utf8),
+            pl.col(feature_name).cast(pl.Utf8).alias("feature_id"),
+            pl.col("abundance").cast(pl.Float64, strict=False),
+        ])
+    else:
+        index = sample_col if sample_col in df.columns else (_match_column(list(df.columns), _SAMPLE_ALIASES) or df.columns[0])
+        long = df.unpivot(index=index, on=[c for c in df.columns if c != index], variable_name="feature_id", value_name="abundance").select([
+            pl.col(index).cast(pl.Utf8).alias("sample_id"),
+            pl.col("feature_id").cast(pl.Utf8),
+            pl.col("abundance").cast(pl.Float64, strict=False),
+        ])
+    long = long.filter(pl.col("abundance").is_not_null())
+    if drop_zeros:
+        long = long.filter(pl.col("abundance") > 0)
+    return long, layout
+
+
+def _apply_coordinates(df: pl.DataFrame) -> pl.DataFrame:
+    """Copy latitude/longitude aliases, and a combined lat_lon column, into the standard columns."""
+    from flora.io.geo import parse_lat_lon
+
+    lowered = {c.lower(): c for c in df.columns}
+    lat_aliases = ("latitude", "lat", "decimal_latitude", "geo_latitude")
+    lon_aliases = ("longitude", "lon", "long", "lng", "decimal_longitude", "geo_longitude")
+    pair_aliases = ("lat_lon", "latlon", "coordinates")
+    lat_name = next((lowered[n] for n in lat_aliases if n in lowered), None)
+    lon_name = next((lowered[n] for n in lon_aliases if n in lowered), None)
+    pair_name = next((lowered[n] for n in pair_aliases if n in lowered), None)
+    if lat_name and lat_name != "latitude":
+        df = df.rename({lat_name: "latitude"})
+    if lon_name and lon_name != "longitude":
+        df = df.rename({lon_name: "longitude"})
+
+    def _empty(column: str) -> bool:
+        if column not in df.columns:
+            return True
+        text = df[column].cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+        return text.eq("").all()
+
+    if pair_name and _empty("latitude") and _empty("longitude"):
+        latitudes: list[float | None] = []
+        longitudes: list[float | None] = []
+        for value in df[pair_name].to_list():
+            parsed = parse_lat_lon("" if value is None else str(value))
+            latitudes.append(parsed[0] if parsed else None)
+            longitudes.append(parsed[1] if parsed else None)
+        df = df.with_columns(pl.Series("latitude", latitudes), pl.Series("longitude", longitudes))
+    return df
+
+
 def ingest_tsv_asv(
     db: "FloraDB",
     tsv_path: str | Path,
     sample_col: str = "sample_id",
     feature_col: str = "feature_id",
     abundance_col: str = "abundance",
-    wide_format: bool = False,
+    wide_format: bool | None = None,
     parquet_dir: str | Path | None = None,
 ) -> int:
     """Ingest a TSV ASV table into the DuckDB ``asv`` table.
@@ -142,9 +272,10 @@ def ingest_tsv_asv(
         Column name for feature IDs (long format only).
     abundance_col : str
         Column name for abundance values (long format only).
-    wide_format : bool
-        If True, the TSV is wide (samples x features). It will be melted
-        to long format before insertion.
+    wide_format : bool or None
+        Optional hint. ``None`` (the default) detects long, wide or QIIME-style
+        tables from the header. An explicit value is used only when that
+        layout's columns are present; otherwise the header wins.
     parquet_dir : str or Path, optional
         Cache long-format data as Parquet.
 
@@ -169,29 +300,14 @@ def ingest_tsv_asv(
     except Exception as exc:
         raise IngestionError(f"Failed to read TSV file: {exc}", source=str(path)) from exc
 
-    if wide_format:
-        value_vars = [c for c in df.columns if c != sample_col]
-        df = df.unpivot(
-            index=sample_col,
-            on=value_vars,
-            variable_name="feature_id",
-            value_name="abundance",
-        ).rename({sample_col: "sample_id"})
-    else:
-        required = {sample_col, feature_col, abundance_col}
-        missing = required - set(df.columns)
-        if missing:
-            raise ValidationError(
-                f"TSV missing required columns: {missing}",
-                context={"file": str(path)},
-            )
-        df = df.select([
-            pl.col(sample_col).alias("sample_id"),
-            pl.col(feature_col).alias("feature_id"),
-            pl.col(abundance_col).cast(pl.Float64).alias("abundance"),
-        ])
-
-    df = df.filter(pl.col("abundance") > 0)
+    df, layout = asv_frame_to_long(
+        df,
+        sample_col=sample_col,
+        feature_col=feature_col,
+        abundance_col=abundance_col,
+        wide_format=wide_format,
+    )
+    logger.info("ASV table %s read as %s", path.name, layout)
 
     if parquet_dir is not None:
         pdir = Path(parquet_dir)
@@ -251,12 +367,12 @@ def ingest_metadata(
 
     if sample_col not in df.columns:
         raise ValidationError(
-            f"Metadata file missing sample column '{sample_col}'",
+            f"O arquivo de metadata não tem a coluna de amostra '{sample_col}'. Colunas encontradas: {list(df.columns)[:12]}.",
             field=sample_col,
             context={"columns": df.columns},
         )
 
-    df = df.rename({sample_col: "sample_id"})
+    df = _apply_coordinates(df.rename({sample_col: "sample_id"}))
 
     standard_cols = {
         "biome": pl.Utf8,
