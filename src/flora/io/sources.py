@@ -176,19 +176,7 @@ class MGnifySource:
 
     def download(self, accession: str, output_dir: str | Path, **opts: Any) -> dict[str, str]:
         _require_entry(self.id, accession, opts.get("entry"))
-        _check_mgnify(accession)
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        rows = _mgnify_samples(accession, 200)
-        if not rows:
-            raise LibraryError(f"No samples returned for {accession}")
-        metadata_path = out / "metadata.tsv"
-        _write_tsv(metadata_path, rows)
-        artifacts = {"metadata": str(metadata_path)}
-        taxonomy = _download_ssu_table(accession, out)
-        if taxonomy is not None:
-            artifacts["taxonomy"] = str(taxonomy)
-        return artifacts
+        return download_mgnify_tables(accession, Path(output_dir))
 
 
 class EnaSource:
@@ -315,33 +303,53 @@ def _sample_row(item: dict) -> dict[str, Any]:
     }
 
 
-def _download_ssu_table(accession: str, output_dir: Path) -> Path | None:
+def download_mgnify_tables(accession: str, out: Path) -> dict[str, str]:
+    """Sample metadata plus, when MGnify published it, the SSU table converted to FLORA's ``asv_table``/``taxonomy``."""
+    _check_mgnify(accession)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = _mgnify_samples(accession, 200)
+    if not rows:
+        raise LibraryError(f"No samples returned for {accession}")
+    metadata_path = out / "metadata.tsv"
+    _write_tsv(metadata_path, rows)
+    artifacts = {"metadata": str(metadata_path)}
+    artifacts.update(_download_ssu_table(accession, out))
+    return artifacts
+
+
+def _download_ssu_table(accession: str, output_dir: Path) -> dict[str, str]:
+    """Study-level SSU taxonomy table from MGnify, converted to FLORA's ``asv_table.tsv`` + ``taxonomy.tsv``.
+
+    Returns the artifacts it managed to write (possibly empty). Failures are logged, never raised,
+    because the sample metadata is still worth keeping.
+    """
+    from flora.io.mgnify_tables import analysis_sample_map, convert_ssu_table
+
     downloader = MGnifyDownloader()
     session = _make_session()
-    url = f"{downloader.api_base}/studies/{accession}/downloads?page_size=100"
     try:
-        payload = downloader._api_get(session, url)
+        payload = downloader._api_get(session, f"{downloader.api_base}/studies/{accession}/downloads?page_size=100")
     except IngestionError as exc:
         logger.warning("MGnify downloads list failed for %s: %s", accession, exc)
-        return None
-    chosen = ""
+        return {}
+    links: dict[str, str] = {}
     for item in payload.get("data") or []:
         alias = str((item.get("attributes") or {}).get("alias") or item.get("id") or "").lower()
         link = str((item.get("links") or {}).get("self") or "")
-        if "taxonomy_abundances_ssu" in alias and "phylum" not in alias and link:
-            chosen = link
-            break
-        if not chosen and "taxonomy_abundances_ssu" in alias and link:
-            chosen = link
+        if link and "taxonomy_abundances" in alias and "phylum" not in alias:
+            links["ssu" if "_ssu_" in alias else "lsu" if "_lsu_" in alias else "other"] = link
+    chosen = links.get("ssu") or links.get("lsu") or links.get("other")
     if not chosen:
-        return None
-    dest = output_dir / _safe_name(chosen, "taxonomy_ssu.tsv")
+        return {}
+    raw = output_dir / _safe_name(chosen, "taxonomy_abundances.tsv")
     try:
-        _download_file(chosen, dest, session=session, min_bytes=32)
-    except IngestionError as exc:
-        logger.warning("SSU table download failed for %s: %s", accession, exc)
-        return None
-    return dest
+        _download_file(chosen, raw, session=session, min_bytes=32)
+        analyses = list(downloader._iter_paginated(session, f"{downloader.api_base}/studies/{accession}/analyses?page_size=100"))
+        tables = convert_ssu_table(raw.read_text(encoding="utf-8", errors="replace"), analysis_sample_map(analyses), output_dir)
+    except (IngestionError, ValueError, OSError) as exc:
+        logger.warning("MGnify SSU table for %s could not be converted: %s", accession, exc)
+        return {}
+    return {**tables, "raw_taxonomy": str(raw)}
 
 
 def _ena_runs(accession: str, limit: int) -> list[dict[str, Any]]:

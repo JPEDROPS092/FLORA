@@ -214,10 +214,13 @@ class SyncManager:
             files = EMPDownloader(biome_filter=src.params.get("biome_filter") or None).fetch(output_dir=str(raw), max_samples=int(src.params.get("max_samples", 200)))
             return {"metadata": Path(files["metadata"]), "asv": Path(files["asv_table"]), "taxonomy": Path(files["taxonomy"])}
         if src.type == "mgnify":
-            from flora.io.downloaders import MGnifyDownloader
+            from flora.io.sources import download_mgnify_tables
 
-            MGnifyDownloader(biome=src.params.get("biome", "root:Environmental:Terrestrial")).fetch(
-                study_accession=src.accession, output_dir=str(raw), max_samples=int(src.params.get("max_samples", 20)))
+            # MGnify serves processed taxonomic tables, not raw reads: ingest them when they are complete.
+            files = download_mgnify_tables(src.accession, raw)
+            if {"metadata", "asv_table", "taxonomy"} <= set(files):
+                return {"metadata": Path(files["metadata"]), "asv": Path(files["asv_table"]), "taxonomy": Path(files["taxonomy"])}
+            job["log"].append("MGnify não publicou a tabela taxonômica deste estudo: só os metadados foram baixados.")
             return None
         from flora.io.downloaders import NCBISRADownloader
 

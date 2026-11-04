@@ -67,6 +67,11 @@ class FloraDB:
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._connect()
 
+    @property
+    def path(self) -> str:
+        """Database file path, or ``:memory:``."""
+        return self._path
+
     # ------------------------------------------------------------------
     # Connection lifecycle
     # ------------------------------------------------------------------

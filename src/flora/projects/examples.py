@@ -30,7 +30,7 @@ EXAMPLES: list[dict[str, Any]] = [
         "description": (
             "MGnify MGYS00001352 (PRJEB8643). 18 amplicon samples of forest and "
             "deforested soil in the Brazilian Amazon. Verified 2026-11-03. "
-            "Raw files are not an ASV matrix yet."
+            "The taxonomic profile table is ingested when MGnify publishes it; otherwise only metadata is kept."
         ),
         "biome": "root:Environmental:Terrestrial:Soil",
         "marker": "amplicon",

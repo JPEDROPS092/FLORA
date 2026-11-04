@@ -25,7 +25,18 @@ _ARTIFACT_KEYS = {
     "sequences_reverse": "Sequências (R2)",
     "barcodes": "Barcodes",
     "archive": "Arquivo",
+    "raw_taxonomy": "Tabela original",
 }
+
+
+def readiness(folder: Path) -> str:
+    """What a downloaded folder can do: ``ready`` (metadata + ASV + taxonomy), ``metadata_only``, ``partial`` or ``none``."""
+    have = {kind for kind, name in (("metadata", "metadata.tsv"), ("asv", "asv_table.tsv"), ("taxonomy", "taxonomy.tsv")) if (folder / name).is_file()}
+    if {"metadata", "asv", "taxonomy"} <= have:
+        return "ready"
+    if have == {"metadata"}:
+        return "metadata_only"
+    return "partial" if have else "none"
 
 _ACC = r"(?P<acc>[A-Za-z0-9._-]+)"
 _SRC = r"(?P<source>[a-z0-9_-]+)"
@@ -54,6 +65,8 @@ def recorded(source: str, handler):
             raise
         job["artifacts"] = [{"label": label, "path": str(payload[key])} for key, label in _ARTIFACT_KEYS.items() if payload.get(key)]
         job.update(status="completed", detail=str(payload.get("output_dir") or job["detail"]))
+        folder = Path(job["detail"]) if job["detail"] else None
+        job["readiness"] = readiness(folder) if folder and folder.is_dir() else "none"
         _store(state).save(job)
         return {**payload, "output_dir": job["detail"], "job": job}
 
@@ -115,6 +128,10 @@ def library_catalog(state, params=None):
         seq_type=_first(params, "seq_type"),
         amazonia=_flag(params, "amazonia"),
     )
+    base = Path(state.workdir).resolve() / "raw" if state is not None else None
+    for study in studies:
+        folder = base / str(study.get("source", "")) / str(study.get("accession", "")) if base else None
+        study["local_state"] = readiness(folder) if folder and folder.is_dir() else "none"
     return json_success(data={"studies": studies, "count": len(studies)})
 
 

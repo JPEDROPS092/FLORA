@@ -200,7 +200,7 @@ def test_mgnify_metadata_and_download_are_local(monkeypatch, tmp_path: Path):
     assert preview["truncated"] is False
 
     monkeypatch.setattr(sources, "_mgnify_samples", lambda accession, limit: preview["rows"])
-    monkeypatch.setattr(sources, "_download_ssu_table", lambda accession, output_dir: None)
+    monkeypatch.setattr(sources, "_download_ssu_table", lambda accession, output_dir: {})
     written = get_source("mgnify").download("MGYS00005779", tmp_path)
     header = Path(written["metadata"]).read_text(encoding="utf-8").splitlines()[0]
     assert header.startswith("sample_id")

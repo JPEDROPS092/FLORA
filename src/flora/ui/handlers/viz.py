@@ -28,7 +28,13 @@ def viz_taxonomy(state, params: dict):
     group_by = params.get("group_by", [None])[0]
     try:
         agg = state.db.aggregate_by_taxon(level=level, group_by=group_by)
-        fig = plot_taxonomy_barplot(agg, level=level, group_by=group_by)
+        if agg.is_empty():
+            raise UiHttpError(
+                "Taxonomic composition requires ingested ASV and taxonomy data.",
+                status=400,
+                code="empty_feature_matrix",
+            )
+        fig = plot_taxonomy_barplot(agg, level=level, group_by=group_by, top_n=int(params.get("top_n", ["15"])[0]))
         return _plot_payload(fig)
     except Exception as exc:
         raise _plot_error(exc) from exc

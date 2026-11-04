@@ -65,7 +65,7 @@ def plot_taxonomy_barplot(
         If provided, group the x-axis by this column (e.g. ``biome``).
     top_n : int
         Show only the top N most abundant taxa; remainder aggregated as
-        ``"Other"``.
+        ``"Outros"``.
     normalize : bool
         If True, normalize abundances to relative proportions per group.
     output_path : str or Path, optional
@@ -96,11 +96,18 @@ def plot_taxonomy_barplot(
     df = df.with_columns(
         pl.when(pl.col(level).is_in(top_taxa))
         .then(pl.col(level))
-        .otherwise(pl.lit("Other"))
+        .otherwise(pl.lit("Outros"))
         .alias(level)
     )
 
-    x_col = group_by if group_by and group_by in df.columns else "sample_id"
+    if group_by and group_by in df.columns:
+        x_col = group_by
+    elif "sample_id" in df.columns:
+        x_col = "sample_id"
+    else:
+        # Aggregated without a grouping column: one bar for the whole dataset.
+        x_col = "dataset"
+        df = df.with_columns(pl.lit("All samples").alias(x_col))
 
     agg_df = (
         df.group_by([x_col, level])
