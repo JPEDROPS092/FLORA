@@ -18,8 +18,8 @@ from flora.ui.frontend import (
     resolve_frontend_asset,
     should_serve_spa_index,
 )
-from flora.ui.handlers import datasets, downloads, explore, ingest, llm, ml, projects, report, status, viz, workspace
-from flora.ui.http import UiHttpError, read_json_body, send_error, send_html, send_json
+from flora.ui.handlers import analysis, datasets, engines, exports, downloads, explore, ingest, llm, ml, projects, report, status, viz, workspace
+from flora.ui.http import RawResponse, UiHttpError, read_json_body, send_error, send_html, send_json, send_raw
 from flora.ui.state import FLORAState
 
 logger = logging.getLogger("flora.ui.server")
@@ -58,6 +58,17 @@ GET_ROUTES = {
     "/api/pipeline/datasets": datasets.list_datasets,
     "/api/explore/summary": workspace.explore_summary,
     "/api/explore/schema": explore.get_schema,
+    "/api/engines": engines.list_engines,
+    "/api/export/dataset": exports.export_dataset,
+    "/api/engines/jobs": engines.list_jobs,
+    "/api/engines/jobs/detail": engines.get_job,
+    "/api/analysis/qc": analysis.get_qc,
+    "/api/analysis/rarefaction": analysis.get_rarefaction,
+    "/api/analysis/alpha_stats": analysis.get_alpha_stats,
+    "/api/analysis/beta_stats": analysis.get_beta_stats,
+    "/api/analysis/volcano": analysis.get_volcano,
+    "/api/analysis/mixs": analysis.get_mixs,
+    "/api/analysis/settings": analysis.get_settings,
     "/api/explore/table": explore.get_table,
     "/api/ml/experiments": ml.list_experiments,
     "/api/downloads": downloads.list_downloads,
@@ -92,6 +103,10 @@ POST_ROUTES = {
     "/api/ml/cluster": ml.cluster,
     "/api/ingest/preview": workspace.preview_ingest,
     "/api/pipeline/upload": datasets.upload_file,
+    "/api/engines/run": engines.run_engine,
+    "/api/engines/jobs/cancel": engines.cancel_job,
+    "/api/analysis/qc/apply": analysis.apply_qc,
+    "/api/analysis/settings": analysis.save_settings,
     "/api/download/mgnify": downloads.recorded("mgnify", downloads.download_mgnify),
     "/api/download/sra": downloads.recorded("sra", downloads.download_sra),
     "/api/download/emp": downloads.recorded("emp", downloads.download_emp),
@@ -211,6 +226,9 @@ def _make_handler(state: FLORAState):
                     raise UiHttpError(f"Unknown endpoint: {path}", status=404, code="not_found")
 
                 payload = handler(state, parse_qs(parsed.query))
+                if isinstance(payload, RawResponse):
+                    send_raw(self, payload)
+                    return
                 if path == "/api/report/preview":
                     send_html(self, payload)
                     return

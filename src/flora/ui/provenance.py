@@ -36,10 +36,20 @@ def build_provenance(
                 inputs.append(f"{src.type}:{src.accession}" if src.accession else src.type)
         except Exception:  # noqa: BLE001 - provenance must never break the request
             pass
+    extra: list[dict[str, str]] = []
+    try:
+        from flora.engines import registry
+        from flora.ui.handlers.analysis import read_settings
+
+        db_name = read_settings(state.db).get("taxonomy_db", "")
+        extra.append({"label": "Banco taxonômico", "value": db_name or "não informado"})
+        extra += [{"label": e["name"], "value": e["version"]} for e in registry.detect_all() if e["available"]]
+    except Exception:  # noqa: BLE001 - provenance must never break the request
+        pass
     return {
         "pipeline_version": f"FLORA {__version__} · Python {platform.python_version()}",
         "seed": seed,
-        "parameters": parameters or [],
+        "parameters": (parameters or []) + extra,
         "packages": package_versions(),
         "inputs": inputs,
         "history": history or [],

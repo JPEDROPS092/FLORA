@@ -124,6 +124,7 @@ Detailed documentation lives in `docs/` (browse it with `mkdocs serve`):
 | Installation and troubleshooting | [installation.md](docs/installation.md), [troubleshooting.md](docs/troubleshooting.md) |
 | Usage | [quickstart.md](docs/quickstart.md), [user_guide.md](docs/user_guide.md) |
 | Projects and source sync | [projects.md](docs/projects.md) |
+| Analyses and external engines (QIIME 2, DADA2…) | [analysis.md](docs/analysis.md) |
 | Public datasets | [datasets.md](docs/datasets.md) |
 | Methods (normalization, diversity, ML) | [methods.md](docs/methods.md) |
 | Experimental evaluation and reports | [experimental_evaluation.md](docs/experimental_evaluation.md), [emp_report.md](docs/emp_report.md), [report.md](docs/report.md) |

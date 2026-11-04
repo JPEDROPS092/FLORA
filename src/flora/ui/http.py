@@ -65,6 +65,28 @@ def send_json(handler: BaseHTTPRequestHandler, data: dict[str, Any], *, status: 
         logger.debug("Client disconnected before the response was sent")
 
 
+@dataclass(slots=True)
+class RawResponse:
+    """A non-JSON download (TSV, BIOM…) returned by a handler."""
+
+    body: bytes
+    content_type: str
+    filename: str
+
+
+def send_raw(handler: BaseHTTPRequestHandler, raw: RawResponse) -> None:
+    """Send a file download."""
+    try:
+        handler.send_response(200)
+        handler.send_header("Content-Type", raw.content_type)
+        handler.send_header("Content-Length", str(len(raw.body)))
+        handler.send_header("Content-Disposition", f'attachment; filename="{raw.filename}"')
+        handler.end_headers()
+        handler.wfile.write(raw.body)
+    except (BrokenPipeError, ConnectionResetError):
+        logger.debug("Client disconnected before the download was sent")
+
+
 def send_html(handler: BaseHTTPRequestHandler, html: str, *, status: int = 200) -> None:
     """Send an HTML response."""
     body = html.encode("utf-8")

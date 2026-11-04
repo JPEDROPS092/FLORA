@@ -285,6 +285,9 @@ def report_draft(state, params: dict | None = None):
     if best:
         parameters += best["config"]
     provenance = build_provenance(state, parameters=parameters)
+    parameters = list(provenance["parameters"])  # includes the taxonomy database and the engine versions
+    if provenance["inputs"]:
+        parameters.append({"label": "Accessions", "value": ", ".join(provenance["inputs"])})
     parameters += [{"label": p["name"], "value": p["version"]} for p in provenance["packages"]]
 
     def section(key, figure, text, table=None):

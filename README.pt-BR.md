@@ -124,6 +124,7 @@ Documentação detalhada, em `docs/` (publicável com `mkdocs serve`):
 | Instalação e solução de problemas | [installation.md](docs/installation.md), [troubleshooting.md](docs/troubleshooting.md) |
 | Uso | [quickstart.md](docs/quickstart.md), [user_guide.md](docs/user_guide.md) |
 | Projetos e sincronização de fontes | [projects.md](docs/projects.md) |
+| Análises e motores externos (QIIME 2, DADA2…) | [analysis.md](docs/analysis.md) |
 | Datasets públicos | [datasets.md](docs/datasets.md) |
 | Métodos (normalização, diversidade, ML) | [methods.md](docs/methods.md) |
 | Avaliação experimental e relatórios | [experimental_evaluation.md](docs/experimental_evaluation.md), [emp_report.md](docs/emp_report.md), [report.md](docs/report.md) |

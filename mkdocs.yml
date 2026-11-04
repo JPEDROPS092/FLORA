@@ -34,6 +34,7 @@ nav:
   - Installation: installation.md
   - Quick Start: quickstart.md
   - User Guide: user_guide.md
+  - Analyses and engines: analysis.md
   - Development: development.md
   - Contributing: contributing.md
   - Troubleshooting: troubleshooting.md
