@@ -21,6 +21,17 @@ def _plot_error(exc: Exception) -> UiHttpError:
     return UiHttpError(str(exc), status=500, code="internal_error")
 
 
+def _metadata_with(db, column: str | None):
+    """``samples`` plus ``column`` when it is a key of the key-value metadata (real studies keep most fields there)."""
+    metadata = db.query("SELECT * FROM samples").to_polars()
+    if column and column not in metadata.columns:
+        from flora.ui.handlers.workspace import _groups_frame
+
+        extra = _groups_frame(db, column).rename({"group": column})
+        metadata = metadata.join(extra, on="sample_id", how="left")
+    return metadata
+
+
 def viz_taxonomy(state, params: dict):
     from flora.viz.taxonomy_plots import plot_taxonomy_barplot
 
@@ -55,7 +66,7 @@ def viz_pcoa(state, params: dict):
                 code="insufficient_samples",
             )
         pcoa_long = compute_pcoa(feature_matrix, metric="braycurtis", n_components=3)
-        metadata = state.db.query("SELECT * FROM samples").to_polars()
+        metadata = _metadata_with(state.db, color_by)
         fig = plot_pcoa(
             pcoa_long,
             metadata_df=metadata if color_by else None,
@@ -81,7 +92,7 @@ def viz_alpha(state, params: dict):
                 code="empty_feature_matrix",
             )
         alpha = compute_alpha_diversity(feature_matrix, metrics=[metric])
-        metadata = state.db.query("SELECT * FROM samples").to_polars()
+        metadata = _metadata_with(state.db, group_by)
         if group_by:
             alpha = alpha.join(
                 metadata.select(["sample_id", group_by]),

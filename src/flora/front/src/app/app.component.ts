@@ -26,11 +26,18 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
   imports: [TPipe, LanguageSwitchComponent, RouterLink, RouterLinkActive, RouterOutlet, ToastModule, ButtonModule, TooltipModule, CommandPaletteComponent, CopilotComponent, DocsDialogComponent],
   template: `
     <a class="skip-link" href="#flora-content">{{ 'Pular para o conteúdo' | t }}</a>
-    <div class="shell" [class.collapsed]="!store.sidebarOpen()">
-      <aside class="sidebar" [attr.aria-label]="'Navegação principal' | t">
+    <div class="shell" [class.collapsed]="!store.sidebarOpen() && !store.mobile()" [class.mobile-open]="store.mobileNavOpen()">
+      @if (store.mobileNavOpen()) { <div class="nav-backdrop" (click)="store.closeMobileNav()" aria-hidden="true"></div> }
+      <aside id="flora-sidebar" class="sidebar" [attr.aria-label]="'Navegação principal' | t">
         <div class="brand">
           <img class="mark-img" src="branding/logo/badge.webp" alt="" width="34" height="34" />
           <div class="brand-text"><strong>{{ 'FLORA' | t }}</strong><span>{{ 'Microbiome Research' | t }}</span></div>
+          <button type="button" class="side-toggle" (click)="store.toggleSidebar()" aria-controls="flora-sidebar"
+                  [attr.aria-expanded]="store.mobile() ? store.mobileNavOpen() : store.sidebarOpen()"
+                  [attr.aria-label]="(store.mobile() ? 'Fechar o menu' : store.sidebarOpen() ? 'Comprimir o menu' : 'Expandir o menu') | t"
+                  [pTooltip]="(store.sidebarOpen() ? 'Comprimir (Ctrl+B)' : 'Expandir (Ctrl+B)') | t" tooltipPosition="right">
+            <i [class]="store.mobile() ? 'pi pi-times' : store.sidebarOpen() ? 'pi pi-angle-double-left' : 'pi pi-angle-double-right'" aria-hidden="true"></i>
+          </button>
         </div>
 
         <nav class="nav" [attr.aria-label]="'Módulos' | t">
@@ -70,7 +77,8 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
       <div class="workspace-col">
         <header class="topbar">
           <p-button icon="pi pi-bars" [text]="true" [rounded]="true" severity="secondary" (onClick)="store.toggleSidebar()"
-                    [ariaLabel]="'Alternar menu lateral' | t" />
+                    [ariaLabel]="'Alternar menu lateral' | t" [attr.aria-controls]="'flora-sidebar'"
+                    [attr.aria-expanded]="store.mobile() ? store.mobileNavOpen() : store.sidebarOpen()" />
           <nav class="crumbs" [attr.aria-label]="'Localização' | t"><span>{{ 'FLORA' | t }}</span><i class="pi pi-angle-right"></i><strong>{{ title() }}</strong></nav>
           @if (workspace(); as ws) {
             <span class="ws-chip" [class.volatile]="!ws.persistent" [attr.title]="ws.dbPath">
@@ -142,6 +150,7 @@ export class AppComponent implements OnInit {
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
       .subscribe((e) => {
         this.lab.set(e.urlAfterRedirects.startsWith('/ml'));
+        this.store.closeMobileNav();
         const path = '/' + e.urlAfterRedirects.split(/[/?#]/)[1];
         this.title.set([...this.primary, ...this.library].find((i) => i.path === path)?.label ?? 'FLORA');
         void this.refreshWorkspace();
@@ -174,8 +183,10 @@ export class AppComponent implements OnInit {
 
   @HostListener('document:keydown', ['$event'])
   onKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && this.store.mobileNavOpen()) { this.store.closeMobileNav(); return; }
     if (!(e.ctrlKey || e.metaKey)) return;
-    if (e.key.toLowerCase() === 'k') { e.preventDefault(); this.store.paletteOpen.update((v) => !v); }
+    if (e.key.toLowerCase() === 'b') { e.preventDefault(); this.store.toggleSidebar(); }
+    else if (e.key.toLowerCase() === 'k') { e.preventDefault(); this.store.paletteOpen.update((v) => !v); }
     else if (e.key.toLowerCase() === 'j') { e.preventDefault(); this.store.toggleCopilot(); }
   }
 }

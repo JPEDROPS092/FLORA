@@ -1,3 +1,5 @@
+import { OperatorArtifact, PendingApproval } from '../llm/llm.models';
+
 export type AgentId = 'analyst' | 'qc' | 'taxonomist' | 'reporter';
 
 export interface AgentDefinition {
@@ -36,6 +38,13 @@ export interface AgentMessage {
   steps?: AgentStep[];
   actions?: AgentAction[];
   pending?: boolean;
+  /** Written by the tool-calling LLM operator (not the deterministic agents). */
+  operator?: boolean;
+  /** Charts, tables, maps and shortcuts the operator's tools produced. Not persisted (they can be large). */
+  artifacts?: OperatorArtifact[];
+  /** Actions waiting for the researcher; `decided` records the answer per call id. */
+  approvals?: PendingApproval[];
+  decided?: Record<string, 'approved' | 'rejected'>;
   /** Optional LLM reading of the deterministic result. Never counted as evidence. */
   llm?: { status: 'pending' | 'ok' | 'error'; model?: string; text?: string; error?: string; ms?: number };
   at: Date;

@@ -70,3 +70,28 @@ def test_missing_paths_are_reported(env):
     with pytest.raises(UiHttpError) as err:
         ingest.ingest_dataset(env[0], {"metadata_path": "x"})
     assert err.value.code == "missing_path" and "asv_path" in err.value.message
+
+
+def test_confirming_updates_the_active_project_record(env):
+    st, a, b = env
+    project = st.projects.create("Teste")
+    st.projects.set_active(project.id)
+    assert st.projects.get(project.id).stage == "empty"
+    out = ingest.ingest_dataset(st, body(a))
+    assert out["project_stage"] == "ingested"
+    rec = st.projects.get(project.id)
+    assert (rec.stage, rec.samples, rec.asvs) == ("ingested", 12, 20)
+    assert rec.analyses[-1]["step"] == "ingest"
+    ingest.ingest_dataset(st, body(b))  # replacing keeps the record in sync
+    assert st.projects.get(project.id).samples == 7
+
+
+def test_ml_can_target_a_metadata_key_not_stored_in_the_samples_table(env):
+    st, a, _ = env
+    ingest.ingest_dataset(st, body(a))
+    # move the label into the key-value metadata, as real MGnify studies do (land_cover, environment_biome…)
+    st.db.execute("INSERT INTO sample_metadata SELECT sample_id, 'land_cover', CASE WHEN biome IN ('Amazon','Cerrado') THEN 'forest' ELSE 'pasture' END FROM samples")
+    from flora.ui.handlers import ml
+
+    out = ml.classify(st, {"model": "random_forest", "target_column": "land_cover", "split": "auto", "cv_folds": 2, "seed": 1, "normalize": "clr"})
+    assert out["success"] and out["experiment"]["status"] == "completed" and out["experiment"]["train_n"] + out["experiment"]["test_n"] == 12

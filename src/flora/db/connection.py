@@ -12,6 +12,7 @@ It provides:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -522,16 +523,31 @@ class FloraDB:
             feat_df = self.query(feat_sql).to_polars().fill_null(0.0)
 
             if target_column:
-                meta_sql = (
-                    f"SELECT sample_id, {target_column} FROM samples WHERE sample_id IN ({ids_str})"
-                )
-                meta_df = self.query(meta_sql).to_polars()
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", target_column):
+                    raise DatabaseError(f"Invalid target column name: {target_column!r}")
+                if target_column in self.query("SELECT * FROM samples LIMIT 0").to_polars().columns:
+                    meta_df = self.query(f'SELECT sample_id, "{target_column}" FROM samples WHERE sample_id IN ({ids_str})').to_polars()
+                else:  # a metadata key such as land_cover or environment_biome lives in the key-value table
+                    meta_df = self.query(
+                        f'SELECT sample_id, value AS "{target_column}" FROM sample_metadata WHERE key = ? AND sample_id IN ({ids_str})', [target_column]
+                    ).to_polars()
                 feat_df = feat_df.join(meta_df, on="sample_id", how="left")
 
             return feat_df
 
         train = _build_split(train_filter)
         test = _build_split(test_filter)
+        # A taxon seen only in one split is absent from the other's pivot: give both the same columns (0 where unseen).
+        reserved = {"sample_id", target_column} if target_column else {"sample_id"}
+        features = list(dict.fromkeys([c for c in train.columns if c not in reserved] + [c for c in test.columns if c not in reserved]))
+
+        def _align(frame: pl.DataFrame) -> pl.DataFrame:
+            missing = [c for c in features if c not in frame.columns]
+            frame = frame.with_columns([pl.lit(0.0).alias(c) for c in missing]) if missing else frame
+            tail = [target_column] if target_column and target_column in frame.columns else []
+            return frame.select(["sample_id", *features, *tail])
+
+        train, test = _align(train), _align(test)
         logger.info(
             "Dataset slice: train=%d samples, test=%d samples",
             len(train),

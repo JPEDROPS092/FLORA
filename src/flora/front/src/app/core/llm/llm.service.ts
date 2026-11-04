@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { FloraRepository } from '../data/flora.repository';
 import { LANG, t } from '../i18n/i18n';
 import { PROVIDERS } from './llm.catalog';
-import { ChatMessage, ChatResult, LlmSettings, LlmStatus, ModelRole, PullJob } from './llm.models';
+import { ChatMessage, ChatResult, LlmSettings, LlmStatus, ModelRole, OperatorMessage, OperatorArtifact, OperatorTurn, PullJob, SavedRun } from './llm.models';
 
 const KEY = 'flora.llm';
 const DEFAULTS: LlmSettings = {
@@ -148,6 +148,31 @@ export class LlmService {
     ], undefined, 'routing');
     const word = out.text.toLowerCase().match(/[a-z]+/)?.[0];
     return options.find((o) => o.id === word)?.id ?? null;
+  }
+
+  /** Operator analyses saved with the active project (survive reloads and restarts). */
+  async savedRuns(): Promise<SavedRun[]> {
+    if (this.mode !== 'proxy') return [];
+    const res = await firstValueFrom(this.http.get<{ runs: Record<string, unknown>[] }>(`${this.repo.source.apiBaseUrl}/api/llm/agent/runs`));
+    return (res.runs ?? []).map((r) => ({
+      id: String(r['id']), createdAt: String(r['created_at'] ?? ''), question: String(r['question'] ?? ''), text: String(r['text'] ?? ''),
+      steps: Number(r['steps'] ?? 0), artifacts: Number(r['artifacts'] ?? 0), model: String(r['model'] ?? ''),
+      tools: (r['tools'] as string[]) ?? [], pending: Number(r['pending'] ?? 0)
+    }));
+  }
+
+  async savedRun(id: string): Promise<{ steps: { tool: string; ok: boolean; ms: number; detail: string }[]; artifacts: OperatorArtifact[] }> {
+    const res = await firstValueFrom(this.http.get<{ run: { steps?: { tool: string; ok: boolean; ms: number; detail: string }[]; artifacts?: OperatorArtifact[] } }>(
+      `${this.repo.source.apiBaseUrl}/api/llm/agent/runs/detail`, { params: { id } }));
+    return { steps: res.run.steps ?? [], artifacts: res.run.artifacts ?? [] };
+  }
+
+  /** True when the backend can run the tool-calling operator (it needs the proxy; mock mode has no tools). */
+  readonly operatorAvailable = computed(() => this.ready() && this.mode === 'proxy' && this.settings().provider !== 'native');
+
+  /** One operator turn: the model may call FLORA's tools; `approved`/`rejected` answer actions it asked to run. */
+  agentTurn(messages: OperatorMessage[], approved: string[] = [], rejected: string[] = []): Promise<OperatorTurn> {
+    return this.post<OperatorTurn>('/api/llm/agent', { messages, approved, rejected });
   }
 
   /** Ask the model to explain facts that deterministic tools already computed. */

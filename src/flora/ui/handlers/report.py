@@ -254,7 +254,9 @@ def generate_report(state, body: dict):
     title = body.get("title", "FLORA Analysis Report")
     output_path = _resolve_output(state, body.get("output_path"), "report.html")
     output_format = body.get("output_format", "html")
-    group_by = body.get("group_by", "biome")
+    from flora.ui.handlers.explore import default_group
+
+    group_by = body.get("group_by") or default_group(state.db)
     include_pdf = output_format in {"pdf", "both"}
     pdf_path = _resolve_output(state, body.get("pdf_path"), output_path.with_suffix(".pdf").name)
     warnings: list[str] = []
@@ -401,7 +403,9 @@ def report_draft(state, params: dict | None = None):
     from flora.ui.provenance import build_provenance
 
     lang = lang_of(params)
-    group_by = ((params or {}).get("group_by") or ["biome"])[0]
+    from flora.ui.handlers.explore import default_group
+
+    group_by = ((params or {}).get("group_by") or [""])[0] or default_group(state.db)
     active = state.projects.active_id()
     project = state.projects.get(active) if active else None
     name = project.name if project else "workspace"

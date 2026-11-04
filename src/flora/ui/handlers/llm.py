@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -95,6 +96,62 @@ def chat(state, body: dict[str, Any]) -> dict[str, Any]:
     except LlmError as exc:
         raise UiHttpError(str(exc), status=502, code="llm_error") from exc
     return json_success(data=result)
+
+
+def agent(state, body: dict[str, Any]) -> dict[str, Any]:
+    """One turn of the tool-calling operator (see :mod:`flora.ui.agent`)."""
+    from flora.ui.agent import run_turn
+
+    settings = _store(state).load()
+    if not settings.enabled:
+        raise UiHttpError("Ative um modelo em Modelos de IA para usar o operador.", status=409, code="llm_disabled")
+    client = _client(state, settings)
+    if not hasattr(client, "chat_with_tools"):
+        raise UiHttpError("Este provedor não suporta chamada de ferramentas. Use um modelo via API (Qwen, OpenAI, Gemini, OpenRouter) ou Ollama.", status=409, code="tools_unsupported")
+    result = run_turn(state, settings, client, body or {})
+    result["run_id"] = _save_run(state, body or {}, result)
+    return json_success(data=result)
+
+
+def _runs(state):
+    from flora.projects.store import RecordStore
+
+    return RecordStore(Path(state.data_dir) / "agent_runs")
+
+
+def _save_run(state, body: dict[str, Any], result: dict[str, Any]) -> str:
+    """Persist one operator turn (question, answer, tool trace and the charts/tables it produced) with the project."""
+    from flora.projects.store import new_id
+
+    question = next((m["content"] for m in reversed(body.get("messages") or []) if m.get("role") == "user"), "")
+    active = state.projects.active_id()
+    record = {
+        "id": new_id(), "project_id": active, "question": str(question)[:600], "text": result["text"], "steps": result["steps"],
+        "artifacts": result["artifacts"], "pending": result["pending"], "model": result["model"], "usage": result["usage"],
+    }
+    try:
+        _runs(state).save(record)
+    except OSError:  # a full disk must not lose the answer the researcher is waiting for
+        return ""
+    return record["id"]
+
+
+def list_agent_runs(state, params=None) -> dict[str, Any]:
+    """Saved operator analyses of the active project, newest first, without the (large) artifacts."""
+    rows = []
+    for r in _runs(state).list():
+        rows.append({"id": r["id"], "created_at": r["created_at"], "question": r.get("question", ""), "text": r.get("text", ""),
+                     "steps": len(r.get("steps", [])), "artifacts": len(r.get("artifacts", [])), "model": r.get("model", ""),
+                     "tools": [s["tool"] for s in r.get("steps", [])][:12], "pending": len(r.get("pending", []))})
+    return json_success(data={"runs": rows})
+
+
+def get_agent_run(state, params=None) -> dict[str, Any]:
+    run_id = ((params or {}).get("id") or [""])[0]
+    record = _runs(state).get(run_id)
+    if not record:
+        raise UiHttpError("Análise não encontrada.", status=404, code="not_found")
+    return json_success(data={"run": record})
 
 
 def pull_start(state, body: dict[str, Any]) -> dict[str, Any]:

@@ -258,7 +258,7 @@ class FLORAPipeline:
                 value_name="value",
             ).with_columns(pl.lit(depth).alias("sampling_depth"))
 
-            self.db.load_dataframe("diversity_alpha", long)
+            self.db.load_dataframe("diversity_alpha", long, if_exists="replace")
             self._log_step("compute_diversity", "completed", params={"metrics": metrics})
             return diversity_df
         except Exception as exc:

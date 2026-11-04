@@ -292,3 +292,30 @@ def test_routing_role_uses_the_light_model_deterministically(tmp_path, server):
     handlers.save_config(state, {"router_model": ""})
     handlers.chat(state, {"role": "routing", "messages": [{"role": "user", "content": "d"}]})
     assert _FakeOpenAI.seen_requests[-1]["model"] == "big"
+
+
+def test_qwen_preset_points_to_dashscope_intl_and_reads_its_env_key(monkeypatch):
+    from flora.llm import PRESETS
+
+    assert PRESETS["qwen"]["base_url"] == "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" and PRESETS["qwen"]["needs_key"]
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-from-env")
+    s = LlmSettings(provider="qwen", base_url=PRESETS["qwen"]["base_url"])
+    assert s.effective_api_key() == "sk-from-env" and s.public()["key_from_env"] is True and "sk-from-env" not in str(s.public())
+
+
+def test_qwen_requests_switch_reasoning_off_unless_asked(server):
+    s = LlmSettings(provider="qwen", base_url=server, model="qwen3.6-plus")
+    OpenAICompatClient(s).chat([{"role": "user", "content": "oi"}])
+    assert _FakeOpenAI.seen_requests[-1]["enable_thinking"] is False
+    OpenAICompatClient(s.model_copy(update={"thinking": True})).chat([{"role": "user", "content": "oi"}])
+    assert _FakeOpenAI.seen_requests[-1]["enable_thinking"] is True
+    OpenAICompatClient(LlmSettings(provider="ollama", base_url=server, model="m")).chat([{"role": "user", "content": "oi"}])
+    assert "enable_thinking" not in _FakeOpenAI.seen_requests[-1]  # other providers are untouched
+
+
+def test_store_keeps_the_qwen_key_private(tmp_path):
+    store = SettingsStore(tmp_path)
+    store.update({"provider": "qwen", "api_key": "sk-secret", "model": "qwen-plus", "enabled": True})
+    assert store.load().base_url.startswith("https://dashscope-intl.aliyuncs.com") and store.load().effective_api_key() == "sk-secret"
+    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+    assert "api_key" not in store.load().public() and "sk-secret" not in json.dumps(store.load().public())

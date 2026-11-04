@@ -9,6 +9,7 @@ export const PROVIDERS: readonly ProviderPreset[] = [
   { id: 'gemini', label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true, local: false },
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', needsKey: true, local: false },
   { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', needsKey: true, local: false },
+  { id: 'qwen', label: 'Qwen (Alibaba Model Studio · Singapura)', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', needsKey: true, local: false },
   { id: 'custom', label: t('Compatível com OpenAI (personalizado)'), baseUrl: '', needsKey: false, local: false }
 ];
 

@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
-ProviderId = Literal["ollama", "lmstudio", "llamacpp", "native", "gemini", "openai", "openrouter", "custom"]
+ProviderId = Literal["ollama", "lmstudio", "llamacpp", "native", "gemini", "openai", "openrouter", "qwen", "custom"]
 
 #: Default endpoints per provider. All speak the OpenAI-compatible API.
 PRESETS: dict[str, dict[str, Any]] = {
@@ -27,6 +27,14 @@ PRESETS: dict[str, dict[str, Any]] = {
     },
     "openai": {"label": "OpenAI", "base_url": "https://api.openai.com/v1", "needs_key": True, "env_key": "OPENAI_API_KEY"},
     "openrouter": {"label": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "needs_key": True, "env_key": "OPENROUTER_API_KEY"},
+    # Alibaba Model Studio (international, pay-as-you-go). Keys are tied to their plan: Coding Plan and Token Plan keys
+    # use other hosts and are rejected here, and this key type is rejected by the Beijing and US endpoints.
+    "qwen": {
+        "label": "Qwen (Alibaba Model Studio · Singapura)",
+        "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "needs_key": True,
+        "env_key": "DASHSCOPE_API_KEY",
+    },
     "custom": {"label": "OpenAI-compatible (custom)", "base_url": "", "needs_key": False},
 }
 
@@ -43,6 +51,8 @@ class LlmSettings(BaseModel):
     temperature: float = Field(0.2, ge=0, le=2)
     max_tokens: int = Field(700, ge=16, le=8192)
     timeout_s: float = Field(120, ge=1, le=900)
+    #: Qwen3 models "think" by default (hundreds of reasoning tokens for a one-word answer); off unless asked for.
+    thinking: bool = False
     # Only used by the in-process ``native`` provider (GGUF files under <workdir>/models).
     n_ctx: int = Field(4096, ge=512, le=131072)
     n_gpu_layers: int = Field(-1, ge=-1, le=999, description="-1 offloads every layer to the GPU")

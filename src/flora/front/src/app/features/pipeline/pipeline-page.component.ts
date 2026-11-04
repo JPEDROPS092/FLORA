@@ -335,6 +335,15 @@ import { t } from '../../core/i18n/i18n';
                   <p [class]="result.success ? 'status-pass' : 'status-fail'">
                     {{ result.success ? t('As três etapas foram aceitas.') : result.error }}
                   </p>
+                  @if (result.success) {
+                    <div class="next-steps" role="group" [attr.aria-label]="'Próximos passos' | t">
+                      <span>{{ 'Os dados já estão no projeto ativo. O que fazer agora:' | t }}</span>
+                      <a routerLink="/explorer" [queryParams]="{ view: 'qc' }">{{ 'Conferir a qualidade (QC)' | t }}</a>
+                      <a routerLink="/explorer">{{ 'Explorar diversidade e taxonomia' | t }}</a>
+                      <a routerLink="/ml">{{ 'Treinar um modelo' | t }}</a>
+                      <a routerLink="/reports">{{ 'Montar o relatório' | t }}</a>
+                    </div>
+                  }
                 }
                 <div class="actions">
                   <p-button type="button" [label]="'Voltar' | t" severity="secondary" (onClick)="activateCallback(4)" />
@@ -360,6 +369,7 @@ import { t } from '../../core/i18n/i18n';
     .ds-meta span { border: 1px solid var(--flora-border); border-radius: 999px; padding: 1px 8px; }
     .ds-meta span.ok { color: var(--flora-ok); border-color: var(--flora-ok); }
     .warn { color: var(--flora-warn); }
+    .next-steps { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: .88rem; margin: 8px 0; }
     .replace-note { color: var(--flora-warn); border-left: 3px solid var(--flora-warn); padding-left: 8px; font-size: .86rem; }
     .project-bar { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
     .project-bar p { margin: 0; }

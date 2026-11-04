@@ -262,6 +262,12 @@ _SAMPLE_COLUMNS = [
     "environment_feature",
     "environment_material",
     "geo_loc_name",
+    "collection_date",
+    "sample_name",
+    "sample_desc",
+    "substrate",
+    "land_cover",
+    "site",
 ]
 
 
@@ -290,8 +296,33 @@ def _mgnify_samples(accession: str, limit: int) -> list[dict[str, Any]]:
     return rows
 
 
+_LAND_COVER = (("deforest", "deforested"), ("regenerat", "regeneration"), ("pastur", "pasture"), ("forest", "forest"))
+_MUNICIPALITY = re.compile(r"\b(Bel[eé]n|Solano)\b", re.IGNORECASE)
+_SITE = re.compile(r"\bsite\s+(\w+)", re.IGNORECASE)
+
+
+def _from_description(desc: str) -> dict[str, str]:
+    """Plain keyword reading of the submitter's sample description (kept next to the raw text in ``sample_desc``)."""
+    low = desc.lower()
+    first = low.split(" ", 1)[0] if low else ""
+    cover = next((label for key, label in _LAND_COVER if key in low), "")
+    place = _MUNICIPALITY.search(desc)
+    site = _SITE.search(desc)
+    return {
+        "substrate": first if first in {"soil", "litter"} else "",
+        "land_cover": cover,
+        "site": (place.group(1).capitalize() if place else f"site {site.group(1)}" if site else ""),
+    }
+
+
 def _sample_row(item: dict) -> dict[str, Any]:
     attrs = item.get("attributes") or {}
+
+    def text(key: str) -> str:
+        value = attrs.get(key)
+        return "" if value in (None, "None") else str(value).replace("''", "'").strip()
+
+    desc = text("sample-desc")
     return {
         "sample_id": item.get("id") or "",
         "latitude": attrs.get("latitude") if attrs.get("latitude") is not None else "",
@@ -300,6 +331,10 @@ def _sample_row(item: dict) -> dict[str, Any]:
         "environment_feature": attrs.get("environment-feature") or "",
         "environment_material": attrs.get("environment-material") or "",
         "geo_loc_name": attrs.get("geo-loc-name") or "",
+        "collection_date": text("collection-date"),
+        "sample_name": text("sample-name"),
+        "sample_desc": desc,
+        **_from_description(desc),
     }
 
 

@@ -137,3 +137,33 @@ def get_table(state, params: dict | None = None):
 
     rows = [["" if v is None else (round(v, 3) if isinstance(v, float) else v) for v in row] for row in frame.iter_rows()]
     return json_success(data={"name": name, "columns": frame.columns, "rows": rows, "total": total, "limit": limit, "offset": offset})
+
+
+def default_group(db) -> str:
+    """Column the app groups by when none is chosen: ``biome`` if it has 2+ values, else the first categorical column."""
+    try:
+        columns = _group_columns(db)
+    except Exception:  # noqa: BLE001 - an empty workspace has no columns
+        return "biome"
+    return next((c["name"] for c in columns if c["name"] == "biome"), columns[0]["name"] if columns else "biome")
+
+
+def get_map(state, params: dict | None = None):
+    """Where the active project's samples were collected (needs latitude/longitude), coloured by a metadata column."""
+    from flora.io.geo import points_from_rows
+    from flora.ui.handlers.workspace import _groups_frame
+
+    db = state.db
+    group_by = _q(params, "group_by") or default_group(db)
+    samples = db.query("SELECT sample_id, latitude, longitude FROM samples").to_polars()
+    rows = [{"sample_id": r["sample_id"], "latitude": "" if r["latitude"] is None else str(r["latitude"]),
+             "longitude": "" if r["longitude"] is None else str(r["longitude"])} for r in samples.iter_rows(named=True)]
+    if group_by:
+        groups = dict(zip(*(_groups_frame(db, group_by)[c].to_list() for c in ("sample_id", "group")), strict=True))
+        for row in rows:
+            row["group"] = groups.get(row["sample_id"]) or ""
+    out = points_from_rows(rows, ["sample_id", "latitude", "longitude", "group"], "group" if group_by else None)
+    out["group_column"] = group_by if out.get("available") else out.get("group_column", "")
+    if not rows:
+        out["reason"] = "not_downloaded"
+    return json_success(data={"map": out})

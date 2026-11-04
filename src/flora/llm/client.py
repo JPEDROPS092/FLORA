@@ -73,17 +73,16 @@ class OpenAICompatClient:
         if not chosen:
             raise LlmError("No model selected.")
         started = time.perf_counter()
-        body = self._request(
-            "POST",
-            "/chat/completions",
-            {
-                "model": chosen,
-                "messages": messages,
-                "temperature": self.settings.temperature if temperature is None else temperature,
-                "max_tokens": max_tokens or self.settings.max_tokens,
-                "stream": False,
-            },
-        )
+        payload: dict[str, Any] = {
+            "model": chosen,
+            "messages": messages,
+            "temperature": self.settings.temperature if temperature is None else temperature,
+            "max_tokens": max_tokens or self.settings.max_tokens,
+            "stream": False,
+        }
+        if self.settings.provider == "qwen":
+            payload["enable_thinking"] = bool(self.settings.thinking)  # DashScope's switch for Qwen3 reasoning
+        body = self._request("POST", "/chat/completions", payload)
         try:
             text = body["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as exc:
@@ -94,6 +93,42 @@ class OpenAICompatClient:
             "elapsed_ms": int((time.perf_counter() - started) * 1000),
             "usage": body.get("usage") or {},
         }
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.1,
+        max_tokens: int | None = None,
+    ) -> dict[str, Any]:
+        """One assistant turn that may ask for tool calls (OpenAI ``tools`` protocol).
+
+        Returns ``{"message": <assistant message incl. tool_calls>, "usage", "elapsed_ms", "model"}``.
+        """
+        chosen = model or self.settings.model
+        if not chosen:
+            raise LlmError("No model selected.")
+        started = time.perf_counter()
+        payload: dict[str, Any] = {
+            "model": chosen,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "temperature": temperature,
+            "max_tokens": max_tokens or self.settings.max_tokens,
+            "stream": False,
+        }
+        if self.settings.provider == "qwen":
+            payload["enable_thinking"] = bool(self.settings.thinking)
+        body = self._request("POST", "/chat/completions", payload)
+        try:
+            message = body["choices"][0]["message"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LlmError("Unexpected response shape from /chat/completions") from exc
+        message = {**message, "content": strip_reasoning(message.get("content") or "")}
+        return {"message": message, "model": chosen, "usage": body.get("usage") or {}, "elapsed_ms": int((time.perf_counter() - started) * 1000)}
 
     def ping(self) -> dict[str, Any]:
         """Check reachability and whether the selected model is available."""

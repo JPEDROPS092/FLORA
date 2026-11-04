@@ -77,7 +77,11 @@ def read_points(path: str | Path, group_by: str | None = None, max_rows: int = 2
         reader = csv.DictReader(fh, delimiter=delimiter)
         header = [h for h in (reader.fieldnames or []) if h]
         rows = [r for _, r in zip(range(max_rows), reader, strict=False)]
+    return points_from_rows(rows, header, group_by)
 
+
+def points_from_rows(rows: list[dict[str, str]], header: list[str], group_by: str | None = None) -> dict[str, Any]:
+    """Map points from already-parsed rows (a file, or the active project's samples)."""
     lat_col, lon_col = _column(header, _LAT), _column(header, _LON)
     pair_col = _column(header, ("lat_lon", "latlon", "coordinates"))
     id_col = _column(header, _ID) or (header[0] if header else "")

@@ -1,9 +1,12 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
 import { AgentService } from '../../core/agents/agent.service';
+import { LlmService } from '../../core/llm/llm.service';
+import { OperatorArtifact, SavedRun } from '../../core/llm/llm.models';
+import { AgentArtifactComponent } from '../../shared/agent-artifact.component';
 import { MascotComponent } from '../../shared/mascot.component';
 import { WorkspaceStore } from '../../core/workspace/workspace.store';
 import { TPipe } from '../../core/i18n/t.pipe';
@@ -12,7 +15,7 @@ import { t } from '../../core/i18n/i18n';
 @Component({
   selector: 'flora-agents',
   standalone: true,
-  imports: [TPipe, MascotComponent, DatePipe, ButtonModule, TagModule],
+  imports: [TPipe, MascotComponent, AgentArtifactComponent, DatePipe, ButtonModule, TagModule],
   template: `
     <section class="page">
       <header class="page-heading">
@@ -38,6 +41,27 @@ import { t } from '../../core/i18n/i18n';
           </article>
         }
       </div>
+
+      @if (saved().length) {
+        <article class="surface">
+          <div class="section-title">
+            <h2>{{ 'Análises do operador (salvas no projeto)' | t }}</h2>
+            <p>{{ saved().length }} {{ 'análises geradas pelo LLM chamando as ferramentas do FLORA' | t }}</p>
+          </div>
+          @for (r of saved(); track r.id) {
+            <details class="run" (toggle)="open(r, $event)">
+              <summary>
+                <i class="pi pi-bolt"></i>
+                <strong>{{ r.question }}</strong>
+                <time>{{ r.createdAt | date:'dd/MM HH:mm' }}</time>
+              </summary>
+              <p class="saved-text">{{ r.text }}</p>
+              <p class="note">@for (tool of r.tools; track $index) { <code>{{ tool }}</code> } · {{ r.model }}</p>
+              @for (a of artifacts()[r.id]; track $index) { <flora-agent-artifact [artifact]="a" [wide]="true" /> }
+            </details>
+          }
+        </article>
+      }
 
       <article class="surface">
         <div class="section-title">
@@ -68,6 +92,22 @@ import { t } from '../../core/i18n/i18n';
 export class AgentsPageComponent {
   protected readonly t = t;
   protected readonly svc = inject(AgentService);
+  private readonly llm = inject(LlmService);
+  protected readonly saved = signal<SavedRun[]>([]);
+  protected readonly artifacts = signal<Record<string, OperatorArtifact[]>>({});
+
+  constructor() {
+    void this.llm.savedRuns().then((runs) => this.saved.set(runs)).catch(() => this.saved.set([]));
+  }
+
+  /** Charts and tables are fetched when a saved analysis is opened (they can be large). */
+  async open(run: SavedRun, event: Event): Promise<void> {
+    if (!(event.target as HTMLDetailsElement).open || this.artifacts()[run.id]) return;
+    try {
+      const detail = await this.llm.savedRun(run.id);
+      this.artifacts.update((a) => ({ ...a, [run.id]: detail.artifacts }));
+    } catch { /* the text is still shown */ }
+  }
   private readonly store = inject(WorkspaceStore);
 
   run(agent: Parameters<AgentService['selected']['set']>[0], prompt: string): void {

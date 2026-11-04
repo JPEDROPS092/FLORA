@@ -28,6 +28,12 @@ _DEFAULT_MIN_READS = 10_000
 _TREE_MAX_CHILDREN = 25
 
 
+def _default_group(db) -> str:
+    from flora.ui.handlers.explore import default_group
+
+    return default_group(db)
+
+
 def _q(params: dict | None, key: str, default: str = "") -> str:
     values = (params or {}).get(key)
     return values[0] if values else default
@@ -142,7 +148,7 @@ def _active_project(state):
 # ---------------------------------------------------------------------------
 def get_dashboard(state, params: dict | None = None):
     lang = lang_of(params)
-    group_by = _q(params, "group_by", "biome")
+    group_by = _q(params, "group_by") or _default_group(state.db)
     min_reads = _int(params, "min_reads", _DEFAULT_MIN_READS)
     project = _active_project(state)
 
@@ -207,7 +213,7 @@ def _recent_from_experiment(exp: dict[str, Any], project_id: str, lang: str) -> 
 # ---------------------------------------------------------------------------
 def get_pipeline(state, params: dict | None = None):
     lang = lang_of(params)
-    group_by = _q(params, "group_by", "biome")
+    group_by = _q(params, "group_by") or _default_group(state.db)
     min_reads = _int(params, "min_reads", _DEFAULT_MIN_READS)
     db = state.db
     counts = _table_counts(db)
@@ -397,7 +403,7 @@ def explore_summary(state, params: dict | None = None):
     from flora.diversity.alpha import compute_alpha_diversity
 
     lang = lang_of(params)
-    group_by = _q(params, "group_by", "biome")
+    group_by = _q(params, "group_by") or _default_group(state.db)
     rank = _q(params, "rank", "genus")
     if rank not in _RANKS:
         raise UiHttpError(f"Unknown rank: {rank}", code="invalid_rank")
