@@ -15,7 +15,8 @@ import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 
 import { FloraRepository } from '../../core/data/flora.repository';
-import { CatalogEntry, DownloadJob, DownloadRequest, MetadataPreview } from '../../core/models/domain';
+import { CatalogEntry, DownloadJob, DownloadRequest, MetadataPreview, SampleMap } from '../../core/models/domain';
+import { SampleMapComponent } from '../../shared/sample-map.component';
 import { TPipe } from '../../core/i18n/t.pipe';
 import { t } from '../../core/i18n/i18n';
 
@@ -28,6 +29,7 @@ interface FilterOption {
   selector: 'flora-downloads',
   standalone: true,
   imports: [
+    SampleMapComponent,
     NgTemplateOutlet,
     FormsModule,
     PrimeTemplate,
@@ -233,6 +235,8 @@ interface FilterOption {
               @if (downloadState() === 'completed') { <span class="status-pass">{{ 'Download concluído' | t }}</span> }
               @if (downloadState() === 'failed') { <span class="status-fail">{{ downloadDetail() || t('Falha no download.') }}</span> }
             </div>
+            <h3>{{ 'Mapa das amostras' | t }}</h3>
+            <flora-sample-map [map]="sampleMap()" [height]="340" />
             <h3>{{ 'Prévia dos metadados' | t }}</h3>
             @if (previewLoading()) { <p class="muted">{{ 'Carregando…' | t }}</p> }
             @if (previewError()) { <p class="field-error" role="alert">{{ previewError() }}</p> }
@@ -311,6 +315,7 @@ export class DownloadsPageComponent {
   readonly selected = signal<CatalogEntry | null>(null);
   readonly preview = signal<MetadataPreview | null>(null);
   readonly previewLoading = signal(false);
+  readonly sampleMap = signal<SampleMap | null>(null);
   readonly previewError = signal('');
   readonly downloadState = signal<'idle' | 'running' | 'completed' | 'failed'>('idle');
   readonly downloadDetail = signal('');
@@ -425,12 +430,24 @@ export class DownloadsPageComponent {
     this.downloadState.set('idle');
     this.downloadDetail.set('');
     this.previewLoading.set(true);
+    this.sampleMap.set(null);
+    void this.loadMap(study);
     try {
       this.preview.set(await this.repository.datasetMetadata(study.source, study.accession));
     } catch (error) {
       this.previewError.set(error instanceof Error ? error.message : t('Não foi possível carregar a prévia.'));
     } finally {
       this.previewLoading.set(false);
+    }
+  }
+
+  /** Shown whenever the dataset is on disk and has coordinates; refreshed after each download. */
+  private async loadMap(study: CatalogEntry): Promise<void> {
+    try {
+      const map = await this.repository.datasetMap(study.source, study.accession);
+      if (this.selected()?.accession === study.accession) this.sampleMap.set(map);
+    } catch {
+      this.sampleMap.set(null);
     }
   }
 
@@ -453,6 +470,7 @@ export class DownloadsPageComponent {
       detail: failed ? job.detail : t('Download concluído')
     });
     await this.reload();
+    if (!failed) await this.loadMap(study);
   }
 
   artifactPaths(job: DownloadJob): string {

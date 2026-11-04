@@ -510,3 +510,24 @@ export interface TablePage {
   total: number;
   offset: number;
 }
+
+export interface MapPoint {
+  lat: number;
+  lon: number;
+  group: string;
+  /** Samples collected at this exact spot. */
+  n: number;
+  ids: string[];
+}
+
+/** Sample locations of a dataset; `available` is false when the file has no usable coordinates. */
+export interface SampleMap {
+  available: boolean;
+  reason: '' | 'not_downloaded' | 'no_coordinates' | 'no_valid_coordinates';
+  points: MapPoint[];
+  groups: { name: string; count: number }[];
+  groupColumn: string;
+  total: number;
+  mapped: number;
+  skipped: number;
+}

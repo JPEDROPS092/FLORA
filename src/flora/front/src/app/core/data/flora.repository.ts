@@ -10,6 +10,7 @@ import {
   ExploreSchema,
   TablePage,
   LibrarySource,
+  SampleMap,
   LocalDataset,
   UploadKind,
   MetadataPreview,
@@ -69,6 +70,7 @@ export abstract class FloraRepository {
   abstract searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]>;
   abstract resolveRuns(studyAccession: string): Promise<string[]>;
   abstract catalog(query: CatalogQuery): Promise<CatalogEntry[]>;
+  abstract datasetMap(source: string, accession: string): Promise<SampleMap>;
   abstract datasetMetadata(source: string, accession: string): Promise<MetadataPreview>;
   abstract downloadDataset(source: string, accession: string): Promise<DownloadJob>;
 }

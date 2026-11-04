@@ -13,6 +13,7 @@ import {
   ExploreSchema,
   TablePage,
   LibrarySource,
+  SampleMap,
   LocalDataset,
   UploadKind,
   MetadataPreview,
@@ -484,6 +485,11 @@ export class MockFloraRepository extends FloraRepository {
       const blob = `${entry.accession} ${entry.title} ${entry.titlePt} ${entry.description} ${entry.secondary} ${entry.bioproject} ${entry.regionLabel}`.toLowerCase();
       return q.split(/\s+/).every((part) => blob.includes(part));
     });
+  }
+
+  async datasetMap(): Promise<SampleMap> {
+    await wait();
+    return { available: false, reason: 'not_downloaded', points: [], groups: [], groupColumn: '', total: 0, mapped: 0, skipped: 0 };
   }
 
   async datasetMetadata(source: string, accession: string): Promise<MetadataPreview> {

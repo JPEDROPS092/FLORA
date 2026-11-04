@@ -199,6 +199,8 @@ def _make_handler(state: FLORAState):
                         params[key] = [value]
                     if kind == "catalog":
                         payload = downloads.library_catalog(state, params)
+                    elif kind == "map":
+                        payload = downloads.library_map(state, params)
                     else:
                         payload = downloads.library_metadata(state, params)
                     send_json(self, payload)

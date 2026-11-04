@@ -1,5 +1,15 @@
 /** Feature pages: dashboard, downloads, explorer, ML lab, pipeline, projects, reports, agents. */
 export const EN_PAGES: Record<string, string> = {
+  // sample map
+  'Mapa das amostras': 'Sample map',
+  'de': 'of',
+  'amostras com coordenadas': 'samples with coordinates',
+  'sem coordenadas válidas': 'without valid coordinates',
+  'cores:': 'colours:',
+  'Baixe o dataset para ver o mapa das amostras.': 'Download the dataset to see the sample map.',
+  'Este dataset não traz latitude e longitude, então não há mapa.': 'This dataset has no latitude and longitude, so there is no map.',
+  'As coordenadas deste dataset estão vazias ou inválidas.': "This dataset's coordinates are empty or invalid.",
+  'amostra(s)': 'sample(s)',
   // explorer: project context and data viewer
   'Projeto e dataset': 'Project and dataset',
   'Nenhum projeto ativo': 'No active project',

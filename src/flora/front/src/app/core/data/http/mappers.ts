@@ -6,6 +6,7 @@ import {
   DownloadJob,
   MetadataPreview,
   StudyEntry,
+  SampleMap,
   LocalDataset,
   GroupComparison,
   IngestPreview,
@@ -294,5 +295,26 @@ export function toLocalDataset(raw: unknown): LocalDataset {
     samples: Number(d['samples']) || 0,
     columns: arr(d['columns']).map((c) => String(c)),
     modified: str(d['modified'])
+  };
+}
+
+export function toSampleMap(raw: unknown): SampleMap {
+  const m = obj(raw);
+  const reason = m['reason'];
+  return {
+    available: m['available'] === true,
+    reason: reason === 'not_downloaded' || reason === 'no_coordinates' || reason === 'no_valid_coordinates' ? reason : '',
+    points: arr(m['points']).map((p) => ({
+      lat: Number(p['lat']),
+      lon: Number(p['lon']),
+      group: str(p['group']),
+      n: Number(p['n']) || 1,
+      ids: strings(p['ids'])
+    })),
+    groups: arr(m['groups']).map((g) => ({ name: str(g['name']), count: Number(g['count']) || 0 })),
+    groupColumn: str(m['group_column']),
+    total: Number(m['total']) || 0,
+    mapped: Number(m['mapped']) || 0,
+    skipped: Number(m['skipped']) || 0
   };
 }

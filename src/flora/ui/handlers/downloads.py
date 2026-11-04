@@ -30,6 +30,7 @@ _ARTIFACT_KEYS = {
 _ACC = r"(?P<acc>[A-Za-z0-9._-]+)"
 _SRC = r"(?P<source>[a-z0-9_-]+)"
 _LIBRARY_META = re.compile(rf"^/api/library/{_SRC}/{_ACC}/metadata$")
+_LIBRARY_MAP = re.compile(rf"^/api/library/{_SRC}/{_ACC}/map$")
 _LIBRARY_DOWNLOAD = re.compile(rf"^/api/library/{_SRC}/{_ACC}/download$")
 
 
@@ -91,6 +92,8 @@ def library_route(method: str, path: str) -> tuple[str, dict[str, str]] | None:
         return "catalog", {}
     if method == "GET" and (match := _LIBRARY_META.fullmatch(path)):
         return "metadata", {"source": match["source"], "accession": match["acc"]}
+    if method == "GET" and (match := _LIBRARY_MAP.fullmatch(path)):
+        return "map", {"source": match["source"], "accession": match["acc"]}
     if method == "POST" and (match := _LIBRARY_DOWNLOAD.fullmatch(path)):
         return "download", {"source": match["source"], "accession": match["acc"]}
     return None
@@ -138,6 +141,19 @@ def library_metadata(state, params=None):
     except LibraryError as exc:
         raise UiHttpError(str(exc), status=502, code="library_error") from exc
     return json_success(data={"preview": preview})
+
+
+def library_map(state, params=None):
+    """Sample locations of an already downloaded catalog dataset (empty when none are available)."""
+    from flora.io.catalog import get_entry
+    from flora.io.geo import read_points
+
+    source = _first(params, "source")
+    accession = _first(params, "accession")
+    if get_entry(source, accession) is None:
+        raise UiHttpError(f"Dataset {accession} is not in the catalog", status=404, code="not_found")
+    metadata = _library_output(state, {}, source, accession) / "metadata.tsv"
+    return json_success(data={"map": read_points(metadata, _first(params, "group_by") or None)})
 
 
 def _library_output(state, body: dict, source: str, accession: str) -> Path:

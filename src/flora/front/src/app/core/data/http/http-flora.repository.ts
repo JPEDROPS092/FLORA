@@ -17,6 +17,7 @@ import {
   ExploreSchema,
   TablePage,
   LibrarySource,
+  SampleMap,
   LocalDataset,
   UploadKind,
   MetadataPreview,
@@ -48,7 +49,7 @@ import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
 import { LANG, t } from '../../i18n/i18n';
-import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toLocalDataset, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
+import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toLocalDataset, toSampleMap, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
 
 interface StatusResponse {
   success: boolean;
@@ -659,6 +660,11 @@ export class HttpFloraRepository extends FloraRepository {
       }
     });
     return (res.studies ?? []).map(toCatalogEntry);
+  }
+
+  async datasetMap(source: string, accession: string): Promise<SampleMap> {
+    const res = await this.send<{ map: unknown }>('GET', `/api/library/${encodeURIComponent(source)}/${encodeURIComponent(accession)}/map`);
+    return toSampleMap(res.map);
   }
 
   async datasetMetadata(source: string, accession: string): Promise<MetadataPreview> {
