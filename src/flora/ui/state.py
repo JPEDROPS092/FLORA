@@ -40,6 +40,13 @@ class FLORAState:
                 self._project_pipelines[project_id] = pipe
             return pipe
 
+    def release(self, project_id: str) -> None:
+        """Close the DuckDB of ``project_id`` so its directory can be deleted."""
+        with self._lock:
+            pipe = self._project_pipelines.pop(project_id, None)
+        if pipe is not None:
+            pipe.close()
+
     @property
     def pipeline(self):
         from flora.pipelines.main_pipeline import FLORAPipeline

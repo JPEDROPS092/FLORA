@@ -262,6 +262,11 @@ export class MockFloraRepository extends FloraRepository {
     await wait();
   }
 
+  async deleteProject(id: string): Promise<void> {
+    await wait();
+    this.projectStore = this.projectStore.filter((project) => project.id !== id);
+  }
+
   async pipeline(): Promise<PipelineSnapshot> {
     await wait();
     return this.pipelineSnapshot();

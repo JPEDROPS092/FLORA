@@ -496,7 +496,7 @@ class FloraDB:
         normalize = None if features == "asv" else features
 
         def _build_split(where_clause: str) -> pl.DataFrame:
-            sample_sql = f"SELECT sample_id FROM samples WHERE {where_clause}"
+            sample_sql = self._samples_matching(where_clause)
             samples = self.query(sample_sql).to_polars()
             sample_ids = samples["sample_id"].to_list()
 
@@ -554,6 +554,40 @@ class FloraDB:
             len(test),
         )
         return train, test
+
+    def _samples_matching(self, where_clause: str) -> str:
+        """``SELECT sample_id`` for a filter that may name ``sample_metadata`` keys.
+
+        Real studies keep ``land_cover`` and ``environment_biome`` out of ``samples``.
+        A predicate such as ``land_cover = 'forest'`` is joined in from the key-value table
+        instead of being rejected as a missing column of ``samples``.
+        """
+        columns = set(self.query("SELECT * FROM samples LIMIT 0").to_polars().columns)
+        try:
+            keys = {row[0] for row in self.query("SELECT DISTINCT key FROM sample_metadata").to_polars().iter_rows()}
+        except Exception:  # noqa: BLE001 - no metadata table yet
+            keys = set()
+        words = {
+            "and", "or", "not", "in", "is", "null", "like", "between", "true", "false",
+            "select", "from", "where", "as", "on", "case", "when", "then", "else", "end", "cast",
+        }
+        joins: list[str] = []
+        seen: list[str] = []
+        for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", where_clause):
+            if ident.lower() in words or ident in columns or ident in seen or ident not in keys:
+                continue
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", ident):
+                continue
+            seen.append(ident)
+            alias = f"md{len(seen)}"
+            joins.append(
+                f'LEFT JOIN (SELECT sample_id, value AS "{ident}" FROM sample_metadata WHERE key = \'{ident}\') {alias} '
+                f"ON {alias}.sample_id = samples.sample_id"
+            )
+        joined = " ".join(joins)
+        if joins:
+            where_clause = re.sub(r"(?<![\w.])sample_id\b", "samples.sample_id", where_clause)
+        return f"SELECT samples.sample_id FROM samples {joined} WHERE {where_clause}"
 
     def create_views(self) -> None:
         """Create standard analytical views for common query patterns.

@@ -196,7 +196,8 @@ def test_operator_turns_are_saved_with_their_charts_and_listed(st, monkeypatch):
 def test_charts_and_the_map_work_when_the_grouping_lives_in_the_key_value_metadata(st):
     # real MGnify studies keep land_cover / environment_biome in sample_metadata, not in the samples table
     st.db.execute("INSERT INTO sample_metadata SELECT sample_id, 'land_cover', CASE WHEN biome IN ('Amazon','Cerrado') THEN 'forest' ELSE 'pasture' END FROM samples")
-    st.db.execute("UPDATE samples SET latitude = -3.0 + (row_number() OVER ())::DOUBLE / 10, longitude = -60.0 FROM (SELECT 1) x WHERE FALSE")
+    st.db.execute("CREATE OR REPLACE TEMP TABLE _lat AS SELECT sample_id, -3.0 - (ROW_NUMBER() OVER (ORDER BY sample_id)) / 10.0 AS la FROM samples")
+    st.db.execute("UPDATE samples SET latitude = c.la, longitude = -60.0 FROM _lat c WHERE samples.sample_id = c.sample_id")
     for name, args in (("plot_alpha", {"group_by": "land_cover"}), ("plot_pcoa", {"color_by": "land_cover"}), ("plot_taxonomy", {"group_by": "land_cover"}),
                        ("alpha_stats", {"group_by": "land_cover"}), ("beta_stats", {"group_by": "land_cover", "permutations": 99})):
         result, trace = at.execute(st, name, args)

@@ -134,6 +134,7 @@ import { t } from '../../core/i18n/i18n';
                     {{ result.method }} · k={{ result.nClusters }} · silhueta {{ result.silhouette | number:'1.2-2' }}
                     @if (result.daviesBouldin !== null) { · Davies–Bouldin {{ result.daviesBouldin | number:'1.2-2' }} }
                     @if (result.noiseFraction) { {{ '· ruído' | t }} {{ result.noiseFraction | number:'1.2-2' }} }
+                    @if (result.note) { <span class="note">{{ result.note }}</span> }
                   } @else {
                     {{ result.error }}
                   }

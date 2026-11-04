@@ -41,6 +41,8 @@ class ClusteringResult:
         Davies-Bouldin index (lower is better).
     noise_fraction : float
         Fraction of samples labeled as noise (HDBSCAN only; 0.0 for K-Means).
+    note : str
+        Why ``n_clusters`` is below the requested k, when the points cannot support it.
     """
 
     method: str
@@ -49,6 +51,7 @@ class ClusteringResult:
     silhouette: float | None
     davies_bouldin: float | None
     noise_fraction: float = 0.0
+    note: str = ""
 
 
 class MicrobiomeClusterer:
@@ -143,6 +146,23 @@ class MicrobiomeClusterer:
         if self.scale:
             scaler = StandardScaler()
             X = scaler.fit_transform(X)
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        requested = self.n_clusters
+        note = ""
+        if self.method == "kmeans":
+            distinct = int(np.unique(np.round(X, 5), axis=0).shape[0]) if len(X) else 0
+            if distinct < 1:
+                distinct = 1
+            if requested > len(sample_ids):
+                note = f"k={requested} é maior que o número de amostras ({len(sample_ids)})."
+                self.n_clusters = max(1, len(sample_ids))
+            elif distinct < requested:
+                note = (
+                    f"As coordenadas só têm {distinct} posições distintas, então não dá para formar "
+                    f"{requested} grupos. O resultado usa {distinct}."
+                )
+                self.n_clusters = distinct
 
         estimator = self._build_estimator()
 
@@ -181,6 +201,11 @@ class MicrobiomeClusterer:
             noise_fraction * 100,
         )
 
+        if self.method == "kmeans" and not note and n_clusters < requested:
+            note = (
+                f"O k-means devolveu {n_clusters} grupo(s) em vez de {requested}: "
+                "parte dos centróides ficou vazia porque as amostras não se separam nessa dimensão."
+            )
         return ClusteringResult(
             method=self.method,
             n_clusters=n_clusters,
@@ -188,6 +213,7 @@ class MicrobiomeClusterer:
             silhouette=sil,
             davies_bouldin=db,
             noise_fraction=noise_fraction,
+            note=note,
         )
 
     def sweep_k(

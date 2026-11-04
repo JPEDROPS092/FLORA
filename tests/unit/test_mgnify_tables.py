@@ -21,6 +21,12 @@ def test_parse_lineage_ranks_and_empties():
     assert tax["order"] == "" and tax["species"] == ""
 
 
+def test_parse_lineage_accepts_pipeline_v3_root_rows():
+    tax = parse_lineage("Root;k__Bacteria;p__Proteobacteria;c__;o__;f__;g__Rhizobium;s__")
+    assert tax["kingdom"] == "Bacteria" and tax["phylum"] == "Proteobacteria" and tax["genus"] == "Rhizobium"
+    assert parse_lineage("Root")["kingdom"] == ""
+
+
 def test_convert_maps_columns_to_samples_and_sums_duplicates(tmp_path):
     out = convert_ssu_table(TABLE, {"ERZ1": "S1", "ERZ2": "S2", "ERR9": "S2"}, tmp_path)
     asv = pl.read_csv(out["asv_table"], separator="\t")
@@ -34,6 +40,24 @@ def test_convert_maps_columns_to_samples_and_sums_duplicates(tmp_path):
 def test_unmapped_columns_are_kept_not_dropped(tmp_path):
     out = convert_ssu_table(TABLE, {"ERZ1": "S1"}, tmp_path)
     assert pl.read_csv(out["asv_table"], separator="\t")["sample_id"].to_list() == ["S1", "ERZ2", "ERR9"]
+
+
+def test_v3_table_drops_root_rollups_and_keeps_kingdom(tmp_path):
+    text = (
+        "#SampleID\tERR1\tERR2\n"
+        "Root\t10\t8\n"
+        "Root;k__Bacteria\t10\t8\n"
+        "Root;k__Bacteria;p__Firmicutes;c__;o__;f__;g__;s__\t4\t3\n"
+        "Root;k__Bacteria;p__Proteobacteria;c__;o__;f__;g__Rhizobium;s__\t6\t5\n"
+    )
+    out = convert_ssu_table(text, {"ERR1": "S1", "ERR2": "S2"}, tmp_path)
+    asv = pl.read_csv(out["asv_table"], separator="\t")
+    tax = pl.read_csv(out["taxonomy"], separator="\t")
+    assert asv["sample_id"].to_list() == ["S1", "S2"]
+    assert asv.columns == ["sample_id", "MGN_00001", "MGN_00002"]
+    assert int(asv.filter(pl.col("sample_id") == "S1").select(pl.sum_horizontal(pl.all().exclude("sample_id"))).item()) == 10
+    assert tax["kingdom"].to_list() == ["Bacteria", "Bacteria"]
+    assert "Rhizobium" in tax["genus"].to_list()
 
 
 def test_empty_table_is_an_error(tmp_path):

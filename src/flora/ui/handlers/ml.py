@@ -201,6 +201,9 @@ def classify(state, body: dict):
             ),
         }
         state.experiments.save(experiment)
+        from flora.ui.project_progress import record_project_step
+
+        record_project_step(state, "classify", f"{model_type} → {target}")
 
         # Legacy flat keys stay for existing API consumers.
         return json_success(
@@ -228,9 +231,38 @@ def list_experiments(state, params=None):
     return json_success(data={"experiments": state.experiments.list()})
 
 
-def cluster(state, body: dict):
+def _cluster_frame(feature_matrix, normalize: str | None):
+    """Coordinates for k-means.
+
+    Bray–Curtis is only defined for non-negative abundances. CLR values are signed,
+    and Bray–Curtis on them collapses the ordination (every sample lands on one point,
+    so k=2 comes back as 1 cluster). CLR uses Euclidean distance; counts and TSS keep Bray–Curtis.
+    When that ordination has no spread, clustering uses the feature matrix itself.
+    """
+    import numpy as np
+
     from flora.feature_engineering.reduction import compute_pcoa
+
+    values = feature_matrix.drop("sample_id").to_numpy()
+    signed = bool(values.size) and float(np.nanmin(values)) < 0
+    metric = "euclidean" if signed or normalize == "clr" else "braycurtis"
+    n = feature_matrix.height
+    long = compute_pcoa(feature_matrix, metric=metric, n_components=min(5, max(2, n - 1)))
+    wide = long.pivot(index="sample_id", on="component", values="value", aggregate_function="first")
+    wide = wide.rename({str(c): f"PC{c}" for c in wide.columns if str(c).isdigit()})
+    varying = []
+    for column in [c for c in wide.columns if c != "sample_id"]:
+        series = wide[column].drop_nulls()
+        if series.len() and float(series.std() or 0) > 1e-8:
+            varying.append(column)
+    if varying:
+        return wide.select(["sample_id", *varying]).fill_null(0.0), ""
+    return feature_matrix, "A ordenação não separou as amostras; o agrupamento usou a matriz de features."
+
+
+def cluster(state, body: dict):
     from flora.ml.clustering.clusterer import MicrobiomeClusterer
+    from flora.ui.project_progress import record_project_step
 
     method = body.get("method", "kmeans")
     n_clusters = int(body.get("n_clusters", 4))
@@ -244,36 +276,32 @@ def cluster(state, body: dict):
                 status=400,
                 code="insufficient_samples",
             )
-
-        pcoa_long = compute_pcoa(feature_matrix, metric="braycurtis", n_components=2)
-        if pcoa_long.is_empty():
+        if method == "kmeans" and n_clusters > len(feature_matrix):
             raise UiHttpError(
-                "PCoA returned no coordinates for clustering.",
+                f"k={n_clusters} é maior que o número de amostras ({len(feature_matrix)}).",
                 status=400,
-                code="empty_embedding",
+                code="invalid_k",
             )
 
-        pcoa_wide = pcoa_long.pivot(
-            index="sample_id",
-            on="component",
-            values="value",
-            aggregate_function="first",
-        ).rename({"1": "PC1", "2": "PC2"})
-
+        frame, embedding_note = _cluster_frame(feature_matrix, normalize)
         clusterer = MicrobiomeClusterer(
             method=method,
             n_clusters=n_clusters,
             random_state=int(body.get("seed", 42)),
         )
-        result = clusterer.fit(pcoa_wide)
+        result = clusterer.fit(frame)
+        note = result.note or embedding_note
+        record_project_step(state, "cluster", f"{method} k={result.n_clusters}")
 
         return json_success(
             data={
                 "method": method,
+                "requested_k": n_clusters,
                 "n_clusters": result.n_clusters,
                 "silhouette": result.silhouette,
                 "davies_bouldin": result.davies_bouldin,
                 "noise_fraction": result.noise_fraction,
+                "note": note,
                 "labels": result.labels.to_pandas().to_dict(orient="records"),
             }
         )

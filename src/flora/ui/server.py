@@ -136,6 +136,7 @@ POST_ROUTES = {
     "/api/projects": projects.create_project,
     "/api/projects/update": projects.update_project,
     "/api/projects/activate": projects.activate_project,
+    "/api/projects/delete": projects.delete_project,
     "/api/projects/sync": projects.start_sync,
     "/api/sync-jobs/cancel": projects.cancel_job,
     "/api/examples/install": projects.install_example,

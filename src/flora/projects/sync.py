@@ -148,6 +148,8 @@ class SyncManager:
 
     # ---- the actual work -------------------------------------------------
     def _execute(self, job: dict[str, Any]) -> None:
+        from flora.projects.registry import LOADED_STAGES
+
         project = self.registry.get(job["project_id"])
         src = Source.model_validate(job["source"])
         raw = self.registry.dir(project.id) / "raw" / src.type
@@ -155,7 +157,7 @@ class SyncManager:
         manifest = json.loads(manifest_path.read_text("utf-8")) if manifest_path.exists() else {"sources": {}}
         key = f"{src.type}:{src.accession}:{json.dumps(src.params, sort_keys=True)}"
 
-        if project.stage == "ingested" and project.sources and key not in manifest["sources"]:
+        if project.stage in LOADED_STAGES and project.sources and key not in manifest["sources"]:
             raise ProjectError("This project already has analysed data from another source. Create a new project for this one.", "project_has_data", 409)
 
         if self._up_to_date(project.id, manifest, key):
@@ -163,7 +165,7 @@ class SyncManager:
             job["result"] = {"up_to_date": True, "summary": "Já sincronizado: nada novo para baixar", "files": len(manifest["sources"][key]["files"])}
             return
 
-        if project.stage == "ingested":
+        if project.stage in LOADED_STAGES:
             raise ProjectError("Local files differ from the manifest and the data is already ingested. Create a new project to re-import.", "manifest_mismatch", 409)
 
         raw.mkdir(parents=True, exist_ok=True)
@@ -240,7 +242,9 @@ class SyncManager:
             raise
         samples = int(pipe.db.query("SELECT COUNT(*) AS n FROM samples").to_polars()["n"][0])
         asvs = int(pipe.db.query("SELECT COUNT(DISTINCT feature_id) AS n FROM asv").to_polars()["n"][0])
-        groups = [r[0] for r in pipe.db.query("SELECT DISTINCT biome FROM samples WHERE biome IS NOT NULL ORDER BY 1").to_polars().iter_rows()]
+        from flora.ui.project_progress import _group_names
+
+        groups = _group_names(pipe.db)
         return {"samples": samples, "asvs": asvs, "groups": groups}
 
 

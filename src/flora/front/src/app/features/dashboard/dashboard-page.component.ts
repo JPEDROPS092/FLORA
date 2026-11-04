@@ -1,5 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { PrimeTemplate } from 'primeng/api';
@@ -7,12 +8,14 @@ import { ButtonModule } from 'primeng/button';
 import { DrawerModule } from 'primeng/drawer';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { TableModule } from 'primeng/table';
+import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
 import { interval, startWith, switchMap } from 'rxjs';
 
 import { FloraRepository } from '../../core/data/flora.repository';
 import { DashboardSnapshot, DiagnosticEntry, RecentAnalysis, ResearchProject } from '../../core/models/domain';
 import { PlotCardComponent } from '../../shared/plot-card.component';
+import { SampleMapComponent } from '../../shared/sample-map.component';
 
 import { MascotComponent } from '../../shared/mascot.component';
 import { WorkflowStepsComponent } from '../../shared/workflow-steps.component';
@@ -25,14 +28,17 @@ import { TPipe } from '../../core/i18n/t.pipe';
     MascotComponent,
     WorkflowStepsComponent,
     DecimalPipe,
+    FormsModule,
     RouterLink,
     PrimeTemplate,
     ButtonModule,
     DrawerModule,
     ProgressBarModule,
+    SelectModule,
     TableModule,
     TagModule,
-    PlotCardComponent
+    PlotCardComponent,
+    SampleMapComponent
   ],
   template: `
     <section class="page">
@@ -62,6 +68,13 @@ import { TPipe } from '../../core/i18n/t.pipe';
         <a routerLink="/reports">{{ 'Exportação reprodutível' | t }}</a>
       </nav>
 
+      @if (snapshot()?.groupColumns?.length) {
+        <div class="surface" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <label for="dashGroup">{{ 'Agrupar por' | t }}</label>
+          <p-select inputId="dashGroup" [options]="snapshot()?.groupColumns ?? []" optionLabel="name" optionValue="name" [ngModel]="snapshot()?.groupBy" (ngModelChange)="changeGroup($event)" appendTo="body" [style]="{ minWidth: '220px' }" />
+        </div>
+      }
+
       <section class="metrics">
         <article class="surface metric">
           <div class="label">{{ 'Amostras' | t }}</div>
@@ -76,7 +89,7 @@ import { TPipe } from '../../core/i18n/t.pipe';
         <article class="surface metric">
           <div class="label">{{ 'Grupos' | t }}</div>
           <div class="value">{{ snapshot()?.groups | number }}</div>
-          <div class="hint">{{ snapshot()?.groupNames?.join(' · ') }}</div>
+          <div class="hint">@if (snapshot()?.groupBy) { {{ snapshot()?.groupBy }} · }{{ snapshot()?.groupNames?.join(' · ') }}</div>
         </article>
         <article class="surface metric">
           <div class="label">{{ 'Qualidade' | t }}</div>
@@ -106,6 +119,16 @@ import { TPipe } from '../../core/i18n/t.pipe';
           <flora-plot [result]="snapshot()?.pcoa ?? null" [height]="340" />
         </article>
       </section>
+
+      @if (snapshot()?.map; as studyMap) {
+        <article class="surface">
+          <div class="section-title">
+            <h2>{{ 'Mapa das amostras' | t }}</h2>
+            <p>{{ studyMap.groupColumn }}</p>
+          </div>
+          <flora-sample-map [map]="studyMap" [height]="360" />
+        </article>
+      }
 
       <section class="split">
         <article class="surface">
@@ -224,6 +247,11 @@ export class DashboardPageComponent {
 
   reloadLogs(): void {
     void this.repository.diagnostics().then((entries) => this.logs.set(entries));
+  }
+
+  changeGroup(name: string): void {
+    if (!name || name === this.snapshot()?.groupBy) return;
+    void this.repository.dashboard(name).then((snapshot) => this.snapshot.set(snapshot));
   }
 
   private async load(): Promise<void> {

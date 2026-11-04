@@ -62,7 +62,7 @@ import { t } from '../../core/i18n/i18n';
         </div>
         @if (schema(); as sc) {
           <div class="ctx-stats">
-            @if (sc.project) { <p-tag [value]="stageLabel(sc.project.stage)" [severity]="sc.project.stage === 'ingested' ? 'success' : 'warn'" /> }
+            @if (sc.project) { <p-tag [value]="stageLabel(sc.project.stage)" [severity]="sc.project.stage === 'ingested' || sc.project.stage === 'analyzed' || sc.project.stage === 'reported' ? 'success' : 'warn'" /> }
             @if (sc.project?.synthetic) { <p-tag [value]="'Sintético' | t" severity="secondary" /> }
             <span><strong>{{ sc.counts.samples | number }}</strong> {{ 'amostras' | t }}</span>
             <span><strong>{{ sc.counts.asvs | number }}</strong> ASVs</span>
@@ -372,7 +372,12 @@ export class ExplorerPageComponent {
   }
 
   stageLabel(stage: string): string {
-    return stage === 'ingested' ? t('Ingerido') : stage === 'raw_downloaded' ? t('Só arquivos brutos') : t('Vazio');
+    return ({
+      ingested: t('Ingerido'),
+      analyzed: t('Analisado'),
+      reported: t('Com relatório'),
+      raw_downloaded: t('Só arquivos brutos')
+    } as Record<string, string>)[stage] ?? t('Vazio');
   }
 
   /** Loads the project list and the dataset schema, then seeds the group filters from the real data. */

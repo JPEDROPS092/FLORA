@@ -77,8 +77,9 @@ def _status(in_meta: bool, in_asv: bool, reads: float | None, group: str | None,
         issues.append(tr(lang, "qc.missing_metadata"))
         status = "fail"
     elif not group:
+        # An empty grouping column (biome on a MGnify study) is not a failed library.
+        # Quality follows the read-depth cut; the missing label stays as a note.
         issues.append(tr(lang, "qc.no_group"))
-        status = "warn" if status == "pass" else status
     return status, issues
 
 
@@ -147,9 +148,15 @@ def _active_project(state):
 # GET /api/dashboard
 # ---------------------------------------------------------------------------
 def get_dashboard(state, params: dict | None = None):
+    from flora.ui.reads import effective_min_reads
+
     lang = lang_of(params)
     group_by = _q(params, "group_by") or _default_group(state.db)
-    min_reads = _int(params, "min_reads", _DEFAULT_MIN_READS)
+    try:
+        explicit_n = int(_q(params, "min_reads")) if _q(params, "min_reads") else None
+    except ValueError:
+        explicit_n = None
+    min_reads = effective_min_reads(state, explicit_n)
     project = _active_project(state)
 
     data: dict[str, Any] = {
@@ -159,6 +166,8 @@ def get_dashboard(state, params: dict | None = None):
         "project_id": project.id if project else "",
         "stage": project.stage if project else "",
         "group_by": group_by,
+        "group_columns": [],
+        "min_reads": min_reads,
         "samples": 0, "asvs": 0, "groups": 0, "group_names": [],
         "quality": {"pass": 0, "warn": 0, "fail": 0, "mean_reads": 0, "median_reads": 0},
         "recent": [],
@@ -169,6 +178,9 @@ def get_dashboard(state, params: dict | None = None):
         counts = _table_counts(db)
         data.update(samples=counts["samples"], asvs=counts["asvs"], status="connected")
         if counts["samples"]:
+            from flora.ui.handlers.explore import _group_columns
+
+            data["group_columns"] = _group_columns(db)
             qc = _qc(db, group_by, min_reads, lang)
             names = sorted({row["group"] for row in qc["rows"] if row["group"]})
             data.update(
@@ -212,9 +224,15 @@ def _recent_from_experiment(exp: dict[str, Any], project_id: str, lang: str) -> 
 # GET /api/pipeline
 # ---------------------------------------------------------------------------
 def get_pipeline(state, params: dict | None = None):
+    from flora.ui.reads import effective_min_reads
+
     lang = lang_of(params)
     group_by = _q(params, "group_by") or _default_group(state.db)
-    min_reads = _int(params, "min_reads", _DEFAULT_MIN_READS)
+    try:
+        explicit_n = int(_q(params, "min_reads")) if _q(params, "min_reads") else None
+    except ValueError:
+        explicit_n = None
+    min_reads = effective_min_reads(state, explicit_n)
     db = state.db
     counts = _table_counts(db)
     steps: dict[str, Any] = {}

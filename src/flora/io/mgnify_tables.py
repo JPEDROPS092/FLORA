@@ -16,20 +16,37 @@ from pathlib import Path
 
 logger = logging.getLogger("flora.io.mgnify_tables")
 
-_RANKS = (("sk__", "kingdom"), ("k__", None), ("p__", "phylum"), ("c__", "class"), ("o__", "order"), ("f__", "family"), ("g__", "genus"), ("s__", "species"))
+# ``k__`` is the kingdom on pipeline v3 (``Root;k__Bacteria;...``). Pipeline v5 writes
+# ``sk__`` first and leaves ``k__`` empty, so a later empty ``k__`` must not wipe ``sk__``.
+_RANKS = (("sk__", "kingdom"), ("k__", "kingdom"), ("p__", "phylum"), ("c__", "class"), ("o__", "order"), ("f__", "family"), ("g__", "genus"), ("s__", "species"))
 _TAX_COLUMNS = ["feature_id", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
 
 
 def parse_lineage(lineage: str) -> dict[str, str]:
-    """``sk__Archaea;k__;p__X;c__`` -> ``{kingdom: Archaea, phylum: X, ...}`` (empty ranks stay empty)."""
+    """``sk__Archaea;k__;p__X`` or ``Root;k__Bacteria;p__X`` -> ranks (empty ranks stay empty)."""
     out = {name: "" for name in _TAX_COLUMNS[1:]}
     for part in lineage.split(";"):
         part = part.strip()
+        if not part or part.lower() == "root":
+            continue
         for prefix, rank in _RANKS:
-            if rank and part.startswith(prefix):
-                out[rank] = part[len(prefix):].replace("_", " ").strip() if rank == "species" else part[len(prefix):]
+            if part.startswith(prefix):
+                value = part[len(prefix):].strip()
+                if rank == "species":
+                    value = value.replace("_", " ").strip()
+                if value and not out[rank]:
+                    out[rank] = value
                 break
     return out
+
+
+def _is_rollup(lineage: str, lineages: set[str]) -> bool:
+    """True for the bare ``Root`` total and for rows that are only the sum of longer lineages."""
+    text = (lineage or "").strip()
+    if not text or text.lower() == "root":
+        return True
+    prefix = text if text.endswith(";") else text + ";"
+    return any(other.startswith(prefix) for other in lineages)
 
 
 def convert_ssu_table(
@@ -50,7 +67,7 @@ def convert_ssu_table(
     samples = [column_to_sample.get(col, col) for col in columns]
     order = list(dict.fromkeys(samples))
 
-    features: list[tuple[str, dict[str, str], dict[str, float]]] = []
+    parsed: list[tuple[str, dict[str, float]]] = []
     for row in reader:
         if not row or not row[0].strip():
             continue
@@ -63,7 +80,10 @@ def convert_ssu_table(
             if value:
                 counts[sample] = counts.get(sample, 0.0) + value
         if counts:
-            features.append((f"MGN_{len(features) + 1:05d}", parse_lineage(row[0]), counts))
+            parsed.append((row[0].strip(), counts))
+    lineages = {lineage for lineage, _ in parsed}
+    kept = [(lineage, counts) for lineage, counts in parsed if not _is_rollup(lineage, lineages)]
+    features = [(f"MGN_{i + 1:05d}", parse_lineage(lineage), counts) for i, (lineage, counts) in enumerate(kept)]
     if not features:
         raise ValueError("MGnify table has no features with counts")
 

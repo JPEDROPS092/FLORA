@@ -219,7 +219,35 @@ def library_download(state, body: dict):
         )
     except (LibraryError, IngestionError, OSError, ValueError) as exc:
         raise UiHttpError(str(exc), code="download_failed") from exc
-    return json_success(data={**artifacts, "output_dir": str(output_dir), "accession": accession})
+    loaded = _ingest_if_complete(state, artifacts)
+    return json_success(data={**artifacts, "output_dir": str(output_dir), "accession": accession, "ingested": loaded or {}})
+
+
+def _ingest_if_complete(state, artifacts: dict) -> dict | None:
+    """Load a catalog download into the active project through the replace path.
+
+    Metadata + ASV + taxonomy is enough to run the pipeline. A study that only
+    has metadata stays on disk and is not ingested.
+    """
+    from flora.ui.handlers import ingest
+
+    paths = {key: artifacts.get(key) for key in ("metadata", "asv_table", "taxonomy")}
+    if not all(paths.values()):
+        return None
+    projects = getattr(state, "projects", None)
+    if projects is None or not hasattr(state, "pipeline"):
+        return None
+    if not projects.active_id():
+        name = str(artifacts.get("accession") or "Estudo")
+        project = projects.create(name)
+        projects.set_active(project.id)
+    out = ingest.ingest_dataset(state, {
+        "metadata_path": paths["metadata"],
+        "asv_path": paths["asv_table"],
+        "taxonomy_path": paths["taxonomy"],
+        "replace": True,
+    })
+    return {"project_id": projects.active_id(), "project_stage": out.get("project_stage"), "steps": out.get("steps")}
 
 
 def library_runs(state, params=None):

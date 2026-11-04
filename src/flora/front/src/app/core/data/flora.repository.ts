@@ -47,7 +47,7 @@ import {
 export abstract class FloraRepository {
   abstract readonly source: DataSourceInfo;
 
-  abstract dashboard(): Promise<DashboardSnapshot>;
+  abstract dashboard(groupBy?: string): Promise<DashboardSnapshot>;
   abstract diagnostics(lines?: number): Promise<DiagnosticEntry[]>;
   abstract projects(): Promise<ResearchProject[]>;
   abstract saveProject(draft: ProjectDraft): Promise<ResearchProject>;
@@ -58,6 +58,7 @@ export abstract class FloraRepository {
   abstract syncJob(jobId: string): Promise<SyncJob>;
   abstract cancelSync(jobId: string): Promise<SyncJob>;
   abstract activateProject(projectId: string): Promise<void>;
+  abstract deleteProject(id: string): Promise<void>;
   abstract pipeline(): Promise<PipelineSnapshot>;
   abstract previewIngest(request: IngestRequest): Promise<IngestPreview>;
   abstract confirmIngest(request: IngestRequest): Promise<IngestOutcome>;
