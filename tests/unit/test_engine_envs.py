@@ -28,7 +28,8 @@ def _exe(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Path:
 
 
 @pytest.fixture(autouse=True)
-def clean_registry():
+def clean_registry(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # discovery also looks in ./.engines, which exists in the real repository
     registry.configure({})
     yield
     registry.configure({})
@@ -139,8 +140,13 @@ FAKE_Q2 = {
             record("dada2", kw)
             return SimpleNamespace(table=Artifact("table"), representative_sequences=Artifact("seqs"), denoising_stats=Artifact("stats"))
 
-        methods = SimpleNamespace(denoise_paired=lambda **kw: _result(paired=True, **{k: v for k, v in kw.items() if k != "demultiplexed_seqs"}),
-                                  denoise_single=lambda **kw: _result(paired=False, **{k: v for k, v in kw.items() if k != "demultiplexed_seqs"}))
+        def denoise_paired(demultiplexed_seqs, trunc_len_f, trunc_len_r, trim_left_f=0, trim_left_r=0, n_threads=1):
+            return _result(paired=True, trunc_len_f=trunc_len_f, trunc_len_r=trunc_len_r, trim_left_f=trim_left_f, trim_left_r=trim_left_r, n_threads=n_threads)
+
+        def denoise_single(demultiplexed_seqs, trunc_len, trim_left=0, n_threads=1):
+            return _result(paired=False, trunc_len=trunc_len, trim_left=trim_left, n_threads=n_threads)
+
+        methods = SimpleNamespace(denoise_paired=denoise_paired, denoise_single=denoise_single)  # same signatures as q2-dada2
     ''',
     "qiime2/plugins/feature_classifier.py": '''
         from types import SimpleNamespace
@@ -220,7 +226,8 @@ def test_python_backend_single_end_and_no_optional_steps(fake_qiime2, tmp_path):
     done = _wait(mgr, mgr.start("qiime2-dada2", {"backend": "python", "manifest": str(manifest), "paired": False})["id"])
     assert done["status"] == "completed", done["error"] or done["log"][-6:]
     calls = [json.loads(line) for line in fake_qiime2.read_text().splitlines()]
-    assert calls[0][1] == "SampleData[SequencesWithQuality]" and next(c for c in calls if c[0] == "dada2")[1]["paired"] is False
+    single = next(c for c in calls if c[0] == "dada2")[1]
+    assert calls[0][1] == "SampleData[SequencesWithQuality]" and single["paired"] is False and "trunc_len" in single and "trunc_len_f" not in single
     assert "taxonomy" not in done["artifacts"] and "tree" not in done["artifacts"]
 
 

@@ -34,11 +34,18 @@ def main(spec_path: str) -> int:
     demux = Artifact.import_data(kind, spec["manifest"], view_type=view)
 
     log("[2/4] DADA2 (denoise-%s)" % ("paired" if paired else "single"))
-    common = {"trim_left_f": int(params.get("trim_left_f", 0)), "trunc_len_f": int(params.get("trunc_len_f", 0)), "n_threads": int(spec.get("threads", 1))}
+    threads = int(spec.get("threads", 1))
     if paired:
-        result = dada2.methods.denoise_paired(demultiplexed_seqs=demux, trim_left_r=int(params.get("trim_left_r", 0)), trunc_len_r=int(params.get("trunc_len_r", 0)), **common)
-    else:
-        result = dada2.methods.denoise_single(demultiplexed_seqs=demux, **common)
+        result = dada2.methods.denoise_paired(
+            demultiplexed_seqs=demux, n_threads=threads,
+            trim_left_f=int(params.get("trim_left_f", 0)), trunc_len_f=int(params.get("trunc_len_f", 0)),
+            trim_left_r=int(params.get("trim_left_r", 0)), trunc_len_r=int(params.get("trunc_len_r", 0)),
+        )
+    else:  # denoise_single has no _f/_r suffixes
+        result = dada2.methods.denoise_single(
+            demultiplexed_seqs=demux, n_threads=threads,
+            trim_left=int(params.get("trim_left_f", 0)), trunc_len=int(params.get("trunc_len_f", 0)),
+        )
     result.table.export_data(str(export / "table"))
     result.representative_sequences.export_data(str(export / "rep-seqs"))
     result.denoising_stats.export_data(str(export / "denoising-stats"))

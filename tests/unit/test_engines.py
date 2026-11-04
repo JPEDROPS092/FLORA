@@ -91,7 +91,8 @@ def test_qiime_commands_paired_and_single(tmp_path):
     assert cmds[0][:3] == ["qiime", "tools", "import"] and "PairedEndFastqManifestPhred33V2" in cmds[0]
     assert cmds[1][2] == "denoise-paired" and "--p-trunc-len-r" in cmds[1] and cmds[1][cmds[1].index("--p-trunc-len-f") + 1] == "240"
     single = wf.qiime2_dada2_commands(str(manifest), tmp_path / "o", False, {}, None, 2)
-    assert single[1][2] == "denoise-single" and "--p-trunc-len-r" not in single[1]
+    assert single[1][2] == "denoise-single" and "--p-trunc-len-r" not in single[1] and "--p-trunc-len-f" not in single[1]
+    assert "--p-trunc-len" in single[1] and "--p-trim-left" in single[1]  # the single-end action has no -f/-r suffixes
     clf = tmp_path / "clf.qza"
     clf.write_text("x")
     with_tax = wf.qiime2_dada2_commands(str(manifest), tmp_path / "o", True, {}, str(clf), 2, build_tree=True)
@@ -337,23 +338,47 @@ def test_job_results_endpoint_builds_a_volcano(fake_tools, tmp_path):
         handler.job_results(state, {"id": ["0" * 12]})
 
 
-def test_skbio_crosscheck_with_a_stand_in_module(monkeypatch):
+def test_skbio_bridge_calls_scikit_bio_correctly(monkeypatch):
     import types
 
-    from flora.ui.handlers import analysis
-    from flora.ui.http import UiHttpError
+    from flora.engines import skbio_bridge
 
-    monkeypatch.setitem(sys.modules, "skbio", None)  # not installed -> clear, actionable error
-    with pytest.raises(UiHttpError) as err:
-        analysis._skbio_permanova(np.zeros((2, 2)), ["a", "b"], ["x", "y"], 99)
-    assert err.value.code == "engine_unavailable"
-
+    seen = {}
     skbio = types.ModuleType("skbio")
-    skbio.DistanceMatrix = lambda d, ids: (d, ids)
+    skbio.DistanceMatrix = lambda d, ids: ("dm", d.shape, ids)
     stats_mod = types.ModuleType("skbio.stats")
     dist_mod = types.ModuleType("skbio.stats.distance")
-    dist_mod.permanova = lambda dm, grouping, permutations: {"test statistic": 4.2, "p-value": 0.01}
+
+    def fake_permanova(dm, grouping, permutations):
+        seen.update(dm=dm, grouping=grouping, permutations=permutations)
+        return {"test statistic": 4.2, "p-value": 0.01}
+
+    dist_mod.permanova = fake_permanova
     monkeypatch.setitem(sys.modules, "skbio", skbio)
     monkeypatch.setitem(sys.modules, "skbio.stats", stats_mod)
     monkeypatch.setitem(sys.modules, "skbio.stats.distance", dist_mod)
-    assert analysis._skbio_permanova(np.zeros((2, 2)), ["a", "b"], ["x", "y"], 99) == {"backend": "scikit-bio", "f": 4.2, "p": 0.01}
+    out = skbio_bridge.run("permanova", {"distances": [[0, 1], [1, 0]], "ids": ["a", "b"], "groups": ["x", "y"], "permutations": 99})
+    assert out == {"backend": "scikit-bio", "f": 4.2, "p": 0.01} and seen["permutations"] == 99 and seen["grouping"] == ["x", "y"]
+    with pytest.raises(ValueError):
+        skbio_bridge.run("nope", {})
+
+
+def test_skbio_crosscheck_reports_a_clear_error_when_it_is_not_installed(monkeypatch):
+    from flora.engines import registry
+    from flora.ui.handlers import analysis
+    from flora.ui.http import UiHttpError
+
+    monkeypatch.setattr(registry, "skbio_python", lambda: None)
+    with pytest.raises(UiHttpError) as err:
+        analysis._skbio_permanova(np.zeros((2, 2)), ["a", "b"], ["x", "y"], 99)
+    assert err.value.code == "engine_unavailable" and "setup_engines" in err.value.message
+
+
+def test_steps_run_with_the_connected_environment_first_on_path(tmp_path, monkeypatch):
+    prefix = tmp_path / "env"
+    (prefix / "bin").mkdir(parents=True)
+    (prefix / "conda-meta").mkdir()
+    monkeypatch.setenv("PATH", "/usr/bin")
+    env = JobManager._environment(str(prefix / "bin" / "qiime"))
+    assert env["PATH"].startswith(f"{prefix / 'bin'}:") and env["CONDA_PREFIX"] == str(prefix)
+    assert JobManager._environment("vsearch")["PATH"] == "/usr/bin"  # a bare command leaves PATH alone

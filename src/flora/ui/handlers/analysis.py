@@ -332,14 +332,24 @@ def get_beta_stats(state, params: dict | None = None):
 
 
 def _skbio_permanova(D, ids: list[str], groups: list[str], permutations: int) -> dict[str, Any]:
-    """Independent PERMANOVA from scikit-bio, to cross-check FLORA's own implementation."""
-    try:
-        from skbio import DistanceMatrix
-        from skbio.stats.distance import permanova
-    except Exception as exc:  # noqa: BLE001 - a missing optional engine is a user-facing condition
-        raise UiHttpError("O scikit-bio não está instalado (pip install scikit-bio).", code="engine_unavailable", status=409) from exc
-    res = permanova(DistanceMatrix(D, ids), grouping=groups, permutations=permutations)
-    return {"backend": "scikit-bio", "f": float(res["test statistic"]), "p": float(res["p-value"])}
+    """Independent PERMANOVA from scikit-bio (run in the Python that has it), to cross-check FLORA's own."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    from flora.engines import registry
+
+    python = registry.skbio_python()
+    if python is None:
+        raise UiHttpError("O scikit-bio não está instalado nem em um ambiente conectado (veja scripts/setup_engines.sh).", code="engine_unavailable", status=409)
+    bridge = Path(__file__).resolve().parents[2] / "engines" / "skbio_bridge.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        spec = Path(tmp) / "spec.json"
+        spec.write_text(json.dumps({"distances": D.tolist(), "ids": ids, "groups": groups, "permutations": permutations}), encoding="utf-8")
+        done = subprocess.run([python, str(bridge), "permanova", str(spec)], capture_output=True, text=True, timeout=300, check=False)
+    if done.returncode != 0:
+        raise UiHttpError(f"O scikit-bio falhou: {done.stderr.strip().splitlines()[-1] if done.stderr.strip() else 'sem mensagem'}", code="engine_failed", status=502)
+    return json.loads(done.stdout)
 
 
 # ---------------------------------------------------------------------------

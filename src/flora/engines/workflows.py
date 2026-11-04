@@ -44,12 +44,17 @@ def qiime2_dada2_commands(manifest: str, out: Path, paired: bool, params: dict[s
     kind = "SampleData[PairedEndSequencesWithQuality]" if paired else "SampleData[SequencesWithQuality]"
     fmt = "PairedEndFastqManifestPhred33V2" if paired else "SingleEndFastqManifestPhred33V2"
     q = lambda name: str(out / name)  # noqa: E731
-    denoise = ["qiime", "dada2", "denoise-paired" if paired else "denoise-single", "--i-demultiplexed-seqs", q("demux.qza"),
-               "--p-trim-left-f", _int(params, "trim_left_f", 0, 0, 1000), "--p-trunc-len-f", _int(params, "trunc_len_f", 0, 0, 2000),
-               "--p-n-threads", str(max(1, min(int(threads), 128))),
-               "--o-table", q("table.qza"), "--o-representative-sequences", q("rep-seqs.qza"), "--o-denoising-stats", q("denoising-stats.qza")]
+    threads_opt = ["--p-n-threads", str(max(1, min(int(threads), 128)))]
+    outputs = ["--o-table", q("table.qza"), "--o-representative-sequences", q("rep-seqs.qza"), "--o-denoising-stats", q("denoising-stats.qza")]
     if paired:
-        denoise += ["--p-trim-left-r", _int(params, "trim_left_r", 0, 0, 1000), "--p-trunc-len-r", _int(params, "trunc_len_r", 0, 0, 2000)]
+        denoise = ["qiime", "dada2", "denoise-paired", "--i-demultiplexed-seqs", q("demux.qza"),
+                   "--p-trim-left-f", _int(params, "trim_left_f", 0, 0, 1000), "--p-trunc-len-f", _int(params, "trunc_len_f", 0, 0, 2000),
+                   "--p-trim-left-r", _int(params, "trim_left_r", 0, 0, 1000), "--p-trunc-len-r", _int(params, "trunc_len_r", 0, 0, 2000),
+                   *threads_opt, *outputs]
+    else:  # denoise-single has no -f/-r suffixes
+        denoise = ["qiime", "dada2", "denoise-single", "--i-demultiplexed-seqs", q("demux.qza"),
+                   "--p-trim-left", _int(params, "trim_left_f", 0, 0, 1000), "--p-trunc-len", _int(params, "trunc_len_f", 0, 0, 2000),
+                   *threads_opt, *outputs]
     cmds = [
         ["qiime", "tools", "import", "--type", kind, "--input-path", manifest, "--input-format", fmt, "--output-path", q("demux.qza")],
         denoise,
@@ -272,6 +277,7 @@ def cutadapt_commands(fastq_dir: str, out: Path, fwd_primer: str, rev_primer: st
         raise WorkflowError(f"Pasta de FASTQ não encontrada: {fastq_dir}")
     g, G = _primer(fwd_primer, "Primer forward", required=True), _primer(rev_primer, "Primer reverse")
     files = sorted(p for p in folder.iterdir() if p.is_file())
+    (out / "trimmed").mkdir(parents=True, exist_ok=True)  # cutadapt does not create the output folder
     steps = []
     for f in files:
         m = _FASTQ_R1.match(f.name)

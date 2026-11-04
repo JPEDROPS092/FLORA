@@ -88,3 +88,4 @@ src/flora/front/.angular/
 src/flora/front/dist/app/
 
 # The built dist/ may be committed for wheel packaging (see hatch artifacts)
+.engines/

@@ -149,6 +149,18 @@ class JobManager:
             proc.terminate()
         return job
 
+    @staticmethod
+    def _environment(executable: str) -> dict[str, str]:
+        """Process environment for a step. A tool given by absolute path is used as if its environment were activated:
+        its ``bin`` goes first on PATH (QIIME 2's DADA2 plugin calls ``run_dada.R`` by name) and CONDA_PREFIX points to it."""
+        env = dict(os.environ)
+        path = Path(executable)
+        if path.is_absolute():
+            env["PATH"] = f"{path.parent}{os.pathsep}{env.get('PATH', '')}"
+            if (path.parent.parent / "conda-meta").is_dir():
+                env["CONDA_PREFIX"] = str(path.parent.parent)
+        return env
+
     def _log(self, job: dict[str, Any], line: str) -> None:
         job["log"] = (job["log"] + [line.rstrip()])[-_MAX_LOG:]
 
@@ -170,7 +182,7 @@ class JobManager:
                         Path(step["script_path"]).write_text(step["script"], encoding="utf-8")
                     if step.get("spec"):
                         Path(step["spec_path"]).write_text(json.dumps(step["spec"]), encoding="utf-8")
-                    proc = subprocess.Popen(step["cmd"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=out)
+                    proc = subprocess.Popen(step["cmd"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=out, env=self._environment(step["cmd"][0]))
                     self._procs[job_id] = proc
                     for line in proc.stdout or []:
                         self._log(job, line)

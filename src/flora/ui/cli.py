@@ -75,6 +75,17 @@ def _ingest_download_to_duckdb(
         )
 
 
+def ui_config(config_path: str | None, *, memory: bool = False):
+    """Config for ``flora ui``: the database is a ``flora.duckdb`` file unless ``--memory`` (or the config says otherwise)."""
+    from flora.config.settings import FloraConfig, load_config
+
+    cfg = load_config(config_path) if config_path else FloraConfig()
+    if not memory and cfg.database.path == ":memory:":
+        cfg = cfg.model_copy(deep=True)
+        cfg.database.path = "flora.duckdb"
+    return cfg
+
+
 def main() -> None:
     """Entry point for the ``flora`` command."""
     parser = argparse.ArgumentParser(
@@ -88,8 +99,13 @@ def main() -> None:
     ui_cmd.add_argument("--port", type=int, default=8765, help="Port (default: 8765)")
     ui_cmd.add_argument("--workdir", default="results", help="Working directory")
     ui_cmd.add_argument("--config", default=None, help="Path to config.yaml")
+    ui_cmd.add_argument("--memory", action="store_true", help="Keep the database in memory (lost on exit). Default: a flora.duckdb file in the workdir")
     ui_cmd.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")
     ui_cmd.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], dest="log_level")
+
+    from flora.engines.cli import add_engines_parser
+
+    add_engines_parser(sub)
 
     run_cmd = sub.add_parser("run", help="Run a pipeline from config")
     run_cmd.add_argument("config", help="Path to config.yaml")
@@ -178,7 +194,7 @@ def main() -> None:
         from flora.ui.server import run_server
         from flora.config.settings import load_config
 
-        cfg = load_config(args.config) if args.config else None
+        cfg = ui_config(args.config, memory=args.memory)
         run_server(
             host=args.host,
             port=args.port,
@@ -187,6 +203,11 @@ def main() -> None:
             open_browser=not args.no_browser,
             log_level=args.log_level,
         )
+
+    elif args.command == "engines":
+        from flora.engines.cli import run_engines
+
+        sys.exit(run_engines(args))
 
     elif args.command == "download":
         if args.source == "mgnify":

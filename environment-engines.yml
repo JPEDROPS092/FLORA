@@ -1,0 +1,17 @@
+# Optional external engines for FLORA: R + DADA2 + differential abundance, vegan, VSEARCH, cutadapt, scikit-bio.
+# Create with:  scripts/setup_engines.sh      (or: conda env create -f environment-engines.yml)
+# QIIME 2 itself is installed from its own distribution file, see scripts/setup_engines.sh --qiime2.
+name: flora-engines
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - r-base=4.3
+  - bioconductor-dada2      # FASTQ -> ASVs (workflow dada2-r)
+  - bioconductor-aldex2     # workflow aldex2
+  - bioconductor-ancombc    # workflow ancombc2
+  - r-vegan                 # workflow vegan (adonis2 + betadisper)
+  - vsearch                 # workflow vsearch-otu
+  - cutadapt                # workflow cutadapt-trim
+  - scikit-bio              # PERMANOVA cross-check

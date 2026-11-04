@@ -7,10 +7,12 @@ is reported as unavailable with an install hint. Python libraries are probed by 
 from __future__ import annotations
 
 import importlib
+import os
 import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 _CACHE_SECONDS = 30
@@ -31,9 +33,14 @@ class Engine:
 OVERRIDES: dict[str, str] = {}
 
 
+#: ``bin`` folders of the connected environments: tools installed there (vsearch, cutadapt…) are found without PATH
+BIN_DIRS: list[str] = []
+
+
 def configure(config: dict[str, str]) -> None:
     """Apply the saved environment: ``qiime``, ``python`` (the QIIME 2 env's) and ``rscript`` paths."""
     OVERRIDES.clear()
+    BIN_DIRS[:] = list(dict.fromkeys(str(Path(v).parent) for v in config.values() if v))
     for key, command in (("qiime", "qiime"), ("rscript", "Rscript")):
         if config.get(key):
             OVERRIDES[command] = config[key]
@@ -43,13 +50,39 @@ def configure(config: dict[str, str]) -> None:
 
 
 def exe(name: str) -> str | None:
-    """Path of *name*: the configured one if any, else whatever is on PATH."""
-    return OVERRIDES.get(name) or shutil.which(name)
+    """Path of *name*: the configured one, else one in a connected environment's ``bin``, else PATH."""
+    if OVERRIDES.get(name):
+        return OVERRIDES[name]
+    for folder in BIN_DIRS:
+        candidate = Path(folder) / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return shutil.which(name)
 
 
 def resolve_cmd(cmd: list[str]) -> list[str]:
     """Replace a bare ``qiime`` / ``Rscript`` / ``vsearch`` … by its configured path."""
-    return [OVERRIDES.get(cmd[0], cmd[0]), *cmd[1:]] if cmd else cmd
+    if not cmd:
+        return cmd
+    found = exe(cmd[0]) if cmd[0] in {"qiime", "Rscript", "vsearch", "cutadapt"} else None
+    return [found or cmd[0], *cmd[1:]]
+
+
+def skbio_python() -> str | None:
+    """A Python that can ``import skbio``: FLORA's own, else the ``python`` of a connected environment."""
+    import sys
+
+    candidates = [sys.executable, OVERRIDES.get("python")]
+    candidates += [str(Path(d) / "python") for d in BIN_DIRS]
+    for candidate in dict.fromkeys(c for c in candidates if c):
+        if Path(candidate).is_file() and _run([candidate, "-c", "import skbio; print(skbio.__version__)"]):
+            return candidate
+    return None
+
+
+def _skbio() -> str | None:
+    python = skbio_python()
+    return _run([python, "-c", "import skbio; print(skbio.__version__)"]) if python else None
 
 
 def qiime_python() -> str | None:
@@ -124,7 +157,7 @@ ENGINES: dict[str, Engine] = {e.id: e for e in (
     Engine("cutadapt", "cutadapt", "cli", ("trim",),
            "pip install cutadapt", _cli("cutadapt", "--version")),
     Engine("skbio", "scikit-bio", "python", ("unifrac", "permanova", "diversity"),
-           "pip install scikit-bio", _py("skbio")),
+           "pip install scikit-bio, ou conecte o ambiente que o contém (scripts/setup_engines.sh)", _skbio),
 )}
 
 _cache: dict[str, tuple[float, str | None]] = {}

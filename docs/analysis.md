@@ -19,6 +19,20 @@ Precisa de uma árvore Newick cujas pontas tenham os IDs das features: envie-a e
 QIIME 2 com "Construir árvore" (ela é salva no projeto ao ingerir o resultado). O UniFrac não ponderado só olha
 presença e ausência, então não separa grupos quando todas as features aparecem em todas as amostras.
 
+## Instalar e conectar pelo terminal
+
+```bash
+scripts/setup_engines.sh              # R + DADA2 + ALDEx2 + ANCOM-BC2 + vegan + VSEARCH + cutadapt + scikit-bio
+scripts/setup_engines.sh --qiime2     # também o QIIME 2 (download grande, vários GB)
+flora engines doctor                  # o que o FLORA enxerga, com versões e dicas
+flora engines envs                    # ambientes conda com QIIME 2 / DADA2
+flora engines connect --r-env flora-engines --qiime-env qiime2-amplicon-2024.10
+```
+
+O script precisa de micromamba, mamba ou conda já instalados e usa o `environment-engines.yml` do repositório.
+Ferramentas instaladas no `bin` de um ambiente conectado (vsearch, cutadapt…) são encontradas sem mexer no `PATH`.
+`flora ui` guarda o banco em `<workdir>/flora.duckdb` por padrão; use `--memory` para um banco descartável.
+
 ## Conectar o QIIME 2 e o DADA2 (Motores de análise → Ambientes)
 
 O QIIME 2 e o DADA2 quase sempre vivem num ambiente conda à parte. O FLORA não precisa rodar dentro dele:

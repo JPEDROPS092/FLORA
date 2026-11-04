@@ -26,6 +26,7 @@ def _roots(home: Path | None = None) -> list[Path]:
     home = home or Path.home()
     roots = [home / n for n in ("miniconda3", "anaconda3", "mambaforge", "miniforge3", "micromamba", ".conda")]
     roots += [Path("/opt/conda"), Path("/opt/miniconda3"), Path("/opt/anaconda3")]
+    roots.append(Path.cwd() / ".engines" / "mamba")  # created by scripts/setup_engines.sh
     for var in ("CONDA_PREFIX", "CONDA_EXE", "MAMBA_ROOT_PREFIX"):
         value = os.environ.get(var)
         if value:
@@ -100,3 +101,31 @@ def save(workdir: Path, config: dict[str, Any]) -> dict[str, str]:
     tmp.write_text(json.dumps(clean, indent=2), encoding="utf-8")
     os.replace(tmp, path)
     return clean
+
+
+def connect(workdir: Path, *, env: str | None = None, qiime_env: str | None = None, r_env: str | None = None,
+            qiime: str | None = None, python: str | None = None, rscript: str | None = None,
+            home: Path | None = None) -> dict[str, str]:
+    """Choose environments by name (or explicit executables) and save them.
+
+    ``env`` uses one environment for everything; ``qiime_env`` / ``r_env`` split QIIME 2 and R across two. With no
+    arguments it works only when exactly one environment is found, so it never guesses between several.
+    """
+    found = {e["name"]: e for e in discover(home)}
+
+    def pick(name: str) -> dict[str, Any]:
+        if name not in found:
+            raise EnvError(f"Ambiente '{name}' não encontrado. Encontrados: {', '.join(found) or 'nenhum'}.")
+        return found[name]
+
+    config: dict[str, Any] = {}
+    if not any((env, qiime_env, r_env, qiime, python, rscript)):
+        if len(found) != 1:
+            raise EnvError("Informe --env NOME (encontrados: " + (", ".join(found) or "nenhum") + ").")
+        env = next(iter(found))
+    for name, keys in ((env, ("qiime", "python", "rscript")), (qiime_env, ("qiime", "python")), (r_env, ("rscript",))):
+        if name:
+            chosen = pick(name)
+            config.update({k: chosen[k] for k in keys if chosen.get(k)})
+    config.update({k: v for k, v in (("qiime", qiime), ("python", python), ("rscript", rscript)) if v})
+    return save(workdir, config)
