@@ -1,5 +1,24 @@
 /** Feature pages: dashboard, downloads, explorer, ML lab, pipeline, projects, reports, agents. */
 export const EN_PAGES: Record<string, string> = {
+  // pipeline: data origin
+  'Origem dos dados': 'Data origin',
+  'Biblioteca (baixados)': 'Library (downloaded)',
+  'Meu computador': 'My computer',
+  'Caminho manual': 'Manual path',
+  'Datasets já baixados no projeto ativo ou na pasta de trabalho. Só os completos (metadata, ASV e taxonomia) podem ser ingeridos.': 'Datasets already downloaded in the active project or work folder. Only complete ones (metadata, ASV and taxonomy) can be ingested.',
+  'Só leituras brutas (FASTQ): precisam ser processadas no QIIME2/DADA2 antes de entrar aqui.': 'Raw reads only (FASTQ): they must be processed with QIIME2/DADA2 before entering here.',
+  'Faltam arquivos:': 'Missing files:',
+  'Procurando datasets…': 'Looking for datasets…',
+  'Nenhum dataset baixado ainda.': 'No dataset downloaded yet.',
+  'Baixar mais estudos na biblioteca': 'Download more studies from the library',
+  'Escolha os arquivos no seu computador (.tsv, .csv, .txt, .biom). Eles são copiados para a pasta de trabalho do FLORA.': "Pick the files on your computer (.tsv, .csv, .txt, .biom). They are copied to FLORA's work folder.",
+  'Enviando…': 'Uploading…',
+  'Informe caminhos que o servidor do FLORA consiga ler.': 'Enter paths the FLORA server can read.',
+  'Arquivos escolhidos': 'Chosen files',
+  'Escolha metadata, tabela ASV e taxonomia para continuar.': 'Choose metadata, ASV table and taxonomy to continue.',
+  'Enviado': 'Uploaded',
+  'Baixado': 'Downloaded',
+  'Biblioteca': 'Library',
   // downloads library
   'Biblioteca de datasets': 'Dataset library',
   'Catálogo público com foco na Amazônia. A prévia mostra metadados; o download grava um job.': 'Public catalogue focused on the Amazon. The preview shows metadata; download records a job.',

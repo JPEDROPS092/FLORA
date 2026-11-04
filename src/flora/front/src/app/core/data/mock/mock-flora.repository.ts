@@ -10,6 +10,8 @@ import {
   DownloadJob,
   DownloadRequest,
   LibrarySource,
+  LocalDataset,
+  UploadKind,
   MetadataPreview,
   StudyEntry,
   ExplorationBundle,
@@ -393,6 +395,32 @@ export class MockFloraRepository extends FloraRepository {
   async downloads(): Promise<DownloadJob[]> {
     await wait();
     return this.jobs.map((job) => ({ ...job }));
+  }
+
+  async datasets(): Promise<LocalDataset[]> {
+    await wait();
+    const dir = 'results/raw/FL16S-SORGHUM-01';
+    return [
+      {
+        id: dir,
+        label: 'FL16S-SORGHUM-01',
+        path: dir,
+        origin: 'workdir',
+        files: { metadata: `${dir}/metadata.tsv`, asv: `${dir}/asv_table.tsv`, taxonomy: `${dir}/taxonomy.tsv` },
+        missing: [],
+        complete: true,
+        rawReadsOnly: false,
+        samples: 48,
+        columns: ['sample_id', 'group', 'host', 'site'],
+        modified: '2026-02-11T18:02:00+00:00'
+      }
+    ];
+  }
+
+  async uploadFile(file: File, kind: UploadKind): Promise<{ path: string; columns: string[] }> {
+    await wait();
+    const head = kind === 'metadata' ? (await file.slice(0, 8192).text()).split(/\r?\n/, 1)[0] : '';
+    return { path: `results/uploads/manual/${file.name}`, columns: head.split(/[\t,]/).map((c) => c.trim()).filter(Boolean) };
   }
 
   async searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]> {

@@ -14,7 +14,7 @@ import { TagModule } from 'primeng/tag';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 
 import { FloraRepository } from '../../core/data/flora.repository';
-import { IngestOutcome, IngestPreview, PipelineSnapshot } from '../../core/models/domain';
+import { IngestOutcome, IngestPreview, LocalDataset, PipelineSnapshot, UploadKind } from '../../core/models/domain';
 import { PlotCardComponent } from '../../shared/plot-card.component';
 import { TPipe } from '../../core/i18n/t.pipe';
 import { t } from '../../core/i18n/i18n';
@@ -117,31 +117,83 @@ import { t } from '../../core/i18n/i18n';
           <p-step-panels>
             <p-step-panel [value]="1">
               <ng-template pTemplate="content" let-activateCallback="activateCallback">
+                <div class="origin-tabs" role="tablist" [attr.aria-label]="'Origem dos dados' | t">
+                  @for (tab of origins; track tab.id) {
+                    <button type="button" role="tab" class="origin-tab" [class.on]="origin() === tab.id" [attr.aria-selected]="origin() === tab.id" (click)="origin.set(tab.id)">
+                      <i [class]="tab.icon"></i> {{ tab.label | t }}
+                    </button>
+                  }
+                </div>
                 <form class="filters" [formGroup]="uploadForm">
-                  <p-fileupload
-                    mode="advanced"
-                    [customUpload]="true"
-                    [multiple]="true"
-                    accept=".tsv,.csv,.txt,.biom"
-                    [chooseLabel]="'Selecionar arquivos' | t"
-                    [showUploadButton]="false"
-                    [showCancelButton]="false"
-                    (onSelect)="onFiles($event)"
-                  />
-                  <div class="field">
-                    <label for="metadataPath">{{ 'Metadata' | t }}</label>
-                    <input id="metadataPath" pInputText formControlName="metadataPath" />
-                  </div>
-                  <div class="field">
-                    <label for="asvPath">{{ 'Tabela ASV' | t }}</label>
-                    <input id="asvPath" pInputText formControlName="asvPath" />
-                  </div>
-                  <div class="field">
-                    <label for="taxonomyPath">{{ 'Taxonomia' | t }}</label>
-                    <input id="taxonomyPath" pInputText formControlName="taxonomyPath" />
-                  </div>
+                  @switch (origin()) {
+                    @case ('library') {
+                      <p class="note">{{ 'Datasets já baixados no projeto ativo ou na pasta de trabalho. Só os completos (metadata, ASV e taxonomia) podem ser ingeridos.' | t }}</p>
+                      <div class="ds-list">
+                        @for (ds of datasets(); track ds.id) {
+                          <button type="button" class="ds" [class.picked]="selectedDataset() === ds.id" [disabled]="!ds.complete" (click)="chooseDataset(ds)">
+                            <span class="ds-head"><strong>{{ ds.label }}</strong>
+                              <p-tag [value]="originLabel(ds.origin)" severity="secondary" />
+                            </span>
+                            <span class="ds-meta">
+                              @if (ds.samples) { <span>{{ ds.samples }} {{ 'amostras' | t }}</span> }
+                              <span [class.ok]="ds.files.metadata">{{ 'Metadata' | t }}</span>
+                              <span [class.ok]="ds.files.asv">{{ 'Tabela ASV' | t }}</span>
+                              <span [class.ok]="ds.files.taxonomy">{{ 'Taxonomia' | t }}</span>
+                            </span>
+                            @if (ds.rawReadsOnly) {
+                              <small class="warn">{{ 'Só leituras brutas (FASTQ): precisam ser processadas no QIIME2/DADA2 antes de entrar aqui.' | t }}</small>
+                            } @else if (!ds.complete) {
+                              <small class="warn">{{ 'Faltam arquivos:' | t }} {{ ds.missing.join(', ') }}</small>
+                            }
+                          </button>
+                        } @empty {
+                          <p class="note">{{ loadingDatasets() ? t('Procurando datasets…') : t('Nenhum dataset baixado ainda.') }}</p>
+                        }
+                      </div>
+                      <div class="actions">
+                        <a routerLink="/downloads"><i class="pi pi-download"></i> {{ 'Baixar mais estudos na biblioteca' | t }}</a>
+                        <p-button type="button" severity="secondary" icon="pi pi-refresh" [label]="'Atualizar' | t" (onClick)="loadDatasets()" />
+                      </div>
+                    }
+                    @case ('computer') {
+                      <p class="note">{{ 'Escolha os arquivos no seu computador (.tsv, .csv, .txt, .biom). Eles são copiados para a pasta de trabalho do FLORA.' | t }}</p>
+                      <p-fileupload
+                        mode="advanced"
+                        [customUpload]="true"
+                        [multiple]="true"
+                        accept=".tsv,.csv,.txt,.biom"
+                        [chooseLabel]="'Selecionar arquivos' | t"
+                        [showUploadButton]="false"
+                        [showCancelButton]="false"
+                        (onSelect)="onFiles($event)"
+                      />
+                      @if (uploading()) { <small class="note">{{ 'Enviando…' | t }}</small> }
+                    }
+                    @case ('manual') {
+                      <p class="note">{{ 'Informe caminhos que o servidor do FLORA consiga ler.' | t }}</p>
+                      <div class="field">
+                        <label for="metadataPath">{{ 'Metadata' | t }}</label>
+                        <input id="metadataPath" pInputText formControlName="metadataPath" />
+                      </div>
+                      <div class="field">
+                        <label for="asvPath">{{ 'Tabela ASV' | t }}</label>
+                        <input id="asvPath" pInputText formControlName="asvPath" />
+                      </div>
+                      <div class="field">
+                        <label for="taxonomyPath">{{ 'Taxonomia' | t }}</label>
+                        <input id="taxonomyPath" pInputText formControlName="taxonomyPath" />
+                      </div>
+                    }
+                  }
+                  @if (origin() !== 'manual') {
+                    <dl class="chosen" [attr.aria-label]="'Arquivos escolhidos' | t">
+                      <dt>{{ 'Metadata' | t }}</dt><dd>{{ uploadForm.controls.metadataPath.value || '—' }}</dd>
+                      <dt>{{ 'Tabela ASV' | t }}</dt><dd>{{ uploadForm.controls.asvPath.value || '—' }}</dd>
+                      <dt>{{ 'Taxonomia' | t }}</dt><dd>{{ uploadForm.controls.taxonomyPath.value || '—' }}</dd>
+                    </dl>
+                  }
                   @if (uploadForm.invalid && uploadForm.touched) {
-                    <small class="field-error">{{ 'Os três caminhos são obrigatórios. No mock, use fail-taxonomy para simular falha dessa etapa.' | t }}</small>
+                    <small class="field-error">{{ 'Escolha metadata, tabela ASV e taxonomia para continuar.' | t }}</small>
                   }
                   <div class="actions">
                     <p-button type="button" [label]="'Mapear colunas' | t" icon="pi pi-arrow-right" iconPos="right" (onClick)="goColumns(activateCallback)" />
@@ -230,6 +282,23 @@ import { t } from '../../core/i18n/i18n';
         </p-stepper>
       </article>
     </section>
+  `,
+  styles: `
+    .origin-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .origin-tab { border: 1px solid var(--flora-border); background: var(--flora-surface); color: var(--flora-text); border-radius: 999px; padding: 6px 14px; cursor: pointer; font: inherit; font-size: .86rem; }
+    .origin-tab.on { background: var(--flora-primary-soft); border-color: var(--flora-primary); color: var(--flora-primary); font-weight: 600; }
+    .ds-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+    .ds { text-align: left; font: inherit; color: inherit; display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--flora-border); border-radius: var(--radius); background: var(--flora-surface); cursor: pointer; }
+    .ds:disabled { opacity: .6; cursor: not-allowed; }
+    .ds.picked { border-color: var(--flora-primary); box-shadow: 0 0 0 2px var(--flora-primary-soft); }
+    .ds-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .ds-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: .76rem; color: var(--flora-muted); }
+    .ds-meta span { border: 1px solid var(--flora-border); border-radius: 999px; padding: 1px 8px; }
+    .ds-meta span.ok { color: var(--flora-ok); border-color: var(--flora-ok); }
+    .warn { color: var(--flora-warn); }
+    .chosen { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: .82rem; margin: 6px 0 0; }
+    .chosen dt { color: var(--flora-muted); }
+    .chosen dd { margin: 0; word-break: break-all; }
   `
 })
 export class PipelinePageComponent {
@@ -244,6 +313,16 @@ export class PipelinePageComponent {
   readonly columns = signal<string[]>(['sample_id', 'group', 'host', 'site']);
   readonly step = signal(1);
   readonly busy = signal(false);
+  readonly origins: { id: 'library' | 'computer' | 'manual'; label: string; icon: string }[] = [
+    { id: 'library', label: 'Biblioteca (baixados)', icon: 'pi pi-database' },
+    { id: 'computer', label: 'Meu computador', icon: 'pi pi-upload' },
+    { id: 'manual', label: 'Caminho manual', icon: 'pi pi-pencil' }
+  ];
+  readonly origin = signal<'library' | 'computer' | 'manual'>('library');
+  readonly datasets = signal<LocalDataset[]>([]);
+  readonly selectedDataset = signal('');
+  readonly loadingDatasets = signal(false);
+  readonly uploading = signal(false);
   readonly methods = [
     { label: 'CLR', value: 'clr' },
     { label: 'TSS', value: 'tss' },
@@ -251,9 +330,9 @@ export class PipelinePageComponent {
   ];
 
   readonly uploadForm = this.fb.nonNullable.group({
-    metadataPath: ['results/raw/FL16S-SORGHUM-01/metadata.tsv', Validators.required],
-    asvPath: ['results/raw/FL16S-SORGHUM-01/asv_table.tsv', Validators.required],
-    taxonomyPath: ['results/raw/FL16S-SORGHUM-01/taxonomy.tsv', Validators.required],
+    metadataPath: ['', Validators.required],
+    asvPath: ['', Validators.required],
+    taxonomyPath: ['', Validators.required],
     sampleColumn: ['sample_id', Validators.required],
     groupColumn: ['group', Validators.required],
     wideFormat: [true]
@@ -268,6 +347,42 @@ export class PipelinePageComponent {
 
   constructor() {
     void this.reload();
+    void this.loadDatasets();
+  }
+
+  originLabel(origin: LocalDataset['origin']): string {
+    return origin === 'project' ? t('Projeto') : origin === 'upload' ? t('Enviado') : t('Baixado');
+  }
+
+  async loadDatasets(): Promise<void> {
+    this.loadingDatasets.set(true);
+    try {
+      this.datasets.set(await this.repository.datasets());
+    } catch (error) {
+      this.datasets.set([]);
+      this.messages.add({ severity: 'error', summary: t('Biblioteca'), detail: messageOf(error) });
+    } finally {
+      this.loadingDatasets.set(false);
+    }
+  }
+
+  chooseDataset(ds: LocalDataset): void {
+    if (!ds.complete) return;
+    this.selectedDataset.set(ds.id);
+    this.uploadForm.patchValue({
+      metadataPath: ds.files.metadata ?? '',
+      asvPath: ds.files.asv ?? '',
+      taxonomyPath: ds.files.taxonomy ?? ''
+    });
+    this.applyColumns(ds.columns);
+  }
+
+  private applyColumns(header: string[]): void {
+    if (!header.length) return;
+    this.columns.set(header);
+    this.uploadForm.controls.sampleColumn.setValue(header.includes('sample_id') ? 'sample_id' : header[0]);
+    const group = header.find((column) => /group|biome|compartment/i.test(column));
+    if (group) this.uploadForm.controls.groupColumn.setValue(group);
   }
 
   problemRows(): IngestPreview['rows'] {
@@ -289,30 +404,30 @@ export class PipelinePageComponent {
   }
 
   async onFiles(event: { files?: File[] }): Promise<void> {
-    const files = event.files ?? [];
-    for (const file of files) {
-      const header = await readHeader(file);
-      if (!header.length) {
-        continue;
-      }
-      const lower = file.name.toLowerCase();
-      if (lower.includes('tax')) {
-        this.uploadForm.controls.taxonomyPath.setValue(file.name);
-      } else if (lower.includes('asv') || lower.includes('feature') || lower.includes('otu')) {
-        this.uploadForm.controls.asvPath.setValue(file.name);
-      } else {
-        this.uploadForm.controls.metadataPath.setValue(file.name);
-        this.columns.set(header);
-        if (header.includes('sample_id')) {
-          this.uploadForm.controls.sampleColumn.setValue('sample_id');
-        } else if (header[0]) {
-          this.uploadForm.controls.sampleColumn.setValue(header[0]);
-        }
-        const group = header.find((column) => /group|biome|compartment/i.test(column));
-        if (group) {
-          this.uploadForm.controls.groupColumn.setValue(group);
+    this.uploading.set(true);
+    try {
+      for (const file of event.files ?? []) {
+        const lower = file.name.toLowerCase();
+        const kind: UploadKind = lower.includes('tax')
+          ? 'taxonomy'
+          : lower.includes('asv') || lower.includes('feature') || lower.includes('otu') || lower.endsWith('.biom')
+            ? 'asv'
+            : 'metadata';
+        try {
+          const stored = await this.repository.uploadFile(file, kind);
+          if (kind === 'taxonomy') this.uploadForm.controls.taxonomyPath.setValue(stored.path);
+          else if (kind === 'asv') this.uploadForm.controls.asvPath.setValue(stored.path);
+          else {
+            this.uploadForm.controls.metadataPath.setValue(stored.path);
+            this.applyColumns(stored.columns);
+          }
+          this.selectedDataset.set('');
+        } catch (error) {
+          this.messages.add({ severity: 'error', summary: file.name, detail: messageOf(error) });
         }
       }
+    } finally {
+      this.uploading.set(false);
     }
   }
 
@@ -391,17 +506,4 @@ export class PipelinePageComponent {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : t('Falha inesperada.');
-}
-
-function readHeader(file: File): Promise<string[]> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result ?? '');
-      const line = text.split(/\r?\n/, 1)[0] ?? '';
-      resolve(line.split(/[\t,]/).map((column) => column.trim()).filter(Boolean));
-    };
-    reader.onerror = () => resolve([]);
-    reader.readAsText(file.slice(0, 8192));
-  });
 }

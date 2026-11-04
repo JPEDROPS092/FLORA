@@ -374,6 +374,23 @@ export interface DownloadRequest {
   accessions?: string[];
 }
 
+/** A dataset already on disk (downloaded, uploaded or in the active project) that the pipeline can ingest. */
+export interface LocalDataset {
+  id: string;
+  label: string;
+  path: string;
+  origin: 'project' | 'workdir' | 'upload';
+  files: { metadata?: string; asv?: string; taxonomy?: string };
+  missing: string[];
+  complete: boolean;
+  rawReadsOnly: boolean;
+  samples: number;
+  columns: string[];
+  modified: string;
+}
+
+export type UploadKind = 'metadata' | 'asv' | 'taxonomy';
+
 export type LibrarySource = 'curated' | 'mgnify' | 'ena';
 
 /** A public study listed in the library; `accession` is the code used to download it. */

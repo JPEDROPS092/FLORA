@@ -6,6 +6,7 @@ import {
   DownloadJob,
   MetadataPreview,
   StudyEntry,
+  LocalDataset,
   GroupComparison,
   IngestPreview,
   MlExperiment,
@@ -270,5 +271,28 @@ export function toStudy(raw: unknown): StudyEntry {
     url: str(s['url']),
     origin: s['origin'] === 'live' ? 'live' : 'curated',
     importable: s['importable'] !== false
+  };
+}
+
+export function toLocalDataset(raw: unknown): LocalDataset {
+  const d = obj(raw);
+  const files = obj(d['files']);
+  const origin = d['origin'];
+  return {
+    id: str(d['id']),
+    label: str(d['label']),
+    path: str(d['path']),
+    origin: origin === 'project' || origin === 'upload' ? origin : 'workdir',
+    files: {
+      metadata: files['metadata'] ? str(files['metadata']) : undefined,
+      asv: files['asv'] ? str(files['asv']) : undefined,
+      taxonomy: files['taxonomy'] ? str(files['taxonomy']) : undefined
+    },
+    missing: arr(d['missing']).map((m) => String(m)),
+    complete: d['complete'] === true,
+    rawReadsOnly: d['raw_reads_only'] === true,
+    samples: Number(d['samples']) || 0,
+    columns: arr(d['columns']).map((c) => String(c)),
+    modified: str(d['modified'])
   };
 }

@@ -14,6 +14,8 @@ import {
   DownloadJob,
   DownloadRequest,
   LibrarySource,
+  LocalDataset,
+  UploadKind,
   MetadataPreview,
   StudyEntry,
   ExplorationBundle,
@@ -43,7 +45,7 @@ import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
 import { LANG, t } from '../../i18n/i18n';
-import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
+import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toLocalDataset, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
 
 interface StatusResponse {
   success: boolean;
@@ -592,6 +594,21 @@ export class HttpFloraRepository extends FloraRepository {
   async downloads(): Promise<DownloadJob[]> {
     const res = await this.send<{ jobs: unknown[] }>('GET', '/api/downloads');
     return (res.jobs ?? []).map(toDownload);
+  }
+
+  async datasets(): Promise<LocalDataset[]> {
+    const res = await this.send<{ datasets: unknown[] }>('GET', '/api/pipeline/datasets');
+    return (res.datasets ?? []).map(toLocalDataset);
+  }
+
+  async uploadFile(file: File, kind: UploadKind): Promise<{ path: string; columns: string[] }> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const res = await this.send<{ path: string; columns: string[] }>('POST', '/api/pipeline/upload', {
+      body: { kind, filename: file.name, content: btoa(binary) }
+    });
+    return { path: res.path, columns: res.columns ?? [] };
   }
 
   async searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]> {

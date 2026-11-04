@@ -10,6 +10,9 @@ from typing import Any
 
 logger = logging.getLogger("flora.ui.http")
 
+#: base64 inflates uploads by ~4/3, so this admits files up to the 200 MB upload limit.
+MAX_BODY_BYTES = 280 * 1024 * 1024
+
 
 @dataclass(slots=True)
 class UiHttpError(Exception):
@@ -82,6 +85,8 @@ def read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     length = int(handler.headers.get("Content-Length", 0))
     if length == 0:
         return {}
+    if length > MAX_BODY_BYTES:
+        raise UiHttpError("Request body too large", status=413, code="too_large")
 
     raw = handler.rfile.read(length)
     try:
