@@ -89,6 +89,38 @@ class FLORAPipeline:
             logger.info("DuckDB initialized at %s", db_path)
         return self._db
 
+    #: dataset tables, children first (foreign keys point at ``samples``)
+    _DATASET_TABLES = ("diversity_alpha", "diversity_beta", "dim_reduction", "asv", "taxonomy", "sample_metadata", "samples")
+
+    def snapshot_dataset(self) -> dict[str, pl.DataFrame]:
+        """In-memory copy of the dataset tables, so a failed replacement can be undone."""
+        snapshot: dict[str, pl.DataFrame] = {}
+        for table in self._DATASET_TABLES:
+            try:
+                snapshot[table] = self.db.query(f"SELECT * FROM {table}").to_polars()
+            except Exception:  # noqa: BLE001 - nothing to keep from a table that does not exist
+                continue
+        return snapshot
+
+    def restore_dataset(self, snapshot: dict[str, pl.DataFrame]) -> None:
+        """Put back a :meth:`snapshot_dataset` (parents before children)."""
+        self.clear_dataset()
+        for table in reversed(self._DATASET_TABLES):
+            frame = snapshot.get(table)
+            if frame is not None and frame.height:
+                self.db.load_dataframe(table, frame)
+
+    def clear_dataset(self) -> dict[str, int]:
+        """Delete the loaded dataset (samples, metadata, ASV, taxonomy and derived diversity). Returns rows removed per table."""
+        removed: dict[str, int] = {}
+        for table in self._DATASET_TABLES:
+            try:
+                removed[table] = int(self.db.query(f"SELECT COUNT(*) FROM {table}").to_polars().row(0)[0])
+                self.db.execute(f"DELETE FROM {table}")
+            except Exception:  # noqa: BLE001 - a table that does not exist yet has nothing to clear
+                removed.pop(table, None)
+        return removed
+
     def ingest_metadata(
         self,
         metadata_path: str | Path,

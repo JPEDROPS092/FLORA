@@ -9,6 +9,15 @@ from flora.ui.http import UiHttpError, json_success
 def _as_http_error(exc: Exception, *, code: str) -> UiHttpError:
     if isinstance(exc, UiHttpError):
         return exc
+    if "Duplicate key" in str(exc):
+        key = str(exc).split('Duplicate key "', 1)[-1].split('"', 1)[0]
+        return UiHttpError(
+            f"Estes dados já estão no projeto (chave repetida: {key}). Use a ingestão com substituição "
+            "(Pipeline → Confirmar) ou crie um projeto novo para um estudo diferente.",
+            status=409,
+            code="already_ingested",
+            details={"key": key},
+        )
     if isinstance(exc, FileNotFoundError):
         return UiHttpError(str(exc), status=400, code="missing_file")
     if isinstance(exc, (PipelineError, ValidationError, ValueError)):
@@ -88,3 +97,40 @@ def get_feature_matrix(state, params: dict):
         )
     except Exception as exc:
         raise _as_http_error(exc, code="feature_matrix_failed") from exc
+
+
+def ingest_dataset(state, body: dict):
+    """Load metadata, ASV table and taxonomy together, replacing the project's dataset, all or nothing.
+
+    The previous dataset is copied first; if any step fails the partial load is removed and the copy is put back,
+    so a failed ingestion never leaves the project half-overwritten.
+    (A SQL transaction cannot do this: DuckDB rejects deleting and re-inserting the same key in one transaction.)
+    """
+    paths = {k: str(body.get(k) or "") for k in ("metadata_path", "asv_path", "taxonomy_path")}
+    missing = [k for k, v in paths.items() if not v]
+    if missing:
+        raise UiHttpError(f"Informe {', '.join(missing)}.", code="missing_path")
+    replace = body.get("replace", True) is not False
+    pipe = state.pipeline
+    snapshot = pipe.snapshot_dataset() if replace else None
+    steps: list[dict] = []
+    current = "metadata"
+    removed: dict[str, int] = {}
+    try:
+        if replace:
+            removed = pipe.clear_dataset()
+        n = pipe.ingest_metadata(paths["metadata_path"], sample_col=body.get("sample_col", "sample_id"))
+        steps.append({"step": "metadata", "success": True, "detail": f"{n} registros"})
+        current = "asv"
+        n = pipe.ingest_asv_table(paths["asv_path"], wide_format=bool(body.get("wide_format", True)))
+        steps.append({"step": "asv", "success": True, "detail": f"{n} registros"})
+        current = "taxonomy"
+        n = pipe.ingest_taxonomy(paths["taxonomy_path"])
+        steps.append({"step": "taxonomy", "success": True, "detail": f"{n} registros"})
+    except Exception as exc:
+        if snapshot is not None:
+            pipe.restore_dataset(snapshot)
+        err = _as_http_error(exc, code=f"ingest_{current}_failed")
+        note = " (os dados anteriores foram mantidos)" if snapshot is not None else ""
+        raise UiHttpError(f"{current}: {err.message}{note}", status=err.status, code=err.code, details={"step": current}) from exc
+    return json_success(data={"steps": steps, "replaced": {"samples": removed.get("samples", 0)} if replace else {}})

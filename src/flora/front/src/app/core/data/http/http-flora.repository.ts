@@ -373,18 +373,24 @@ export class HttpFloraRepository extends FloraRepository {
   }
 
   async confirmIngest(request: IngestRequest): Promise<IngestOutcome> {
-    const steps = await Promise.all([
-      this.step('metadata', '/api/ingest/metadata', {
-        path: request.metadataPath,
-        sample_col: request.sampleColumn
-      }),
-      this.step('asv', '/api/ingest/asv', {
-        path: request.asvPath,
-        wide_format: request.wideFormat
-      }),
-      this.step('taxonomy', '/api/ingest/taxonomy', { path: request.taxonomyPath })
-    ]);
-    return aggregateIngest(steps);
+    // One call: the server replaces the project's dataset all-or-nothing, so a retry never hits duplicate keys.
+    try {
+      const res = await this.send<{ steps: IngestStepResult[] }>('POST', '/api/ingest/dataset', {
+        body: {
+          metadata_path: request.metadataPath,
+          asv_path: request.asvPath,
+          taxonomy_path: request.taxonomyPath,
+          sample_col: request.sampleColumn,
+          wide_format: request.wideFormat,
+          replace: true
+        }
+      });
+      return aggregateIngest(res.steps);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('Falha na etapa.');
+      const match = /^(metadata|asv|taxonomy): /.exec(message);
+      return aggregateIngest([{ step: (match?.[1] ?? 'metadata') as IngestStepResult['step'], success: false, error: message.replace(/^(metadata|asv|taxonomy): /, '') }]);
+    }
   }
 
   async applyNormalization(config: NormalizationConfig): Promise<PipelineSnapshot> {

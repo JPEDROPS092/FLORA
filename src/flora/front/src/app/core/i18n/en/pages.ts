@@ -1,5 +1,7 @@
 /** Feature pages: dashboard, downloads, explorer, ML lab, pipeline, projects, reports, agents. */
 export const EN_PAGES: Record<string, string> = {
+  // ingest replaces the dataset
+  'Atenção: o projeto ativo já tem {n} amostras. Confirmar substitui esses dados pelos novos; se algo falhar, os dados atuais são mantidos.': 'Warning: the active project already has {n} samples. Confirming replaces them with the new data; if anything fails, the current data is kept.',
   // environments / python connection
   'Ambientes (conda / Python)': 'Environments (conda / Python)',
   'O QIIME 2 e o DADA2 costumam viver em outro ambiente. Aponte para ele e o FLORA usa esses executáveis, sem precisar ativá-lo.': 'QIIME 2 and DADA2 usually live in another environment. Point to it and FLORA uses those executables, without activating it.',

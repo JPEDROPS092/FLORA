@@ -98,6 +98,7 @@ GET_ROUTES = {
 }
 
 POST_ROUTES = {
+    "/api/ingest/dataset": ingest.ingest_dataset,
     "/api/ingest/metadata": ingest.ingest_metadata,
     "/api/ingest/asv": ingest.ingest_asv,
     "/api/ingest/taxonomy": ingest.ingest_taxonomy,

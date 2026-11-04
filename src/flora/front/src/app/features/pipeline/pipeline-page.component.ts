@@ -260,6 +260,9 @@ import { t } from '../../core/i18n/i18n';
             <p-step-panel [value]="5">
               <ng-template pTemplate="content" let-activateCallback="activateCallback">
                 <p>{{ 'A ingestão só é aceita se metadata, ASV e taxonomia responderem com sucesso.' | t }}</p>
+                @if (currentSamples() > 0) {
+                  <p class="replace-note" role="note">{{ 'Atenção: o projeto ativo já tem {n} amostras. Confirmar substitui esses dados pelos novos; se algo falhar, os dados atuais são mantidos.' | t: { n: currentSamples() } }}</p>
+                }
                 @if (outcome(); as result) {
                   <ul class="limitations">
                     @for (item of result.steps; track item.step) {
@@ -296,6 +299,7 @@ import { t } from '../../core/i18n/i18n';
     .ds-meta span { border: 1px solid var(--flora-border); border-radius: 999px; padding: 1px 8px; }
     .ds-meta span.ok { color: var(--flora-ok); border-color: var(--flora-ok); }
     .warn { color: var(--flora-warn); }
+    .replace-note { color: var(--flora-warn); border-left: 3px solid var(--flora-warn); padding-left: 8px; font-size: .86rem; }
     .chosen { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: .82rem; margin: 6px 0 0; }
     .chosen dt { color: var(--flora-muted); }
     .chosen dd { margin: 0; word-break: break-all; }
@@ -313,6 +317,7 @@ export class PipelinePageComponent {
   readonly columns = signal<string[]>(['sample_id', 'group', 'host', 'site']);
   readonly step = signal(1);
   readonly busy = signal(false);
+  readonly currentSamples = signal(0);
   readonly origins: { id: 'library' | 'computer' | 'manual'; label: string; icon: string }[] = [
     { id: 'library', label: 'Biblioteca (baixados)', icon: 'pi pi-database' },
     { id: 'computer', label: 'Meu computador', icon: 'pi pi-upload' },
@@ -489,6 +494,7 @@ export class PipelinePageComponent {
   }
 
   private async reload(): Promise<void> {
+    void this.repository.exploreSchema().then((schema) => this.currentSamples.set(schema.counts.samples)).catch(() => this.currentSamples.set(0));
     const pipeline = await this.repository.pipeline();
     this.pipeline.set(pipeline);
     this.preview.set(pipeline.qc);
