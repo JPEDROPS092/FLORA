@@ -11,15 +11,17 @@ from flora.ui.server import create_app
 @pytest.fixture()
 def state(tmp_path):
     _, _, st = create_app(workdir=tmp_path)
-    # Create a minimal dataset for testing
-    st.db.execute("CREATE TABLE samples (sample_id TEXT PRIMARY KEY, biome TEXT, site TEXT)")
-    st.db.execute("CREATE TABLE asv (sample_id TEXT, feature_id TEXT, abundance INTEGER)")
-    st.db.execute("CREATE TABLE taxonomy (feature_id TEXT PRIMARY KEY, genus TEXT)")
-    
-    # Insert test data
-    st.db.execute("INSERT INTO samples VALUES ('S001', 'Amazon', 'Site1'), ('S002', 'Atlantic_Forest', 'Site1'), ('S003', 'Amazon', 'Site2')")
-    st.db.execute("INSERT INTO asv VALUES ('S001', 'f1', 100), ('S001', 'f2', 50), ('S002', 'f1', 75), ('S003', 'f2', 120)")
-    st.db.execute("INSERT INTO taxonomy VALUES ('f1', 'Bacteria'), ('f2', 'Archaea')")
+    st.db.execute(
+        "INSERT INTO samples (sample_id, biome) VALUES ('S001', 'Amazon'), ('S002', 'Atlantic_Forest'), ('S003', 'Amazon')"
+    )
+    st.db.execute(
+        "INSERT INTO sample_metadata VALUES ('S001','site','Site1'), ('S002','site','Site1'), ('S003','site','Site2')"
+    )
+    st.db.execute(
+        "INSERT INTO asv (sample_id, feature_id, abundance) VALUES "
+        "('S001', 'f1', 100), ('S001', 'f2', 50), ('S002', 'f1', 75), ('S003', 'f2', 120)"
+    )
+    st.db.execute("INSERT INTO taxonomy (feature_id, genus) VALUES ('f1', 'Bacteria'), ('f2', 'Archaea')")
     
     return st
 

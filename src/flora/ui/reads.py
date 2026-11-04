@@ -48,8 +48,30 @@ def depth_profile(db) -> dict | None:
     }
 
 
+def qc_floor(profile: dict) -> int:
+    """A depth cut that flags tiny libraries without failing a whole shallow study.
+
+    The adaptive rarefaction depth is the shallowest sample, so a library of 3 reads
+    would otherwise set the cut and pass. This floor sits well below the median
+    (about 5–10% of it, at least 100 when the study is deep) and never above it.
+    """
+    median = max(int(profile["median"]), 1)
+    if median >= 2000:
+        floor = max(100, median // 20)
+    elif median >= 200:
+        floor = max(20, median // 10)
+    else:
+        floor = max(1, median // 5)
+    return max(1, min(floor, median))
+
+
 def effective_min_reads(state, explicit: int | None = None) -> int:
-    """The threshold to use now: an explicit request, else the saved setting, else the shallowest sample."""
+    """QC cut: an explicit request, else the saved setting, else :func:`qc_floor`.
+
+    Rarefaction still uses the shallowest sample when no depth is chosen
+    (:func:`plan_sampling_depth`). QC does not, so a 3-read library is a warning
+    inside a study whose other samples are thousands of reads deep.
+    """
     if explicit is not None and int(explicit) > 0:
         return int(explicit)
     configured = configured_min_reads(state.db)
@@ -57,7 +79,7 @@ def effective_min_reads(state, explicit: int | None = None) -> int:
         return configured
     profile = depth_profile(state.db)
     if profile:
-        return int(profile["suggested"])
+        return qc_floor(profile)
     return 1000
 
 

@@ -564,6 +564,6 @@ export class DownloadsPageComponent {
   private async reload(): Promise<void> {
     const jobs = await this.repository.downloads();
     this.jobs.set(jobs);
-    this.mocked.set(jobs.every((job) => job.mocked));
+    this.mocked.set(this.repository.source.mocked);
   }
 }

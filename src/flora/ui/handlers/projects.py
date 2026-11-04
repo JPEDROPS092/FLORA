@@ -54,6 +54,21 @@ def update_project(state, body):
 
 
 @_wrap
+def delete_project(state, body):
+    """Delete a project and its DuckDB. Requires ``confirm: true``."""
+    body = body or {}
+    if body.get("confirm") is not True:
+        return json_success(data={
+            "applied": False,
+            "message": "Nada foi apagado. Envie confirm=true para excluir o projeto e o banco dele.",
+        })
+    pid = str(body.get("id") or "")
+    state.release(pid)
+    state.projects.delete(pid)
+    return json_success(data={"applied": True, "id": pid})
+
+
+@_wrap
 def activate_project(state, body):
     pid = (body or {}).get("id", "")
     state.projects.set_active(pid)

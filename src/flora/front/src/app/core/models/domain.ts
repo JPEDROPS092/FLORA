@@ -47,6 +47,10 @@ export interface DashboardSnapshot {
   asvs: number;
   groups: number;
   groupNames: string[];
+  /** Column the groups and the alpha/PCoA charts use. */
+  groupBy?: string;
+  groupColumns?: { name: string; values: { value: string; count: number }[] }[];
+  map?: SampleMap | null;
   quality: {
     pass: number;
     warn: number;
@@ -84,14 +88,14 @@ export interface ResearchProject {
   results: { id: string; title: string; summary: string }[];
   updatedAt: string;
   mocked: boolean;
-  /** empty → raw_downloaded → ingested. Only `ingested` projects can be analysed. */
+  /** empty → raw_downloaded → ingested → analyzed → reported. */
   stage?: ProjectStage;
   synthetic?: boolean;
   active?: boolean;
   source?: { type: SyncSourceType; accession: string };
 }
 
-export type ProjectStage = 'empty' | 'raw_downloaded' | 'ingested';
+export type ProjectStage = 'empty' | 'raw_downloaded' | 'ingested' | 'analyzed' | 'reported';
 export type SyncSourceType = 'synthetic' | 'mgnify' | 'sra' | 'emp';
 
 export interface SyncSourceDraft {
@@ -281,6 +285,7 @@ export interface ClusterSummary {
   silhouette: number | null;
   daviesBouldin: number | null;
   noiseFraction: number | null;
+  note?: string;
   mocked: boolean;
 }
 

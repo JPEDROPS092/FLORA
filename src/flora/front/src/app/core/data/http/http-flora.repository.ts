@@ -118,6 +118,7 @@ interface ClusterResponse {
   silhouette?: number;
   davies_bouldin?: number;
   noise_fraction?: number;
+  note?: string;
 }
 
 interface ReportResponse {
@@ -206,16 +207,25 @@ export class HttpFloraRepository extends FloraRepository {
     }
   }
 
-  async dashboard(): Promise<DashboardSnapshot> {
+  async dashboard(groupBy = ''): Promise<DashboardSnapshot> {
     await this.fitDepth();
+    const dashParams: Record<string, string | number> = { lang: LANG };
+    if (groupBy) dashParams['group_by'] = groupBy;
     const [status, d] = await Promise.all([
       this.send<StatusResponse>('GET', '/api/status'),
-      this.send<Raw>('GET', '/api/dashboard', { params: { lang: LANG, min_reads: this.normalization.rarefactionDepth } })
+      this.send<Raw>('GET', '/api/dashboard', { params: dashParams })
     ]);
-    const groupBy = String(d['group_by'] ?? 'biome');
+    const resolvedGroup = String(d['group_by'] ?? groupBy ?? '');
     const q = (d['quality'] ?? {}) as Raw;
-    const alpha = await settleChart(() => this.loadPlot('/api/viz/alpha', { metric: 'shannon', group_by: groupBy }));
-    const pcoa = await settleChart(() => this.loadPlot('/api/viz/pcoa', { normalize: 'clr', color_by: groupBy }));
+    const alpha = await settleChart(() => this.loadPlot('/api/viz/alpha', { metric: 'shannon', group_by: resolvedGroup }));
+    const pcoa = await settleChart(() => this.loadPlot('/api/viz/pcoa', { normalize: 'clr', color_by: resolvedGroup }));
+    let map: DashboardSnapshot['map'] = null;
+    try {
+      const mapped = await this.send<{ map: unknown }>('GET', '/api/explore/map', { params: resolvedGroup ? { group_by: resolvedGroup } : {} });
+      map = toSampleMap(mapped.map);
+    } catch {
+      map = null;
+    }
     const samples = Number(d['samples'] ?? 0);
     return {
       source: this.source,
@@ -226,6 +236,12 @@ export class HttpFloraRepository extends FloraRepository {
       asvs: Number(d['asvs'] ?? 0),
       groups: Number(d['groups'] ?? 0),
       groupNames: ((d['group_names'] as string[]) ?? []).map(String),
+      groupBy: resolvedGroup,
+      groupColumns: ((d['group_columns'] as { name: string; values: { value: string; count: number }[] }[]) ?? []).map((c) => ({
+        name: String(c.name),
+        values: c.values ?? []
+      })),
+      map,
       quality: {
         pass: Number(q['pass'] ?? 0),
         warn: Number(q['warn'] ?? 0),
@@ -295,6 +311,10 @@ export class HttpFloraRepository extends FloraRepository {
     await this.send('POST', '/api/projects/activate', { body: { id: projectId } });
   }
 
+  async deleteProject(id: string): Promise<void> {
+    await this.send('POST', '/api/projects/delete', { body: { id, confirm: true } });
+  }
+
   private toSource(raw: unknown): SyncSourceDraft {
     const r = (raw ?? {}) as Record<string, unknown>;
     return { type: (r['type'] as SyncSourceDraft['type']) ?? 'synthetic', accession: String(r['accession'] ?? ''), params: (r['params'] as Record<string, string | number>) ?? {} };
@@ -314,7 +334,7 @@ export class HttpFloraRepository extends FloraRepository {
     const sources = (p['sources'] as Record<string, unknown>[]) ?? [];
     return {
       id: String(p['id']), name: String(p['name']), question: String(p['question'] ?? ''),
-      status: stage === 'ingested' ? 'active' : 'draft',
+      status: stage === 'ingested' || stage === 'analyzed' || stage === 'reported' ? 'active' : 'draft',
       datasetName: sources.length ? `${sources[0]['type']}${sources[0]['accession'] ? ' · ' + sources[0]['accession'] : ''}` : t('Ainda sem dataset'),
       marker: String(p['marker'] ?? '16S'), samples: Number(p['samples'] ?? 0), asvs: Number(p['asvs'] ?? 0),
       groups: (p['groups'] as string[]) ?? [], analyses: (p['analyses'] as ResearchProject['analyses']) ?? [],
@@ -326,7 +346,7 @@ export class HttpFloraRepository extends FloraRepository {
 
   async pipeline(): Promise<PipelineSnapshot> {
     await this.fitDepth();
-    const res = await this.send<Raw>('GET', '/api/pipeline', { params: { lang: LANG, min_reads: this.normalization.rarefactionDepth } });
+    const res = await this.send<Raw>('GET', '/api/pipeline', { params: { lang: LANG } });
     const counts = (res['counts'] ?? {}) as Record<string, number>;
     const steps = (res['steps'] ?? {}) as Record<string, { status?: string; at?: string; message?: string }>;
     const ingested = !!res['ingested'];
@@ -656,6 +676,7 @@ export class HttpFloraRepository extends FloraRepository {
         success: true,
         method: response.method ?? request.method,
         nClusters: response.n_clusters ?? request.nClusters,
+        note: response.note,
         silhouette: response.silhouette ?? null,
         daviesBouldin: response.davies_bouldin ?? null,
         noiseFraction: response.noise_fraction ?? null,

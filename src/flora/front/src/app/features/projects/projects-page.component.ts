@@ -68,7 +68,7 @@ import { TPipe } from '../../core/i18n/t.pipe';
                   <span class="proj-tags">
                     @if (project.active) { <p-tag [value]="'Ativo' | t" severity="success" /> }
                     @if (project.synthetic) { <p-tag [value]="'Sintético' | t" severity="warn" /> }
-                    <p-tag [value]="stageLabel(project)" [severity]="project.stage === 'ingested' ? 'success' : 'secondary'" />
+                    <p-tag [value]="stageLabel(project)" [severity]="ready(project.stage) ? 'success' : 'secondary'" />
                   </span>
                 </div>
                 <p class="note">{{ project.question || ('Sem pergunta definida.' | t) }}</p>
@@ -76,9 +76,10 @@ import { TPipe } from '../../core/i18n/t.pipe';
                 <div class="proj-actions">
                   <p-button [label]="'Detalhes' | t" size="small" severity="secondary" [text]="true" (onClick)="selected.set(project)" />
                   @if (!project.active) { <p-button [label]="'Ativar' | t" size="small" severity="secondary" [outlined]="true" (onClick)="activate(project)" /> }
-                  @if (project.stage === 'ingested') {
+                  @if (ready(project.stage)) {
                     <p-button [label]="'Explorar' | t" icon="pi pi-chart-bar" size="small" (onClick)="open(project, '/explorer')" />
                   }
+                  <p-button [label]="'Excluir' | t" size="small" severity="danger" [text]="true" (onClick)="remove(project)" />
                 </div>
               </div>
             }
@@ -113,7 +114,7 @@ import { TPipe } from '../../core/i18n/t.pipe';
       @if (selected(); as project) {
         <p>{{ project.question }}</p>
         <p class="note">{{ project.datasetName }} · {{ project.marker }} · {{ stageLabel(project) }}</p>
-        @if (project.stage !== 'ingested') {
+        @if (!ready(project.stage)) {
           <p class="note">{{ 'Este projeto ainda não tem matriz ASV ingerida; arquivos brutos (FASTQ) não bastam para análise.' | t }}</p>
         }
         <h3>{{ 'Análises' | t }}</h3>
@@ -212,7 +213,7 @@ export class ProjectsPageComponent implements OnDestroy {
   readonly needsAccession = computed(() => this.connectType() === 'mgnify' || this.connectType() === 'sra');
   readonly targets = computed(() => [
     { id: 'new', label: t('Novo projeto') },
-    ...this.projects().filter((p) => p.stage !== 'ingested').map((p) => ({ id: p.id, label: p.name }))
+    ...this.projects().filter((p) => !this.ready(p.stage)).map((p) => ({ id: p.id, label: p.name }))
   ]);
 
   constructor() {
@@ -237,8 +238,31 @@ export class ProjectsPageComponent implements OnDestroy {
     return ({ queued: t('na fila'), running: t('em andamento'), completed: t('concluído'), failed: t('falhou'), cancelled: t('cancelado') } as Record<string, string>)[s] ?? s;
   }
 
+  ready(stage?: string): boolean {
+    return stage === 'ingested' || stage === 'analyzed' || stage === 'reported';
+  }
+
   stageLabel(p: ResearchProject): string {
-    return ({ empty: t('Sem dados'), raw_downloaded: t('Arquivos brutos'), ingested: t('Pronto para análise') } as Record<string, string>)[p.stage ?? 'empty'] ?? '';
+    return ({
+      empty: t('Sem dados'),
+      raw_downloaded: t('Arquivos brutos'),
+      ingested: t('Pronto para análise'),
+      analyzed: t('Analisado'),
+      reported: t('Com relatório')
+    } as Record<string, string>)[p.stage ?? 'empty'] ?? '';
+  }
+
+  async remove(project: ResearchProject): Promise<void> {
+    const ok = window.confirm(t('Excluir o projeto {name}? O banco e os resultados deste projeto são apagados.', { name: project.name }));
+    if (!ok) return;
+    try {
+      await this.repository.deleteProject(project.id);
+      if (this.selected()?.id === project.id) this.selected.set(null);
+      this.messages.add({ severity: 'success', summary: t('Projeto'), detail: t('Projeto excluído.') });
+      await this.reload();
+    } catch (e) {
+      this.fail(e);
+    }
   }
 
   srcHint(): string {

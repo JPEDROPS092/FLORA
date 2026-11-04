@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import polars as pl
+
 from flora.core.exceptions import DatabaseError, ValidationError
 from flora.ui.http import UiHttpError, json_success
 from flora.ui.query_helpers import fetch_sample_taxonomy_profile, fetch_taxonomy_hierarchy
@@ -22,14 +24,21 @@ def _plot_error(exc: Exception) -> UiHttpError:
 
 
 def _metadata_with(db, column: str | None):
-    """``samples`` plus ``column`` when it is a key of the key-value metadata (real studies keep most fields there)."""
-    metadata = db.query("SELECT * FROM samples").to_polars()
-    if column and column not in metadata.columns:
-        from flora.ui.handlers.workspace import _groups_frame
+    """``samples`` plus ``column`` when it is a key of the key-value metadata.
 
-        extra = _groups_frame(db, column).rename({"group": column})
-        metadata = metadata.join(extra, on="sample_id", how="left")
-    return metadata
+    Real studies keep ``land_cover`` and ``environment_biome`` in ``sample_metadata``,
+    not as columns of ``samples``. The column is attached by a map, so an empty join
+    cannot drop it and make the chart fail with "unable to find column".
+    """
+    metadata = db.query("SELECT * FROM samples").to_polars()
+    if not column or column in metadata.columns:
+        return metadata
+    from flora.ui.handlers.workspace import _groups_frame
+
+    frame = _groups_frame(db, column)
+    mapping = dict(zip(frame["sample_id"].cast(pl.Utf8).to_list(), frame["group"].cast(pl.Utf8).to_list(), strict=True)) if frame.height else {}
+    values = [mapping.get(str(sid)) for sid in metadata["sample_id"].to_list()]
+    return metadata.with_columns(pl.Series(column, values, dtype=pl.Utf8))
 
 
 def viz_taxonomy(state, params: dict):
@@ -94,8 +103,16 @@ def viz_alpha(state, params: dict):
         alpha = compute_alpha_diversity(feature_matrix, metrics=[metric])
         metadata = _metadata_with(state.db, group_by)
         if group_by:
-            alpha = alpha.join(
-                metadata.select(["sample_id", group_by]),
+            if group_by not in metadata.columns:
+                metadata = metadata.with_columns(pl.lit(None).cast(pl.Utf8).alias(group_by))
+            labels = metadata.select(["sample_id", group_by]).with_columns(
+                pl.when(pl.col(group_by).is_null() | (pl.col(group_by).cast(pl.Utf8).str.strip_chars() == ""))
+                .then(pl.lit(None))
+                .otherwise(pl.col(group_by).cast(pl.Utf8))
+                .alias(group_by)
+            )
+            alpha = alpha.with_columns(pl.col("sample_id").cast(pl.Utf8)).join(
+                labels.with_columns(pl.col("sample_id").cast(pl.Utf8)),
                 on="sample_id",
                 how="left",
             )

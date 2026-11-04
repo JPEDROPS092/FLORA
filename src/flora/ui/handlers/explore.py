@@ -12,9 +12,15 @@ from flora.ui.http import UiHttpError, json_success
 
 _TABLES = ("samples", "features", "taxonomy")
 _MAX_LIMIT = 200
-_MAX_GROUP_VALUES = 24
+_MAX_GROUP_VALUES = 40
 _RANKS = ("kingdom", "phylum", "class", "order", "family", "genus", "species")
 _SKIP_GROUP_COLS = {"sample_id", "latitude", "longitude", "sequencing_depth"}
+# Real MGnify studies leave ``samples.biome`` empty and put the useful label in metadata.
+_GROUP_PREFERENCE = (
+    "land_cover", "environment_feature", "environment_biome", "substrate", "site",
+    "biome", "compartment", "host", "treatment", "location", "geo_loc_name",
+)
+_BLANK_VALUES = {"", "none", "null", "nan", "na"}
 
 
 def _q(params: dict | None, key: str, default: str = "") -> str:
@@ -29,6 +35,11 @@ def _count(db, sql: str, args: list | None = None) -> int:
         return 0
 
 
+def _usable_values(pairs: list[tuple[str, int]]) -> list[tuple[str, int]]:
+    """Drop blanks. An empty ``biome`` must not count as a group or hide a metadata column."""
+    return [(v, n) for v, n in pairs if str(v).strip().lower() not in _BLANK_VALUES]
+
+
 def _group_columns(db) -> list[dict[str, Any]]:
     """Categorical columns usable for grouping, with their real values and counts."""
     found: dict[str, list[tuple[str, int]]] = {}
@@ -40,23 +51,31 @@ def _group_columns(db) -> list[dict[str, Any]]:
         if col in _SKIP_GROUP_COLS:
             continue
         rows = db.query(
-            f'SELECT CAST("{col}" AS VARCHAR) AS v, COUNT(*) AS n FROM samples WHERE "{col}" IS NOT NULL GROUP BY 1 ORDER BY n DESC'
+            f'SELECT CAST("{col}" AS VARCHAR) AS v, COUNT(*) AS n FROM samples '
+            f'WHERE "{col}" IS NOT NULL AND CAST("{col}" AS VARCHAR) <> \'\' GROUP BY 1 ORDER BY n DESC'
         ).to_polars().iter_rows()
-        found[col] = [(str(v), int(n)) for v, n in rows]
+        found[col] = _usable_values([(str(v), int(n)) for v, n in rows])
     try:
         rows = db.query(
-            "SELECT key, value, COUNT(*) AS n FROM sample_metadata WHERE value IS NOT NULL GROUP BY key, value ORDER BY key, n DESC"
+            "SELECT key, value, COUNT(*) AS n FROM sample_metadata "
+            "WHERE value IS NOT NULL AND value <> '' GROUP BY key, value ORDER BY key, n DESC"
         ).to_polars().iter_rows()
+        meta: dict[str, list[tuple[str, int]]] = {}
         for key, value, n in rows:
-            if key not in _SKIP_GROUP_COLS and key not in found:
-                found.setdefault(f"meta:{key}", []).append((str(value), int(n)))
+            if key not in _SKIP_GROUP_COLS:
+                meta.setdefault(str(key), []).append((str(value), int(n)))
+        for key, pairs in meta.items():
+            usable = _usable_values(pairs)
+            # A metadata key wins over the same-named samples column when that column is empty.
+            if key not in found or not found[key]:
+                found[key] = usable
     except Exception:  # noqa: BLE001
         pass
     out = []
     for name, values in found.items():
         if 2 <= len(values) <= _MAX_GROUP_VALUES:
-            out.append({"name": name.removeprefix("meta:"), "values": [{"value": v, "count": n} for v, n in values]})
-    out.sort(key=lambda c: (c["name"] != "biome", len(c["values"])))
+            out.append({"name": name, "values": [{"value": v, "count": n} for v, n in values[:_MAX_GROUP_VALUES]]})
+    out.sort(key=lambda c: (_GROUP_PREFERENCE.index(c["name"]) if c["name"] in _GROUP_PREFERENCE else len(_GROUP_PREFERENCE), -sum(v["count"] for v in c["values"])))
     return out
 
 
@@ -140,24 +159,55 @@ def get_table(state, params: dict | None = None):
 
 
 def default_group(db) -> str:
-    """Column the app groups by when none is chosen: ``biome`` if it has 2+ values, else the first categorical column."""
+    """Column the app groups by when none is chosen.
+
+    ``biome`` when it actually has 2+ values. Otherwise the first populated
+    categorical column (``land_cover`` before an empty ``biome``). ``biome`` is
+    only the fallback when the project has no usable column at all.
+    """
     try:
         columns = _group_columns(db)
     except Exception:  # noqa: BLE001 - an empty workspace has no columns
         return "biome"
-    return next((c["name"] for c in columns if c["name"] == "biome"), columns[0]["name"] if columns else "biome")
+    return columns[0]["name"] if columns else "biome"
+
+
+def _metadata_values(db, key: str) -> dict[str, str]:
+    try:
+        frame = db.query(
+            "SELECT sample_id, value FROM sample_metadata WHERE lower(key) = ? AND value IS NOT NULL AND value <> ''",
+            [key.lower()],
+        ).to_polars()
+    except Exception:  # noqa: BLE001
+        return {}
+    return {str(sid): str(value) for sid, value in frame.iter_rows() if value}
 
 
 def get_map(state, params: dict | None = None):
     """Where the active project's samples were collected (needs latitude/longitude), coloured by a metadata column."""
-    from flora.io.geo import points_from_rows
+    from flora.io.geo import parse_lat_lon, points_from_rows
     from flora.ui.handlers.workspace import _groups_frame
 
     db = state.db
     group_by = _q(params, "group_by") or default_group(db)
     samples = db.query("SELECT sample_id, latitude, longitude FROM samples").to_polars()
-    rows = [{"sample_id": r["sample_id"], "latitude": "" if r["latitude"] is None else str(r["latitude"]),
-             "longitude": "" if r["longitude"] is None else str(r["longitude"])} for r in samples.iter_rows(named=True)]
+    lat_meta = _metadata_values(db, "latitude") or _metadata_values(db, "lat")
+    lon_meta = _metadata_values(db, "longitude") or _metadata_values(db, "lon")
+    pair_meta = _metadata_values(db, "lat_lon") or _metadata_values(db, "coordinates")
+    rows = []
+    for r in samples.iter_rows(named=True):
+        sid = r["sample_id"]
+        lat = "" if r["latitude"] is None else str(r["latitude"])
+        lon = "" if r["longitude"] is None else str(r["longitude"])
+        if not lat:
+            lat = lat_meta.get(sid, "")
+        if not lon:
+            lon = lon_meta.get(sid, "")
+        if (not lat or not lon) and pair_meta.get(sid):
+            parsed = parse_lat_lon(pair_meta[sid])
+            if parsed:
+                lat, lon = str(parsed[0]), str(parsed[1])
+        rows.append({"sample_id": sid, "latitude": lat, "longitude": lon})
     if group_by:
         groups = dict(zip(*(_groups_frame(db, group_by)[c].to_list() for c in ("sample_id", "group")), strict=True))
         for row in rows:

@@ -451,7 +451,12 @@ export class PipelinePageComponent {
   }
 
   stageLabel(stage: string): string {
-    return stage === 'ingested' ? t('Pronto para análise') : stage === 'raw_downloaded' ? t('Arquivos brutos') : t('Sem dados');
+    return ({
+      ingested: t('Pronto para análise'),
+      analyzed: t('Analisado'),
+      reported: t('Com relatório'),
+      raw_downloaded: t('Arquivos brutos')
+    } as Record<string, string>)[stage] ?? t('Sem dados');
   }
 
   analyzableDatasets(): LocalDataset[] {
@@ -623,8 +628,10 @@ export class PipelinePageComponent {
     const wanted = this.uploadForm.controls.groupColumn.value;
     const group = columns.find((column) => column.name === wanted)?.name ?? columns[0]?.name ?? (wanted || 'biome');
     const depth = this.normForm.controls.rarefactionDepth.value;
+    const studyMin = this.reads()?.min ?? 0;
+    const qcParams: Record<string, string | number> = depth > studyMin ? { min_reads: depth } : {};
     const steps: { id: string; label: string; run: () => Promise<unknown> }[] = [
-      { id: 'qc', label: t('Controle de qualidade'), run: () => this.repository.analysis('qc', { min_reads: depth }) },
+      { id: 'qc', label: t('Controle de qualidade'), run: () => this.repository.analysis('qc', qcParams) },
       { id: 'diversity', label: t('Diversidade'), run: () => this.repository.computeDiversity(depth) },
       { id: 'rarefaction', label: t('Curvas de rarefação'), run: () => this.repository.analysis('rarefaction', { group_by: group, depth }) },
       { id: 'alpha', label: t('Kruskal-Wallis'), run: () => this.repository.analysis('alpha_stats', { group_by: group }) },

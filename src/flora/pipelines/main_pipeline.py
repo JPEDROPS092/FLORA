@@ -90,7 +90,9 @@ class FLORAPipeline:
         return self._db
 
     #: dataset tables, children first (foreign keys point at ``samples``)
-    _DATASET_TABLES = ("diversity_alpha", "diversity_beta", "dim_reduction", "asv", "taxonomy", "sample_metadata", "samples")
+    # ``pipeline_log`` has no foreign keys; it is cleared with the dataset so a replace
+    # does not keep the previous study's steps.
+    _DATASET_TABLES = ("pipeline_log", "diversity_alpha", "diversity_beta", "dim_reduction", "asv", "taxonomy", "sample_metadata", "samples")
 
     def snapshot_dataset(self) -> dict[str, pl.DataFrame]:
         """In-memory copy of the dataset tables, so a failed replacement can be undone."""

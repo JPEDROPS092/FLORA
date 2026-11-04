@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 _ID = re.compile(r"^[0-9a-f]{12}$")
+LOADED_STAGES = {"ingested", "analyzed", "reported"}
 
 
 class ProjectError(Exception):
@@ -45,7 +46,7 @@ class Project(BaseModel):
     kind: str = "local"  # local | example | public
     synthetic: bool = False
     example_id: str = ""
-    #: empty -> raw_downloaded -> ingested. Only "ingested" can be analysed.
+    #: empty -> raw_downloaded -> ingested -> analyzed -> reported.
     stage: str = "empty"
     sources: list[Source] = Field(default_factory=list)
     samples: int = 0
@@ -104,6 +105,20 @@ class ProjectRegistry:
                     except (ValueError, OSError):
                         continue
         return sorted(found, key=lambda p: p.updated_at, reverse=True)
+
+    def delete(self, project_id: str) -> None:
+        """Remove the project directory. Clears the active pointer when it pointed here."""
+        import shutil
+
+        with self._lock:
+            path = self.dir(project_id)
+            if not self._file(project_id).exists():
+                raise ProjectError("Project not found.", "not_found", 404)
+            if self.active_id() == project_id:
+                active = self.root / "active.json"
+                if active.exists():
+                    active.unlink()
+            shutil.rmtree(path)
 
     def update(self, project_id: str, patch: dict[str, Any]) -> Project:
         with self._lock:

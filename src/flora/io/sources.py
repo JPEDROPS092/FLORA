@@ -383,7 +383,9 @@ def _download_ssu_table(accession: str, output_dir: Path) -> dict[str, str]:
         tables = convert_ssu_table(raw.read_text(encoding="utf-8", errors="replace"), analysis_sample_map(analyses), output_dir)
     except (IngestionError, ValueError, OSError) as exc:
         logger.warning("MGnify SSU table for %s could not be converted: %s", accession, exc)
-        return {}
+        raise LibraryError(
+            f"A MGnify publicou a tabela taxonômica de {accession}, mas ela não pôde ser convertida em tabela ASV: {exc}"
+        ) from exc
     return {**tables, "raw_taxonomy": str(raw)}
 
 
