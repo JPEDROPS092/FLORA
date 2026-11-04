@@ -5,9 +5,12 @@ import {
   DashboardSnapshot,
   DataSourceInfo,
   DiagnosticEntry,
+  CatalogEntry,
+  CatalogQuery,
   DownloadJob,
   DownloadRequest,
   LibrarySource,
+  MetadataPreview,
   StudyEntry,
   ExplorationBundle,
   ExplorationQuery,
@@ -29,7 +32,9 @@ import {
   ScientificExport,
   TrainRequest
 } from '../../models/domain';
+import { toCatalogEntry } from '../http/mappers';
 import { FloraRepository } from '../flora.repository';
+import { CATALOG_RAW } from './catalog.data';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
 import { buildReportFiles } from '../../export/report-document';
@@ -192,10 +197,12 @@ export class MockFloraRepository extends FloraRepository {
     return [
       { ...base, id: 'synthetic-demo', name: 'Synthetic Microbiome Demo', question: t('Os quatro biomas sintéticos diferem em diversidade?'), description: t('80 amostras, 200 ASVs, seed 42. Dados sintéticos, não reais.'),
         biome: 'synthetic', synthetic: true, verified: true, source: { type: 'synthetic', accession: 'seed-42' } },
-      { ...base, id: 'amazon-forest-mgnify', name: 'Amazonian Forest Microbiome', question: t('Quais táxons caracterizam o solo da floresta amazônica?'), description: t('Template MGnify (MGYS00005116). Ainda não verificado na fonte.'),
-        biome: 'soil', source: { type: 'mgnify', accession: 'MGYS00005116' } },
-      { ...base, id: 'tropical-soil-sra', name: 'Brazilian Tropical Soil', question: t('Como o solo tropical varia entre sítios?'), description: t('Template NCBI SRA (SRP151124). Baixa FASTQ; precisa de processamento.'),
-        biome: 'soil', source: { type: 'sra', accession: 'SRP151124' } }
+      { ...base, id: 'amazon-forest-mgnify', name: 'Amazon deforestation soil', question: t('Como o desmate altera o microbioma do solo amazônico?'), description: t('MGYS00001352 (PRJEB8643): 18 amostras de amplicon em solo de floresta e área desmatada na Amazônia. Verificado em 2026-11-03.'),
+        biome: 'soil', verified: true, source: { type: 'mgnify', accession: 'MGYS00001352' } },
+      { ...base, id: 'amazon-sediments-sra', name: 'Amazon River lake sediments', question: t('Como variam as comunidades nos sedimentos de lagos do Rio Amazonas?'), description: t('PRJNA289633 (MGYS00004385): 29 runs de amplicon em sedimentos de lagos do Rio Amazonas. Verificado em 2026-11-03.'),
+        biome: 'sediment', verified: true, source: { type: 'sra', accession: 'PRJNA289633' } },
+      { ...base, id: 'ocean-sampling-day', name: 'Ocean Sampling Day 2014', question: t('Como é um retrato marinho global de um único dia?'), description: t('PRJEB8682 (ERP009703): 467 runs, amplicon e WGS. Não é rizosfera amazônica. Verificado em 2026-11-03.'),
+        biome: 'marine', verified: true, installable: false, source: { type: 'sra', accession: 'PRJEB8682' } }
     ];
   }
 
@@ -391,16 +398,72 @@ export class MockFloraRepository extends FloraRepository {
   async searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]> {
     await wait();
     const q = query.trim().toLowerCase();
-    const base = { description: '', biome: '', samples: 0, centre: '', bioproject: '', secondary: '', updated: '', origin: 'curated' as const, importable: true };
-    const all: StudyEntry[] = [
-      { ...base, source: 'synthetic', accession: 'SYNTHETIC', title: t('Coorte sintética'), description: t('Gerada localmente com seed; quatro biomas brasileiros. Dados não reais.'), biome: 'Synthetic', samples: 80, centre: 'FLORA', url: '' },
-      { ...base, source: 'emp', accession: 'EMP-R1', title: 'Earth Microbiome Project — Release 1', biome: 'Global', samples: 2000, centre: 'EMP · Qiita / UCSD', url: 'https://doi.org/10.5281/zenodo.890000' },
-      { ...base, source: 'mgnify', accession: 'MGYS00005116', title: t('Solo de floresta amazônica (MGnify)'), biome: 'Amazonian Forest', samples: 80, centre: 'MGnify', url: 'https://www.ebi.ac.uk/metagenomics/studies/MGYS00005116' },
-      { ...base, source: 'ena', accession: 'SRP151124', title: t('Solo tropical brasileiro (NCBI SRA)'), biome: 'Brazilian Tropical Soil', samples: 60, centre: 'NCBI SRA', url: 'https://www.ncbi.nlm.nih.gov/sra/?term=SRP151124' },
-      { ...base, source: 'ena', accession: 'ERP009703', title: t('Rizosfera amazônica'), biome: 'Amazonian Rhizosphere', samples: 120, centre: 'ENA', url: 'https://www.ebi.ac.uk/ena/browser/view/ERP009703' }
-    ];
-    const pool = source === 'curated' ? all : all.filter((e) => e.source === source);
-    return pool.filter((e) => !q || `${e.accession} ${e.title} ${e.biome}`.toLowerCase().includes(q));
+    const all: StudyEntry[] = this.catalogEntries().map((entry) => ({
+      source: entry.source,
+      accession: entry.accession,
+      title: entry.titlePt,
+      description: entry.description,
+      biome: entry.biomeLabel,
+      samples: entry.nSamples,
+      centre: entry.centre,
+      bioproject: entry.bioproject,
+      secondary: entry.secondary,
+      updated: entry.verifiedAt,
+      url: entry.url,
+      origin: 'curated',
+      importable: entry.importable
+    }));
+    const pool = source === 'curated' ? all : all.filter((entry) => entry.source === source);
+    return pool.filter((entry) => !q || `${entry.accession} ${entry.title} ${entry.biome} ${entry.description}`.toLowerCase().includes(q));
+  }
+
+  async catalog(query: CatalogQuery): Promise<CatalogEntry[]> {
+    await wait();
+    const q = (query.q ?? '').trim().toLowerCase();
+    return this.catalogEntries().filter((entry) => {
+      if (query.biome && entry.biome !== query.biome) return false;
+      if (query.host && entry.host !== query.host) return false;
+      if (query.region && entry.region !== query.region) return false;
+      if (query.seqType && entry.seqType !== query.seqType) return false;
+      if (query.amazonia && entry.highlight !== 'amazonia') return false;
+      if (!q) return true;
+      const blob = `${entry.accession} ${entry.title} ${entry.titlePt} ${entry.description} ${entry.secondary} ${entry.bioproject} ${entry.regionLabel}`.toLowerCase();
+      return q.split(/\s+/).every((part) => blob.includes(part));
+    });
+  }
+
+  async datasetMetadata(source: string, accession: string): Promise<MetadataPreview> {
+    await wait();
+    const entry = this.catalogEntries().find((item) => item.source === source && item.accession === accession);
+    if (!entry) throw new Error(t('Dataset fora do catálogo.'));
+    const columns = ['sample_id', 'biome', 'country'];
+    const count = Math.min(3, Math.max(entry.nSamples, 1));
+    const rows = Array.from({ length: count }, (_, index) => ({
+      sample_id: `${accession}-${index + 1}`,
+      biome: entry.biomeLabel,
+      country: entry.country || '—'
+    }));
+    return { source, accession, columns, rows, rowCount: rows.length, truncated: entry.nSamples > rows.length };
+  }
+
+  async downloadDataset(source: string, accession: string): Promise<DownloadJob> {
+    await wait();
+    const dir = `results/raw/${source}/${accession}`;
+    const job: DownloadJob = {
+      id: `job-${Date.now()}`,
+      source,
+      status: 'completed',
+      detail: t('Pedido mockado para {dir}. Nenhum arquivo remoto foi baixado.', { dir }),
+      artifacts: [{ label: t('Metadata'), path: `${dir}/metadata.tsv` }],
+      mocked: true,
+      createdAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    };
+    this.jobs = [job, ...this.jobs];
+    return job;
+  }
+
+  private catalogEntries(): CatalogEntry[] {
+    return CATALOG_RAW.map((item) => toCatalogEntry(item));
   }
 
   async resolveRuns(): Promise<string[]> {

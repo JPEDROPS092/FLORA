@@ -2,7 +2,7 @@
 
 Two kinds of entries share one shape (:data:`Study`):
 
-* **curated** — studies already referenced by FLORA itself (README, examples); no network needed;
+* **curated** — the YAML catalog (``flora.io.catalog``); no network needed;
 * **live** — searched on MGnify (EBI) and ENA Portal APIs, both public and key-less.
 
 Nothing here downloads data; it only lists what exists so the user can pick a code.
@@ -28,69 +28,10 @@ _ACCESSION = re.compile(r"^[A-Za-z]{2,6}\d{3,}$")
 
 SOURCES = ("curated", "mgnify", "ena")
 
-# Studies already named in FLORA's own docs/examples. Titles are descriptive labels, not fetched metadata.
-CURATED: list[Study] = [
-    {
-        "source": "synthetic",
-        "accession": "SYNTHETIC",
-        "title": "Synthetic cohort",
-        "description": "Generated locally with a seed; four Brazilian biomes. No internet, not real data.",
-        "biome": "Synthetic",
-        "samples": 80,
-        "centre": "FLORA",
-        "url": "",
-        "origin": "curated",
-        "importable": True,
-    },
-    {
-        "source": "emp",
-        "accession": "EMP-R1",
-        "title": "Earth Microbiome Project — Release 1",
-        "description": "Standardised global sampling; Deblur 150 bp tables and metadata (Thompson et al. 2017, Nature 551).",
-        "biome": "Global",
-        "samples": 2000,
-        "centre": "EMP · Qiita / UCSD",
-        "url": "https://doi.org/10.5281/zenodo.890000",
-        "origin": "curated",
-        "importable": True,
-    },
-    {
-        "source": "mgnify",
-        "accession": "MGYS00005116",
-        "title": "Amazonian forest soil (MGnify)",
-        "description": "Template study referenced by FLORA. Not re-verified against the source on every release.",
-        "biome": "Amazonian Forest",
-        "samples": 80,
-        "centre": "MGnify",
-        "url": "https://www.ebi.ac.uk/metagenomics/studies/MGYS00005116",
-        "origin": "curated",
-        "importable": True,
-    },
-    {
-        "source": "ena",
-        "accession": "SRP151124",
-        "title": "Brazilian tropical soil (NCBI SRA)",
-        "description": "Template study referenced by FLORA. Raw FASTQ; needs processing before analysis.",
-        "biome": "Brazilian Tropical Soil",
-        "samples": 60,
-        "centre": "NCBI SRA",
-        "url": "https://www.ncbi.nlm.nih.gov/sra/?term=SRP151124",
-        "origin": "curated",
-        "importable": True,
-    },
-    {
-        "source": "ena",
-        "accession": "ERP009703",
-        "title": "Amazonian rhizosphere",
-        "description": "Template study referenced by FLORA (ENA secondary accession).",
-        "biome": "Amazonian Rhizosphere",
-        "samples": 120,
-        "centre": "ENA",
-        "url": "https://www.ebi.ac.uk/ena/browser/view/ERP009703",
-        "origin": "curated",
-        "importable": True,
-    },
-]
+# Accessions that were once labelled as Amazon in this repo and are not.
+# MGYS00005116 is ISS vacuum-bag dust. SRP151124 / PRJNA477418 is Belgian forest fungi.
+# ERP009703 is the secondary accession of Ocean Sampling Day (PRJEB8682).
+MISLABELLED_AMAZON = ("MGYS00005116", "SRP151124", "PRJNA477418", "ERP009703")
 
 
 class LibraryError(RuntimeError):
@@ -101,14 +42,32 @@ def _clean(query: str) -> str:
     return _SAFE_QUERY.sub(" ", query or "").strip()
 
 
+def curated_studies() -> list[Study]:
+    """Catalog entries projected to the study shape. Loaded from YAML, not hardcoded."""
+    from flora.io.catalog import as_study, load_catalog
+
+    return [as_study(entry) for entry in load_catalog()]
+
+
 def search_curated(query: str = "") -> list[Study]:
+    studies = curated_studies()
     q = _clean(query).lower()
     if not q:
-        return [dict(s) for s in CURATED]
+        return studies
+    keys = (
+        "accession",
+        "title",
+        "title_pt",
+        "description",
+        "biome",
+        "region_label",
+        "secondary",
+        "bioproject",
+    )
     return [
-        dict(s)
-        for s in CURATED
-        if q in " ".join(str(s.get(k, "")) for k in ("accession", "title", "description", "biome")).lower()
+        study
+        for study in studies
+        if q in " ".join(str(study.get(key, "")) for key in keys).lower()
     ]
 
 

@@ -9,9 +9,12 @@ import {
   DashboardSnapshot,
   DataSourceInfo,
   DiagnosticEntry,
+  CatalogEntry,
+  CatalogQuery,
   DownloadJob,
   DownloadRequest,
   LibrarySource,
+  MetadataPreview,
   StudyEntry,
   ExplorationBundle,
   ExplorationQuery,
@@ -40,7 +43,7 @@ import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
 import { LANG, t } from '../../i18n/i18n';
-import { Raw, toChart, toComparisons, toDifferential, toDownload, toStudy, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
+import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
 
 interface StatusResponse {
   success: boolean;
@@ -599,6 +602,51 @@ export class HttpFloraRepository extends FloraRepository {
   async resolveRuns(studyAccession: string): Promise<string[]> {
     const res = await this.send<{ runs: string[] }>('GET', '/api/downloads/library/runs', { params: { study: studyAccession, limit: 10 } });
     return res.runs ?? [];
+  }
+
+  async catalog(query: CatalogQuery): Promise<CatalogEntry[]> {
+    const res = await this.send<{ studies: unknown[] }>('GET', '/api/library/catalog', {
+      params: {
+        q: query.q,
+        biome: query.biome,
+        host: query.host,
+        region: query.region,
+        seq_type: query.seqType,
+        amazonia: query.amazonia ? '1' : ''
+      }
+    });
+    return (res.studies ?? []).map(toCatalogEntry);
+  }
+
+  async datasetMetadata(source: string, accession: string): Promise<MetadataPreview> {
+    const res = await this.send<{ preview: unknown }>('GET', `/api/library/${encodeURIComponent(source)}/${encodeURIComponent(accession)}/metadata`, {
+      params: { limit: 50 }
+    });
+    return toMetadataPreview(res.preview);
+  }
+
+  async downloadDataset(source: string, accession: string): Promise<DownloadJob> {
+    try {
+      const response = await this.send<DownloadResponse & { job?: unknown }>(
+        'POST',
+        `/api/library/${encodeURIComponent(source)}/${encodeURIComponent(accession)}/download`,
+        { body: {} }
+      );
+      if (!response.success || !response.job) {
+        throw new Error(response.error ?? t('Download recusado.'));
+      }
+      return toDownload(response.job);
+    } catch (error) {
+      return {
+        id: `http-failed-${Date.now()}`,
+        source,
+        status: 'failed',
+        detail: error instanceof Error ? error.message : t('Falha no download.'),
+        artifacts: [],
+        mocked: false,
+        createdAt: new Date().toISOString()
+      };
+    }
   }
 
   async requestDownload(request: DownloadRequest): Promise<DownloadJob> {

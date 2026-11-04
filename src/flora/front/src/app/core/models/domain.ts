@@ -402,3 +402,67 @@ export interface DownloadJob {
   mocked: boolean;
   createdAt: string;
 }
+
+export interface CatalogFile {
+  kind: string;
+  label: string;
+  url: string;
+  size: number | null;
+}
+
+/** One curated dataset. Text fields other than the official title are Portuguese. */
+export interface CatalogEntry {
+  id: string;
+  title: string;
+  titlePt: string;
+  description: string;
+  source: string;
+  accession: string;
+  biome: string;
+  biomeLabel: string;
+  host: string;
+  hostLabel: string;
+  region: string;
+  regionLabel: string;
+  country: string;
+  lat: number | null;
+  lon: number | null;
+  nSamples: number;
+  nRuns: number | null;
+  seqType: string;
+  marker: string;
+  markerRegion: string;
+  platform: string;
+  license: string;
+  licenseNote: string;
+  citation: string;
+  citationDoi: string;
+  bioproject: string;
+  secondary: string;
+  centre: string;
+  url: string;
+  verifiedAt: string;
+  importable: boolean;
+  highlight: string;
+  tags: string[];
+  downloadNote: string;
+  files: CatalogFile[];
+}
+
+export interface CatalogQuery {
+  q?: string;
+  biome?: string;
+  host?: string;
+  region?: string;
+  seqType?: string;
+  amazonia?: boolean;
+}
+
+export interface MetadataPreview {
+  source: string;
+  accession: string;
+  columns: string[];
+  rows: Record<string, string>[];
+  rowCount: number;
+  truncated: boolean;
+}

@@ -187,6 +187,19 @@ def _make_handler(state: FLORAState):
                     send_json(self, payload)
                     return
 
+                routed = downloads.library_route("GET", path)
+                if routed:
+                    kind, extra = routed
+                    params = parse_qs(parsed.query)
+                    for key, value in extra.items():
+                        params[key] = [value]
+                    if kind == "catalog":
+                        payload = downloads.library_catalog(state, params)
+                    else:
+                        payload = downloads.library_metadata(state, params)
+                    send_json(self, payload)
+                    return
+
                 handler = GET_ROUTES.get(path)
                 if handler is None:
                     raise UiHttpError(f"Unknown endpoint: {path}", status=404, code="not_found")
@@ -213,6 +226,15 @@ def _make_handler(state: FLORAState):
 
             try:
                 body = read_json_body(self)
+                routed = downloads.library_route("POST", path)
+                if routed:
+                    _kind, extra = routed
+                    body = {**body, **extra}
+                    handler = downloads.recorded(extra["source"], downloads.library_download)
+                    payload = handler(state, body)
+                    send_json(self, payload)
+                    return
+
                 handler = POST_ROUTES.get(path)
                 if handler is None:
                     raise UiHttpError(f"Unknown endpoint: {path}", status=404, code="not_found")

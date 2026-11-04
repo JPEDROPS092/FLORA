@@ -135,11 +135,11 @@ See the [Web Interface documentation](ui.md) for details.
 
 ```bash
 # MGnify pre-computed analyses
-flora download mgnify MGYS00005116 --outdir data/raw --analyses --max-samples 20
+flora download mgnify MGYS00001352 --outdir data/raw --analyses --max-samples 18
 flora run config.yaml
 
 # Download from MGnify and ingest into DuckDB
-flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80 --to-duckdb
+flora download mgnify MGYS00001352 --outdir data/raw --max-samples 18 --to-duckdb
 
 # Ingest an existing download directory
 flora ingest data/raw --duckdb-path results/flora.duckdb

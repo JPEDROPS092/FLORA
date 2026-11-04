@@ -657,7 +657,7 @@ def _downloads() -> str:
         <div class="form-row">
           <div>
             <label>Study accession</label>
-            <input id="mg-study" type="text" placeholder="MGYS00005116">
+            <input id="mg-study" type="text" placeholder="MGYS00005779">
           </div>
           <div>
             <label>Max samples</label>

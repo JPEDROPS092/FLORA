@@ -196,7 +196,7 @@ class MGnifyDownloader:
     Examples
     --------
     >>> dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Forest")
-    >>> manifest = dl.fetch("MGYS00005116", output_dir="data/raw", max_samples=20)
+    >>> manifest = dl.fetch("MGYS00001352", output_dir="data/raw", max_samples=18)
     """
 
     biome: str = "root:Environmental:Terrestrial"
@@ -272,7 +272,7 @@ class MGnifyDownloader:
         Parameters
         ----------
         study_accession : str
-            MGnify study accession (e.g. ``"MGYS00005116"``).
+            MGnify study accession (e.g. ``"MGYS00001352"``).
         output_dir : str or Path
             Root directory. Creates: fastq/, metadata.tsv, manifest.tsv.
         max_samples : int
@@ -399,7 +399,7 @@ class MGnifyDownloader:
         Parameters
         ----------
         study_accession : str
-            MGnify study accession (e.g. ``"MGYS00005116"``).
+            MGnify study accession (e.g. ``"MGYS00001352"``).
         output_dir : str or Path
             Directory to write output files.
         max_analyses : int

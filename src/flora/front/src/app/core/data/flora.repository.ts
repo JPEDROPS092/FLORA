@@ -2,9 +2,12 @@ import {
   DashboardSnapshot,
   DataSourceInfo,
   DiagnosticEntry,
+  CatalogEntry,
+  CatalogQuery,
   DownloadJob,
   DownloadRequest,
   LibrarySource,
+  MetadataPreview,
   StudyEntry,
   ExplorationBundle,
   ExplorationQuery,
@@ -56,4 +59,7 @@ export abstract class FloraRepository {
   abstract requestDownload(request: DownloadRequest): Promise<DownloadJob>;
   abstract searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]>;
   abstract resolveRuns(studyAccession: string): Promise<string[]>;
+  abstract catalog(query: CatalogQuery): Promise<CatalogEntry[]>;
+  abstract datasetMetadata(source: string, accession: string): Promise<MetadataPreview>;
+  abstract downloadDataset(source: string, accession: string): Promise<DownloadJob>;
 }

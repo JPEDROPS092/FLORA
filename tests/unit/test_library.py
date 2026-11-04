@@ -21,9 +21,14 @@ class _Resp:
         return self._payload
 
 
-def test_curated_lists_all_and_filters():
-    assert {s["accession"] for s in library.search("curated")} >= {"MGYS00005116", "SRP151124", "EMP-R1"}
-    assert [s["accession"] for s in library.search("curated", "rhizosphere")] == ["ERP009703"]
+def test_curated_lists_verified_catalog_and_filters():
+    accessions = {s["accession"] for s in library.search("curated")}
+    assert {"EMP-R1", "MGYS00005779", "PRJEB8682", "SYNTHETIC"} <= accessions
+    assert not accessions & set(library.MISLABELLED_AMAZON)
+    osd = library.search("curated", "ERP009703")
+    assert [s["accession"] for s in osd] == ["PRJEB8682"]
+    assert "rhizosphere" not in osd[0]["title"].lower()
+    assert library.search("curated", "colombian amazon")[0]["accession"] == "MGYS00005779"
 
 
 def test_mgnify_parses_studies(monkeypatch):

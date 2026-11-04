@@ -155,7 +155,7 @@ import { TPipe } from '../../core/i18n/t.pipe';
           <p-select inputId="srcType" [options]="sourceTypes" formControlName="type" optionLabel="label" optionValue="id" appendTo="body" [fluid]="true" /></div>
         @if (needsAccession()) {
           <div class="field"><label for="acc">{{ 'Accession do estudo' | t }}</label>
-            <input id="acc" pInputText formControlName="accession" [placeholder]="connect.controls.type.value === 'mgnify' ? 'MGYS00005116' : 'SRP151124'" autocomplete="off" spellcheck="false" />
+            <input id="acc" pInputText formControlName="accession" [placeholder]="connect.controls.type.value === 'mgnify' ? 'MGYS00005779' : 'PRJNA289633'" autocomplete="off" spellcheck="false" />
             @if (connect.controls.accession.invalid && connect.controls.accession.touched) { <small class="field-error">{{ 'Informe um accession válido.' | t }}</small> }</div>
         }
         <div class="field"><label for="target">{{ 'Projeto de destino' | t }}</label>

@@ -1,6 +1,6 @@
 # Datasets
 
-FLORA supports direct download from three public microbiome repositories. All datasets used in development and testing target Brazilian and Amazonian biomes.
+FLORA supports direct download from public microbiome repositories. The library catalog in `src/flora/io/catalog_data/datasets.yaml` is the checked list. Three accessions that older notes called Amazonian are not: MGYS00005116 is vacuum-bag dust from the International Space Station, SRP151124 / PRJNA477418 is ectomycorrhizal fungi in recent forests (Belgium), and ERP009703 is the secondary accession of Ocean Sampling Day 2014 (PRJEB8682).
 
 ---
 
@@ -68,7 +68,7 @@ When ingesting, FLORA initializes the schema if needed and then:
 
 ```bash
 # MGnify download + DuckDB ingestion
-flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80 \
+flora download mgnify MGYS00001352 --outdir data/raw --max-samples 18 \
     --to-duckdb --duckdb-path results/flora.duckdb
 
 # SRA download (ENA fallback if sra-tools is missing) + DuckDB ingestion
@@ -78,78 +78,48 @@ flora download sra SRR7532201 SRR7532202 --outdir data/raw --jobs 4 \
 
 ---
 
-## Datasets Used in Development
+## Datasets in the library
 
-### MGYS00005116 — Amazonian Forest Soils
+The Downloads page reads `datasets.yaml`. Counts below were checked on 2026-11-03. The one-click download does not pull whole-study FASTQ for shotgun archives.
 
-| Field      | Value                         |
-| ---------- | ----------------------------- |
-| Repository | MGnify                        |
-| Accession  | MGYS00005116                  |
-| Biome      | Terrestrial / Tropical Forest |
-| Region     | Brazilian Amazon              |
-| Samples    | ~80                           |
-| Target     | 16S rRNA V4 region            |
-| Instrument | Illumina MiSeq                |
-
-Download:
+| Accession | What it is | Samples | Seq | One-click download |
+| --- | --- | --- | --- | --- |
+| MGYS00005779 | Colombian Amazon land-use, soil | 64 | WGS | MGnify SSU table + sample metadata |
+| MGYS00005810 | Amazon Continuum TPA assembly (PRJNA237344) | 83 (96 ENA runs) | WGS | MGnify SSU table + sample metadata |
+| MGYS00000382 | Amazon Continuum primary metagenomes | 86 | WGS | metadata + SSU table if published |
+| MGYS00004385 | Amazon River lake sediments | 29 | amplicon | MGnify SSU table + metadata |
+| MGYS00001352 | Amazon deforestation soil | 18 | amplicon | metadata + SSU table if published |
+| MGYS00006061 | Upper Amazon floodplain lakes | 3 | WGS | metadata + SSU table if published |
+| MGYS00002298 | Manaus *Anopheles* breeding water | 48 | 16S amplicon | metadata + SSU table if published |
+| MGYS00001713 | Atlantic Amazon coastal water | 2 | WGS | metadata + SSU table if published |
+| MGYS00006055 | Carajás canga lakes (not the river channel) | 19 | WGS | metadata + SSU table |
+| MGYS00004672 | Amazon plume and North Atlantic zooplankton | 33 | amplicon | metadata + SSU table if published |
+| PRJEB8682 | Ocean Sampling Day 2014 (ERP009703) | 467 runs | amplicon + WGS | run metadata, not FASTQ |
+| PRJEB1787 | Tara Oceans prokaryote shotgun | 249 runs | WGS | run metadata, not FASTQ |
+| PRJEB402 | Tara Oceans barcoding and shotgun | 6423 runs | mixed | first 500 run records |
+| PRJNA43021 | NIH Human Microbiome Project | 62860 runs | mixed | first 500 run records |
+| EMP-R1 | Earth Microbiome Project Release 1 (Zenodo 890000, CC-BY-4.0) | 2000 in the subset file | 16S | BIOM deblur 150 bp + 2k metadata, capped at 200 samples |
+| QIIME2-MP | QIIME 2 Moving Pictures tutorial | 34 | 16S V4 | metadata TSV + sequences + barcodes |
+| MOTHUR-SOP | mothur MiSeq SOP zip | 20 | 16S V4 | miseqsopdata.zip |
+| QIIME2-ATACAMA | QIIME 2 Atacama soil tutorial | 75 | amplicon | metadata + 10% FASTQ subset |
+| SYNTHETIC | Local seeded cohort | 80 | simulated | metadata, ASV table, taxonomy |
 
 ```python
 from flora.io import MGnifyDownloader
 
-dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Forest")
-manifest = dl.fetch("MGYS00005116", output_dir="data/raw", max_samples=80)
+dl = MGnifyDownloader(biome="root:Environmental:Terrestrial:Soil")
+manifest = dl.fetch("MGYS00001352", output_dir="data/raw", max_samples=18)
 ```
 
 ```bash
-flora download mgnify MGYS00005116 --outdir data/raw --max-samples 80
+flora download mgnify MGYS00001352 --outdir data/raw --max-samples 18
 ```
-
-### SRP151124 — Brazilian Tropical Soil Microbiome
-
-| Field      | Value                 |
-| ---------- | --------------------- |
-| Repository | NCBI SRA              |
-| Accession  | SRP151124             |
-| Biome      | Tropical Soil         |
-| Region     | Brazil                |
-| Samples    | ~60                   |
-| Target     | 16S rRNA V3-V4 region |
-| Instrument | Illumina HiSeq 2500   |
-
-Download:
 
 ```python
 from flora.io import NCBISRADownloader
 
-# Uses sra-tools when available, otherwise falls back to ENA direct downloads
 sra = NCBISRADownloader(n_jobs=4)
-manifest = sra.fetch(["SRR7532201", "SRR7532202"], output_dir="data/raw")
-```
-
-```bash
-flora download sra SRR7532201 SRR7532202 --outdir data/raw --jobs 4
-```
-
-### ERP009703 — Amazonian Rhizosphere
-
-| Field      | Value                     |
-| ---------- | ------------------------- |
-| Repository | MGnify                    |
-| Accession  | ERP009703                 |
-| Biome      | Terrestrial / Rhizosphere |
-| Region     | Brazilian Amazon          |
-| Samples    | ~120                      |
-| Target     | 16S rRNA V3-V4 region     |
-| Instrument | Illumina MiSeq            |
-
-Download:
-
-```python
-from flora.io import MGnifyDownloader
-
-dl = MGnifyDownloader()
-manifest = dl.fetch("ERP009703", output_dir="data/raw", max_samples=120)
+manifest = sra.fetch(["SRR2104526"], output_dir="data/raw")
 ```
 
 ---
