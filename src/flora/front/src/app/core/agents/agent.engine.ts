@@ -4,14 +4,19 @@ import { ExplorationQuery } from '../models/domain';
 import { AGENTS, AUTO_ROUTES } from './agent.catalog';
 import { AgentAction, AgentId, AgentReply, AgentStep } from './agent.models';
 
-const DEFAULT_QUERY: ExplorationQuery = {
-  groups: ['Rhizosphere', 'Bulk soil', 'Endosphere'],
+const BASE_QUERY: Omit<ExplorationQuery, 'groupBy' | 'groups'> = {
   metric: 'shannon',
   normalize: 'clr',
   rank: 'genus',
   distance: 'braycurtis',
   topN: 8
 };
+
+/** Default exploration: the dataset's first categorical column with all of its real values. */
+async function defaultQuery(repo: FloraRepository): Promise<ExplorationQuery> {
+  const column = (await repo.exploreSchema()).groupColumns[0];
+  return { ...BASE_QUERY, groupBy: column?.name ?? '', groups: column?.values.map((v) => v.value) ?? [] };
+}
 
 let seq = 0;
 export const nextId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${++seq}`;
@@ -46,10 +51,11 @@ export async function runAgent(repo: FloraRepository, agentId: AgentId, prompt: 
 }
 
 async function diversity(repo: FloraRepository): Promise<AgentReply> {
-  const bundle = await repo.exploration(DEFAULT_QUERY);
+  const query = await defaultQuery(repo);
+  const bundle = await repo.exploration(query);
   const rows = [...bundle.comparisons].sort((a, b) => b.shannonMean - a.shannonMean);
   const steps = [
-    step('exploration.alpha', t('Calcular diversidade alfa'), t('{n} amostras, Shannon, {norm}', { n: bundle.sampleCount, norm: DEFAULT_QUERY.normalize.toUpperCase() })),
+    step('exploration.alpha', t('Calcular diversidade alfa'), t('{n} amostras, Shannon, {norm}', { n: bundle.sampleCount, norm: query.normalize.toUpperCase() })),
     step('exploration.compare', t('Comparar grupos'), t('{n} grupos', { n: rows.length }))
   ];
   if (!rows.length) {
@@ -71,7 +77,8 @@ async function diversity(repo: FloraRepository): Promise<AgentReply> {
 }
 
 async function differential(repo: FloraRepository): Promise<AgentReply> {
-  const bundle = await repo.exploration(DEFAULT_QUERY);
+  const query = await defaultQuery(repo);
+  const bundle = await repo.exploration(query);
   const sig = bundle.differential.filter((d) => d.qValue < 0.05).sort((a, b) => Math.abs(b.log2FoldChange) - Math.abs(a.log2FoldChange));
   const steps = [
     step('exploration.differential', t('Listar táxons diferenciais'), t('{n} contrastes', { n: bundle.differential.length })),

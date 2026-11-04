@@ -6,6 +6,9 @@ import {
   CatalogQuery,
   DownloadJob,
   DownloadRequest,
+  DatasetTable,
+  ExploreSchema,
+  TablePage,
   LibrarySource,
   LocalDataset,
   UploadKind,
@@ -59,6 +62,8 @@ export abstract class FloraRepository {
   abstract exportReport(request: ExportRequest): Promise<ScientificExport>;
   abstract downloads(): Promise<DownloadJob[]>;
   abstract requestDownload(request: DownloadRequest): Promise<DownloadJob>;
+  abstract exploreSchema(): Promise<ExploreSchema>;
+  abstract exploreTable(name: DatasetTable, query: string, offset: number, limit: number): Promise<TablePage>;
   abstract datasets(): Promise<LocalDataset[]>;
   abstract uploadFile(file: File, kind: UploadKind): Promise<{ path: string; columns: string[] }>;
   abstract searchLibrary(source: LibrarySource, query: string): Promise<StudyEntry[]>;

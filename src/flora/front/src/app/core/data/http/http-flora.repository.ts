@@ -13,6 +13,9 @@ import {
   CatalogQuery,
   DownloadJob,
   DownloadRequest,
+  DatasetTable,
+  ExploreSchema,
+  TablePage,
   LibrarySource,
   LocalDataset,
   UploadKind,
@@ -372,8 +375,31 @@ export class HttpFloraRepository extends FloraRepository {
     return this.pipeline();
   }
 
+  async exploreSchema(): Promise<ExploreSchema> {
+    const res = await this.send<Raw>('GET', '/api/explore/schema');
+    const counts = (res['counts'] ?? {}) as Record<string, number>;
+    const reads = res['reads'] as Record<string, number> | undefined;
+    const project = res['project'] as Record<string, unknown> | null;
+    return {
+      project: project
+        ? { id: String(project['id']), name: String(project['name']), stage: String(project['stage']), question: String(project['question'] ?? ''), synthetic: project['synthetic'] === true }
+        : null,
+      counts: { samples: counts['samples'] ?? 0, asvs: counts['asvs'] ?? 0, observations: counts['observations'] ?? 0, taxa: counts['taxa'] ?? 0 },
+      reads: reads && 'median' in reads ? { min: reads['min'], median: reads['median'], max: reads['max'] } : null,
+      groupColumns: ((res['group_columns'] as { name: string; values: { value: string; count: number }[] }[]) ?? []).map((c) => ({ name: c.name, values: c.values })),
+      mocked: false
+    };
+  }
+
+  async exploreTable(name: DatasetTable, query: string, offset: number, limit: number): Promise<TablePage> {
+    const res = await this.send<{ columns: string[]; rows: (string | number)[][]; total: number; offset: number }>('GET', '/api/explore/table', {
+      params: { name, q: query, offset, limit }
+    });
+    return { name, columns: res.columns ?? [], rows: res.rows ?? [], total: res.total ?? 0, offset: res.offset ?? offset };
+  }
+
   async exploration(query: ExplorationQuery): Promise<ExplorationBundle> {
-    const group = query.groups[0] ?? 'biome';
+    const group = query.groupBy || 'biome';
     const [pcoa, alpha, beta, taxonomy, relations] = await Promise.all([
       settleChart(() => this.loadPlot('/api/viz/pcoa', { normalize: query.normalize, color_by: group })),
       settleChart(() => this.loadPlot('/api/viz/alpha', { metric: apiMetric(query.metric), group_by: group })),

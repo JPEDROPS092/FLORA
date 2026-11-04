@@ -9,6 +9,9 @@ import {
   CatalogQuery,
   DownloadJob,
   DownloadRequest,
+  DatasetTable,
+  ExploreSchema,
+  TablePage,
   LibrarySource,
   LocalDataset,
   UploadKind,
@@ -283,6 +286,29 @@ export class MockFloraRepository extends FloraRepository {
     await wait();
     this.normalization = { ...config };
     return this.pipelineSnapshot();
+  }
+
+  async exploreSchema(): Promise<ExploreSchema> {
+    await wait();
+    const counts = new Map<string, number>();
+    for (const sample of this.samples) if (sample.group) counts.set(sample.group, (counts.get(sample.group) ?? 0) + 1);
+    const reads = this.samples.map((sample) => sample.reads).filter((n): n is number => n !== null).sort((a, b) => a - b);
+    return {
+      project: { id: 'mock', name: 'FL16S-SORGHUM-01', stage: 'ingested', question: '', synthetic: true },
+      counts: { samples: this.samples.length, asvs: 200, observations: this.samples.length * 60, taxa: 200 },
+      reads: reads.length ? { min: reads[0], median: reads[Math.floor(reads.length / 2)], max: reads[reads.length - 1] } : null,
+      groupColumns: [{ name: 'group', values: [...counts].map(([value, count]) => ({ value, count })) }],
+      mocked: true
+    };
+  }
+
+  async exploreTable(name: DatasetTable, query: string, offset: number, limit: number): Promise<TablePage> {
+    await wait();
+    const q = query.trim().toLowerCase();
+    const all = this.samples
+      .filter((s) => !q || `${s.id} ${s.group ?? ''} ${s.host} ${s.site}`.toLowerCase().includes(q))
+      .map((s) => [s.id, s.group ?? '', s.host, s.site, s.reads ?? 0]);
+    return { name, columns: ['sample_id', 'group', 'host', 'site', 'reads'], rows: all.slice(offset, offset + limit), total: all.length, offset };
   }
 
   async exploration(query: ExplorationQuery): Promise<ExplorationBundle> {

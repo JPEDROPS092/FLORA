@@ -1,21 +1,22 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
-import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
+import { Component, computed, inject, signal } from '@angular/core';
+import { AbstractControl, FormBuilder, FormsModule, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, ParamMap } from '@angular/router';
+import { ActivatedRoute, ParamMap, RouterLink } from '@angular/router';
 import { TreeNode } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputNumberModule } from 'primeng/inputnumber';
+import { InputTextModule } from 'primeng/inputtext';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
-import { TableModule } from 'primeng/table';
+import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 import { TreeModule } from 'primeng/tree';
 import { PrimeTemplate } from 'primeng/api';
 
 import { FloraRepository } from '../../core/data/flora.repository';
-import { ChartResult, ExplorationBundle, ExplorerView, TaxonNode } from '../../core/models/domain';
+import { ChartResult, DatasetTable, ExploreSchema, ExplorationBundle, ExplorerView, ResearchProject, TablePage, TaxonNode } from '../../core/models/domain';
 import { downloadBlob } from '../../shared/download';
 import { PlotCardComponent } from '../../shared/plot-card.component';
 import { TPipe } from '../../core/i18n/t.pipe';
@@ -27,8 +28,11 @@ import { t } from '../../core/i18n/i18n';
   imports: [TPipe, 
     DecimalPipe,
     ReactiveFormsModule,
+    FormsModule,
     ButtonModule,
     InputNumberModule,
+    InputTextModule,
+    RouterLink,
     MultiSelectModule,
     SelectModule,
     TableModule,
@@ -49,11 +53,44 @@ import { t } from '../../core/i18n/i18n';
         @if (bundle()?.mocked) { <p-tag [value]="'Dados mockados' | t" severity="secondary" /> }
       </header>
 
+      <div class="surface context" [attr.aria-label]="'Projeto e dataset' | t">
+        <div class="ctx-project">
+          <label for="project">{{ 'Projeto' | t }}</label>
+          <p-select inputId="project" [options]="projects()" [ngModel]="schema()?.project?.id" (ngModelChange)="switchProject($event)" optionLabel="name" optionValue="id" [placeholder]="'Nenhum projeto ativo' | t" appendTo="body" [style]="{ minWidth: '240px' }" />
+        </div>
+        @if (schema(); as sc) {
+          <div class="ctx-stats">
+            @if (sc.project) { <p-tag [value]="stageLabel(sc.project.stage)" [severity]="sc.project.stage === 'ingested' ? 'success' : 'warn'" /> }
+            @if (sc.project?.synthetic) { <p-tag [value]="'Sintético' | t" severity="secondary" /> }
+            <span><strong>{{ sc.counts.samples | number }}</strong> {{ 'amostras' | t }}</span>
+            <span><strong>{{ sc.counts.asvs | number }}</strong> ASVs</span>
+            <span><strong>{{ sc.counts.taxa | number }}</strong> {{ 'táxons' | t }}</span>
+            @if (sc.reads) { <span>{{ 'reads por amostra:' | t }} <strong>{{ sc.reads.min | number }}</strong>–<strong>{{ sc.reads.max | number }}</strong></span> }
+          </div>
+        }
+      </div>
+
+      @if (schema() && schema()!.counts.samples === 0) {
+        <article class="surface empty-state">
+          <h2>{{ 'Este projeto ainda não tem dados para explorar.' | t }}</h2>
+          <p>{{ 'Baixe um estudo na biblioteca ou escolha arquivos no pipeline; depois volte aqui.' | t }}</p>
+          <div class="actions">
+            <a routerLink="/downloads"><i class="pi pi-download"></i> {{ 'Biblioteca de estudos' | t }}</a>
+            <a routerLink="/pipeline"><i class="pi pi-cog"></i> {{ 'Pipeline' | t }}</a>
+            <a routerLink="/projects"><i class="pi pi-folder"></i> {{ 'Projetos' | t }}</a>
+          </div>
+        </article>
+      } @else {
+
       <div class="explorer">
         <form class="surface filters" [formGroup]="filters" (ngSubmit)="apply()">
           <div class="field">
+            <label for="groupBy">{{ 'Agrupar por' | t }}</label>
+            <p-select inputId="groupBy" [options]="groupColumns()" formControlName="groupBy" optionLabel="name" optionValue="name" appendTo="body" [fluid]="true" [placeholder]="'Coluna de metadata' | t" />
+          </div>
+          <div class="field">
             <label for="groups">{{ 'Grupos' | t }}</label>
-            <p-multiselect inputId="groups" [options]="groupOptions" formControlName="groups" display="chip" appendTo="body" [fluid]="true" />
+            <p-multiselect inputId="groups" [options]="groupOptions()" optionLabel="label" optionValue="value" formControlName="groups" display="chip" appendTo="body" [fluid]="true" />
             @if (filters.controls.groups.invalid && filters.controls.groups.touched) {
               <small class="field-error">{{ 'Selecione ao menos um grupo.' | t }}</small>
             }
@@ -93,9 +130,38 @@ import { t } from '../../core/i18n/i18n';
               <p-tab value="beta">{{ 'Beta' | t }}</p-tab>
               <p-tab value="taxonomy">{{ 'Taxonomia' | t }}</p-tab>
               <p-tab value="relations">{{ 'Relações' | t }}</p-tab>
+              <p-tab value="data"><i class="pi pi-table"></i> {{ 'Dados' | t }}</p-tab>
             </p-tablist>
           </p-tabs>
 
+          @if (view() === 'data') {
+          <article class="surface">
+            <div class="section-title"><h2>{{ 'Dataset carregado' | t }}</h2><p>{{ 'O que o projeto ativo tem no DuckDB: amostras, features e taxonomia.' | t }}</p></div>
+            <div class="data-overview">
+              <div class="stat"><strong>{{ schema()?.counts?.samples | number }}</strong><span>{{ 'amostras' | t }}</span></div>
+              <div class="stat"><strong>{{ schema()?.counts?.asvs | number }}</strong><span>ASVs</span></div>
+              <div class="stat"><strong>{{ schema()?.counts?.observations | number }}</strong><span>{{ 'observações' | t }}</span></div>
+              <div class="stat"><strong>{{ schema()?.counts?.taxa | number }}</strong><span>{{ 'táxons' | t }}</span></div>
+              @if (schema()?.reads; as r) { <div class="stat"><strong>{{ r.median | number:'1.0-0' }}</strong><span>{{ 'mediana de reads' | t }}</span></div> }
+            </div>
+            <div class="data-bar">
+              @for (tab of dataTabs; track tab.id) {
+                <button type="button" class="chip" [class.on]="dataTable() === tab.id" (click)="setDataTable(tab.id)">{{ tab.label | t }}</button>
+              }
+              <input pInputText [ngModel]="dataQuery()" (ngModelChange)="onDataQuery($event)" [placeholder]="'Buscar por amostra, bioma, gênero…' | t" [attr.aria-label]="'Buscar nos dados' | t" />
+              <p-button type="button" severity="secondary" [text]="true" icon="pi pi-download" [label]="'Exportar CSV' | t" (onClick)="exportDataPage()" />
+            </div>
+            <p-table [value]="dataPage()?.rows ?? []" [lazy]="true" (onLazyLoad)="loadData($event)" [paginator]="true" [rows]="25" [totalRecords]="dataPage()?.total ?? 0" [loading]="dataLoading()" [scrollable]="true" styleClass="nowrap">
+              <ng-template pTemplate="header">
+                <tr>@for (c of dataPage()?.columns ?? []; track c) { <th>{{ c }}</th> }</tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-row>
+                <tr>@for (cell of row; track $index) { <td>{{ cell }}</td> }</tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="(dataPage()?.columns?.length ?? 1)">{{ 'Nada encontrado.' | t }}</td></tr></ng-template>
+            </p-table>
+          </article>
+          } @else {
           <article class="surface stage" [class.with-tree]="view() === 'taxonomy'">
             @if (view() === 'taxonomy') {
               <div class="tree-pane">
@@ -115,7 +181,9 @@ import { t } from '../../core/i18n/i18n';
               <flora-plot [result]="activeChart()" [height]="560" />
             </div>
           </article>
+          }
 
+          @if (view() !== 'data') {
           <article class="surface">
             <div class="section-title">
               <h2>{{ 'Comparação de grupos' | t }}</h2>
@@ -160,9 +228,27 @@ import { t } from '../../core/i18n/i18n';
               <ng-template pTemplate="emptymessage"><tr><td colspan="6">{{ bundle()?.note || t('Sem contrastes.') }}</td></tr></ng-template>
             </p-table>
           </article>
+          }
         </div>
       </div>
+      }
     </section>
+  `,
+  styles: `
+    .context { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; justify-content: space-between; }
+    .ctx-project { display: grid; gap: 4px; }
+    .ctx-project label { font-size: .78rem; color: var(--flora-muted); }
+    .ctx-stats { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: .88rem; }
+    .empty-state { text-align: center; padding: 32px 16px; display: grid; gap: 8px; justify-items: center; }
+    .data-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat { border: 1px solid var(--flora-border); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 2px; }
+    .stat strong { font-size: 1.25rem; }
+    .stat span { color: var(--flora-muted); font-size: .76rem; }
+    .data-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .chip { border: 1px solid var(--flora-border); background: var(--flora-surface); color: var(--flora-text); border-radius: 999px; padding: 5px 14px; cursor: pointer; font: inherit; font-size: .84rem; }
+    .chip.on { background: var(--flora-primary-soft); border-color: var(--flora-primary); color: var(--flora-primary); font-weight: 600; }
+    .data-bar input { flex: 1; min-width: 180px; }
+    .nowrap td, .nowrap th { white-space: nowrap; }
   `
 })
 export class ExplorerPageComponent {
@@ -176,7 +262,25 @@ export class ExplorerPageComponent {
   readonly tree = signal<TreeNode[]>([]);
   readonly busy = signal(false);
 
-  readonly groupOptions = ['Rhizosphere', 'Bulk soil', 'Endosphere'];
+  readonly schema = signal<ExploreSchema | null>(null);
+  readonly projects = signal<ResearchProject[]>([]);
+  readonly groupColumns = computed(() => this.schema()?.groupColumns ?? []);
+  readonly groupBy = signal('');
+  readonly groupOptions = computed(() => {
+    const col = this.groupColumns().find((c) => c.name === this.groupBy());
+    return (col?.values ?? []).map((v) => ({ label: `${v.value} (${v.count})`, value: v.value }));
+  });
+  readonly dataTabs: { id: DatasetTable; label: string }[] = [
+    { id: 'samples', label: 'Amostras' },
+    { id: 'features', label: 'Features (ASVs)' },
+    { id: 'taxonomy', label: 'Taxonomia' }
+  ];
+  readonly dataTable = signal<DatasetTable>('samples');
+  readonly dataQuery = signal('');
+  readonly dataPage = signal<TablePage | null>(null);
+  readonly dataLoading = signal(false);
+  private dataOffset = 0;
+  private dataTimer: ReturnType<typeof setTimeout> | undefined;
   readonly metrics = [
     { label: 'Shannon', value: 'shannon' },
     { label: 'Simpson', value: 'simpson' },
@@ -201,7 +305,8 @@ export class ExplorerPageComponent {
   ];
 
   readonly filters = this.fb.nonNullable.group({
-    groups: this.fb.nonNullable.control(this.groupOptions.slice(), { validators: [nonEmptyGroups] }),
+    groupBy: this.fb.nonNullable.control(''),
+    groups: this.fb.nonNullable.control<string[]>([], { validators: [nonEmptyGroups] }),
     metric: this.fb.nonNullable.control<'shannon' | 'simpson' | 'observed' | 'chao1'>('shannon'),
     normalize: this.fb.nonNullable.control<'clr' | 'tss' | 'none'>('clr'),
     rank: this.fb.nonNullable.control<'phylum' | 'class' | 'order' | 'family' | 'genus'>('genus'),
@@ -210,10 +315,84 @@ export class ExplorerPageComponent {
   });
 
   constructor() {
-    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
-      this.applyParams(params);
-      void this.apply();
+    const ready = this.loadContext();
+    this.filters.controls.groupBy.valueChanges.pipe(takeUntilDestroyed()).subscribe((name) => {
+      this.groupBy.set(name);
+      this.filters.controls.groups.setValue(this.groupOptions().map((o) => o.value));
     });
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      void ready.then(() => {
+        this.applyParams(params);
+        return this.apply();
+      });
+    });
+  }
+
+  stageLabel(stage: string): string {
+    return stage === 'ingested' ? t('Ingerido') : stage === 'raw_downloaded' ? t('Só arquivos brutos') : t('Vazio');
+  }
+
+  /** Loads the project list and the dataset schema, then seeds the group filters from the real data. */
+  private async loadContext(): Promise<void> {
+    const [projects, schema] = await Promise.all([this.repository.projects(), this.repository.exploreSchema()]);
+    this.projects.set(projects);
+    this.schema.set(schema);
+    const first = schema.groupColumns[0];
+    this.filters.controls.groupBy.setValue(first?.name ?? '', { emitEvent: false });
+    this.groupBy.set(first?.name ?? '');
+    this.filters.controls.groups.setValue(this.groupOptions().map((o) => o.value));
+  }
+
+  async switchProject(id: string | undefined): Promise<void> {
+    if (!id || id === this.schema()?.project?.id) return;
+    this.busy.set(true);
+    try {
+      await this.repository.activateProject(id);
+      this.bundle.set(null);
+      this.dataPage.set(null);
+      await this.loadContext();
+      if (this.schema()?.counts.samples) await this.apply();
+      if (this.view() === 'data') await this.fetchData();
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  setDataTable(id: DatasetTable): void {
+    this.dataTable.set(id);
+    this.dataOffset = 0;
+    void this.fetchData();
+  }
+
+  onDataQuery(value: string): void {
+    this.dataQuery.set(value);
+    this.dataOffset = 0;
+    clearTimeout(this.dataTimer);
+    this.dataTimer = setTimeout(() => void this.fetchData(), 300);
+  }
+
+  loadData(event: TableLazyLoadEvent): void {
+    this.dataOffset = event.first ?? 0;
+    void this.fetchData();
+  }
+
+  private async fetchData(): Promise<void> {
+    this.dataLoading.set(true);
+    try {
+      this.dataPage.set(await this.repository.exploreTable(this.dataTable(), this.dataQuery(), this.dataOffset, 25));
+    } catch {
+      this.dataPage.set({ name: this.dataTable(), columns: [], rows: [], total: 0, offset: 0 });
+    } finally {
+      this.dataLoading.set(false);
+    }
+  }
+
+  exportDataPage(): void {
+    const page = this.dataPage();
+    if (!page) return;
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = [page.columns.map(esc).join(','), ...page.rows.map((r) => r.map(esc).join(','))];
+    downloadBlob(`${page.name}.csv`, new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
   }
 
   /** URL contract: ?view=&metric=&normalize=&rank=&distance=&topN=&groups=a,b&question= */
@@ -237,7 +416,11 @@ export class ExplorerPageComponent {
     patch.distance = pick('distance', ['braycurtis', 'jaccard']);
     const topN = Number(params.get('topN'));
     if (Number.isFinite(topN) && topN >= 2 && topN <= 12) patch.topN = topN;
-    const groups = params.get('groups')?.split(',').filter((g) => this.groupOptions.includes(g));
+    const by = params.get('groupBy');
+    if (by && this.groupColumns().some((c) => c.name === by)) {
+      this.filters.controls.groupBy.setValue(by);
+    }
+    const groups = params.get('groups')?.split(',').filter((g) => this.groupOptions().some((o) => o.value === g));
     if (groups?.length) patch.groups = groups;
     const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
     this.filters.patchValue(defined);
@@ -248,7 +431,8 @@ export class ExplorerPageComponent {
     if (!bundle) {
       return null;
     }
-    return bundle[this.view()];
+    const view = this.view();
+    return view === 'data' ? null : bundle[view];
   }
 
   viewTitle(): string {
@@ -261,18 +445,22 @@ export class ExplorerPageComponent {
         return t('Abundância taxonômica');
       case 'relations':
         return t('Co-ocorrência entre gêneros');
+      case 'data':
+        return t('Dados');
       default:
         return t('PCoA');
     }
   }
 
   onView(value: string | number | undefined): void {
-    if (value === 'pcoa' || value === 'alpha' || value === 'beta' || value === 'taxonomy' || value === 'relations') {
+    if (value === 'pcoa' || value === 'alpha' || value === 'beta' || value === 'taxonomy' || value === 'relations' || value === 'data') {
       this.view.set(value);
+      if (value === 'data' && !this.dataPage()) void this.fetchData();
     }
   }
 
   async apply(): Promise<void> {
+    if (!this.schema()?.counts.samples) return;
     if (this.filters.invalid) {
       this.filters.markAllAsTouched();
       return;

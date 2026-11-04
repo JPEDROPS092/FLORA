@@ -205,9 +205,12 @@ export interface PipelineSnapshot {
   note?: string;
 }
 
-export type ExplorerView = 'pcoa' | 'alpha' | 'beta' | 'taxonomy' | 'relations';
+export type ExplorerView = 'pcoa' | 'alpha' | 'beta' | 'taxonomy' | 'relations' | 'data';
 
 export interface ExplorationQuery {
+  /** Metadata column the groups come from (e.g. `biome`). */
+  groupBy: string;
+  /** Values of that column to keep. */
   groups: string[];
   metric: 'shannon' | 'simpson' | 'observed' | 'chao1';
   normalize: 'clr' | 'tss' | 'none';
@@ -482,4 +485,28 @@ export interface MetadataPreview {
   rows: Record<string, string>[];
   rowCount: number;
   truncated: boolean;
+}
+
+export interface GroupColumn {
+  name: string;
+  values: { value: string; count: number }[];
+}
+
+/** What the loaded dataset contains and how it can be grouped. */
+export interface ExploreSchema {
+  project: { id: string; name: string; stage: string; question: string; synthetic: boolean } | null;
+  counts: { samples: number; asvs: number; observations: number; taxa: number };
+  reads: { min: number; median: number; max: number } | null;
+  groupColumns: GroupColumn[];
+  mocked: boolean;
+}
+
+export type DatasetTable = 'samples' | 'features' | 'taxonomy';
+
+export interface TablePage {
+  name: DatasetTable;
+  columns: string[];
+  rows: (string | number)[][];
+  total: number;
+  offset: number;
 }

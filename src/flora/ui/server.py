@@ -18,7 +18,7 @@ from flora.ui.frontend import (
     resolve_frontend_asset,
     should_serve_spa_index,
 )
-from flora.ui.handlers import datasets, downloads, ingest, llm, ml, projects, report, status, viz, workspace
+from flora.ui.handlers import datasets, downloads, explore, ingest, llm, ml, projects, report, status, viz, workspace
 from flora.ui.http import UiHttpError, read_json_body, send_error, send_html, send_json
 from flora.ui.state import FLORAState
 
@@ -57,6 +57,8 @@ GET_ROUTES = {
     "/api/pipeline": workspace.get_pipeline,
     "/api/pipeline/datasets": datasets.list_datasets,
     "/api/explore/summary": workspace.explore_summary,
+    "/api/explore/schema": explore.get_schema,
+    "/api/explore/table": explore.get_table,
     "/api/ml/experiments": ml.list_experiments,
     "/api/downloads": downloads.list_downloads,
     "/api/downloads/library": downloads.library_search,
