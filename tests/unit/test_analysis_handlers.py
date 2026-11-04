@@ -36,7 +36,10 @@ def state():
     tax.append(("F8", "Bacteria", "Cyanobacteria", "Chloroplast", "Chloroplast", "f", "g", None, None))
     db.load_dataframe("taxonomy", pl.DataFrame(tax, schema=["feature_id", "kingdom", "phylum", "class", "order", "family", "genus", "species", "confidence"], orient="row",
                                                schema_overrides={"species": pl.Utf8, "confidence": pl.Float64}))
-    return SimpleNamespace(db=db, projects=SimpleNamespace(active_id=lambda: None))
+    import tempfile
+    from pathlib import Path
+
+    return SimpleNamespace(db=db, projects=SimpleNamespace(active_id=lambda: None), data_dir=Path(tempfile.mkdtemp()))
 
 
 def P(**kw):
@@ -173,3 +176,29 @@ def test_report_draft_carries_taxonomy_db_and_accessions(state, tmp_path):
     labels = {p["label"]: p["value"] for p in draft["parameters"]}
     assert labels["Banco taxonômico"] == "SILVA 138" and labels["Accessions"] == "mgnify:MGYS00005810"
     assert any(p["label"] == "numpy" for p in draft["parameters"])
+
+
+def _star_tree(features):
+    return "(" + ",".join(f"{f}:1" for f in features) + ");"
+
+
+def test_unifrac_beta_stats_uses_the_uploaded_tree(state):
+    tree = "((F0:0.1,F1:0.1):0.2,(F2:0.1,F3:0.1):0.2,((F4:0.1,F5:0.1):0.2,(F6:0.1,F7:0.1):0.2):0.3,F8:0.5);"
+    saved = analysis.save_tree(state, {"newick": tree})
+    assert saved["overlap"] == 9 and analysis.tree_status(state)["overlap"] == 9
+    # every feature is present in every sample, so presence/absence UniFrac cannot separate the groups...
+    unweighted = analysis.get_beta_stats(state, P(group_by="biome", metric="unifrac", permutations=99))
+    assert unweighted["metric"] == "unifrac" and unweighted["permanova"]["p"] > 0.5
+    # ...while the abundance-weighted one sees the group-specific taxa
+    weighted = analysis.get_beta_stats(state, P(group_by="biome", metric="weighted_unifrac", permutations=199))
+    assert weighted["permanova"]["p"] <= 0.01 and weighted["permanova"]["r2"] > 0.2
+
+
+def test_tree_upload_validation_and_mismatch(state):
+    with pytest.raises(UiHttpError) as err:
+        analysis.save_tree(state, {"newick": "(A,B"})
+    assert err.value.code == "invalid_tree"
+    with pytest.raises(UiHttpError) as err:
+        analysis.save_tree(state, {"newick": "(X:1,Y:1);"})
+    assert err.value.code == "tree_mismatch"
+    assert analysis.tree_status(state)["present"] is False

@@ -27,6 +27,41 @@ class Engine:
     probe: Callable[[], str | None] = field(repr=False, default=lambda: None)
 
 
+#: executables chosen by the user (see :mod:`flora.engines.envs`), keyed by the command name they replace
+OVERRIDES: dict[str, str] = {}
+
+
+def configure(config: dict[str, str]) -> None:
+    """Apply the saved environment: ``qiime``, ``python`` (the QIIME 2 env's) and ``rscript`` paths."""
+    OVERRIDES.clear()
+    for key, command in (("qiime", "qiime"), ("rscript", "Rscript")):
+        if config.get(key):
+            OVERRIDES[command] = config[key]
+    if config.get("python"):
+        OVERRIDES["python"] = config["python"]
+    _cache.clear()
+
+
+def exe(name: str) -> str | None:
+    """Path of *name*: the configured one if any, else whatever is on PATH."""
+    return OVERRIDES.get(name) or shutil.which(name)
+
+
+def resolve_cmd(cmd: list[str]) -> list[str]:
+    """Replace a bare ``qiime`` / ``Rscript`` / ``vsearch`` … by its configured path."""
+    return [OVERRIDES.get(cmd[0], cmd[0]), *cmd[1:]] if cmd else cmd
+
+
+def qiime_python() -> str | None:
+    """Python interpreter that can ``import qiime2``: the configured one, else FLORA's own."""
+    import sys
+
+    for candidate in (OVERRIDES.get("python"), sys.executable):
+        if candidate and _run([candidate, "-c", "import qiime2; print(qiime2.__version__)"]):
+            return candidate
+    return None
+
+
 def _run(cmd: list[str]) -> str | None:
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=_TIMEOUT, check=False)
@@ -38,16 +73,27 @@ def _run(cmd: list[str]) -> str | None:
 
 def _cli(binary: str, *args: str) -> Callable[[], str | None]:
     def probe() -> str | None:
-        return _run([binary, *args]) if shutil.which(binary) else None
+        path = exe(binary)
+        return _run([path, *args]) if path else None
 
     return probe
 
 
+def _qiime2() -> str | None:
+    """QIIME 2 through its CLI, or (when there is no CLI) through the Python API of a configured interpreter."""
+    version = _cli("qiime", "--version")()
+    if version:
+        return version
+    python = qiime_python()
+    return _run([python, "-c", "import qiime2; print('QIIME 2 ' + qiime2.__version__ + ' (API Python)')"]) if python else None
+
+
 def _r_package(package: str) -> Callable[[], str | None]:
     def probe() -> str | None:
-        if not shutil.which("Rscript"):
+        rscript = exe("Rscript")
+        if not rscript:
             return None
-        return _run(["Rscript", "--vanilla", "-e", f'cat(as.character(packageVersion("{package}")))'])
+        return _run([rscript, "--vanilla", "-e", f'cat(as.character(packageVersion("{package}")))'])
 
     return probe
 
@@ -64,7 +110,7 @@ def _py(module: str) -> Callable[[], str | None]:
 
 ENGINES: dict[str, Engine] = {e.id: e for e in (
     Engine("qiime2", "QIIME 2", "cli", ("import", "denoise", "classify", "phylogeny", "unifrac", "export"),
-           "Instale o QIIME 2 num ambiente conda (https://docs.qiime2.org/) e inicie o FLORA com esse ambiente ativo.", _cli("qiime", "--version")),
+           "Instale o QIIME 2 num ambiente conda (https://docs.qiime2.org/) e aponte o FLORA para ele em Ambientes, ou inicie o FLORA com esse ambiente ativo.", _qiime2),
     Engine("dada2", "DADA2 (R)", "r", ("denoise",),
            "Instale R e o pacote: BiocManager::install('dada2').", _r_package("dada2")),
     Engine("aldex2", "ALDEx2 (R)", "r", ("differential",),

@@ -20,6 +20,11 @@ _ACTIVE = {"queued", "running"}
 _MAX_LOG = 400
 _MAX_JOBS = 2
 
+#: workflow -> engine it needs; the last four read the active project's table, exported by the caller
+NEEDS = {"qiime2-dada2": "qiime2", "dada2-r": "dada2", "aldex2": "aldex2", "ancombc2": "ancombc2", "vegan": "vegan",
+         "cutadapt-trim": "cutadapt", "vsearch-otu": "vsearch"}
+USES_PROJECT_DATA = {"aldex2", "ancombc2", "vegan", "vsearch-otu"}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -82,12 +87,19 @@ class JobManager:
     def plan(self, kind: str, params: dict[str, Any], out: Path, state_data: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Steps: ``{label, cmd, script?}``. Raises ``EngineError``/``WorkflowError`` before anything runs."""
         threads = int(params.get("threads") or 4)
-        need = {"qiime2-dada2": "qiime2", "dada2-r": "dada2", "aldex2": "aldex2"}.get(kind)
+        need = NEEDS.get(kind)
         if need is None:
             raise EngineError(f"Fluxo desconhecido: {kind}", "unknown_workflow")
         if registry.detect(need) is None:
             raise EngineError(f"{registry.ENGINES[need].name} não está instalado. {registry.ENGINES[need].install}", "engine_unavailable", 409)
         try:
+            if kind == "qiime2-dada2" and str(params.get("backend") or "cli") == "python":
+                python = registry.qiime_python()
+                if python is None:
+                    raise EngineError("Nenhum Python com o QIIME 2 foi encontrado. Aponte o interpretador do ambiente do QIIME 2 em Ambientes.", "engine_unavailable", 409)
+                spec, command = wf.qiime2_python_job(str(params.get("manifest") or ""), out, bool(params.get("paired", True)), params,
+                                                     params.get("classifier") or None, threads, bool(params.get("build_tree")), python)
+                return [{"label": "qiime2 (API Python)", "cmd": command, "spec": spec, "spec_path": command[2]}]
             if kind == "qiime2-dada2":
                 cmds = wf.qiime2_dada2_commands(str(params.get("manifest") or ""), out, bool(params.get("paired", True)), params,
                                                 params.get("classifier") or None, threads, bool(params.get("build_tree")))
@@ -95,9 +107,20 @@ class JobManager:
             if kind == "dada2-r":
                 cmd, script = wf.dada2_r_command(str(params.get("fastq_dir") or ""), out, str(params.get("ref_fasta") or ""), params, threads)
                 return [{"label": "dada2", "cmd": cmd, "script": script, "script_path": cmd[2]}]
-            cmd, script = wf.aldex2_command(str((state_data or {}).get("asv", "")), str((state_data or {}).get("metadata", "")),
-                                            str(params.get("group_by") or ""), str(params.get("a") or ""), str(params.get("b") or ""), out)
-            return [{"label": "aldex2", "cmd": cmd, "script": script, "script_path": cmd[2]}]
+            data = state_data or {}
+            asv, meta = str(data.get("asv", "")), str(data.get("metadata", ""))
+            group, a, b = str(params.get("group_by") or ""), str(params.get("a") or ""), str(params.get("b") or "")
+            if kind == "aldex2":
+                cmd, script = wf.aldex2_command(asv, meta, group, a, b, out)
+            elif kind == "ancombc2":
+                cmd, script = wf.ancombc2_command(asv, meta, group, a, b, out)
+            elif kind == "vegan":
+                cmd, script = wf.vegan_command(asv, meta, group, str(params.get("metric") or "bray_curtis"), params.get("permutations") or 999, out)
+            elif kind == "cutadapt-trim":
+                return wf.cutadapt_commands(str(params.get("fastq_dir") or ""), out, str(params.get("fwd_primer") or ""), params.get("rev_primer") or None, threads)
+            else:  # vsearch-otu
+                return [{"label": "vsearch", "cmd": wf.vsearch_cluster_command(str(params.get("fasta") or ""), float(params.get("identity") or 0.97), out, threads)}]
+            return [{"label": kind, "cmd": cmd, "script": script, "script_path": cmd[2]}]
         except wf.WorkflowError as exc:
             raise EngineError(str(exc), "invalid_params") from exc
 
@@ -113,7 +136,7 @@ class JobManager:
             job = {"id": job_id, "kind": kind, "status": "queued", "progress": 0, "step": "", "steps": [s["label"] for s in steps], "log": [],
                    "error": "", "artifacts": {}, "ingest": {}, "output_dir": str(out), "params": {k: v for k, v in params.items()}, "created_at": _now(), "finished_at": ""}
             self._save(job)
-        threading.Thread(target=self._run, args=(job_id, kind, steps, params), daemon=True, name=f"engine-{job_id}").start()
+        threading.Thread(target=self._run, args=(job_id, kind, steps, params, state_data or {}), daemon=True, name=f"engine-{job_id}").start()
         return job
 
     def cancel(self, job_id: str) -> dict[str, Any]:
@@ -129,7 +152,7 @@ class JobManager:
     def _log(self, job: dict[str, Any], line: str) -> None:
         job["log"] = (job["log"] + [line.rstrip()])[-_MAX_LOG:]
 
-    def _run(self, job_id: str, kind: str, steps: list[dict[str, Any]], params: dict[str, Any]) -> None:
+    def _run(self, job_id: str, kind: str, steps: list[dict[str, Any]], params: dict[str, Any], state_data: dict[str, Any]) -> None:
         job = self.get(job_id)
         out = Path(job["output_dir"])
         with self._slots:
@@ -140,10 +163,13 @@ class JobManager:
                     if job_id in self._cancel:
                         raise InterruptedError
                     job.update(step=step["label"], progress=int(i / len(steps) * 90))
+                    step["cmd"] = registry.resolve_cmd(step["cmd"])  # use the configured qiime / Rscript / python
                     self._log(job, f"$ {' '.join(step['cmd'])}")
                     self._save(job)
                     if step.get("script"):
                         Path(step["script_path"]).write_text(step["script"], encoding="utf-8")
+                    if step.get("spec"):
+                        Path(step["spec_path"]).write_text(json.dumps(step["spec"]), encoding="utf-8")
                     proc = subprocess.Popen(step["cmd"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=out)
                     self._procs[job_id] = proc
                     for line in proc.stdout or []:
@@ -153,7 +179,7 @@ class JobManager:
                         raise InterruptedError
                     if code != 0:
                         raise EngineError(f"'{step['label']}' terminou com erro (código {code}). Veja o log.", "step_failed")
-                job["artifacts"] = self._collect(kind, out, params)
+                job["artifacts"] = self._collect(kind, out, params, state_data)
                 if params.get("ingest") and self._ingest and {"metadata", "asv_table", "taxonomy"} <= set(job["artifacts"]):
                     job["ingest"] = self._ingest(job["artifacts"])
                 job.update(status="completed", progress=100, step="")
@@ -167,7 +193,7 @@ class JobManager:
                 job["finished_at"] = _now()
                 self._save(job)
 
-    def _collect(self, kind: str, out: Path, params: dict[str, Any]) -> dict[str, str]:
+    def _collect(self, kind: str, out: Path, params: dict[str, Any], state_data: dict[str, Any]) -> dict[str, str]:
         if kind == "qiime2-dada2":
             paths = wf.convert_qiime_export(out, params.get("metadata") or None)
             tree = out / "export" / "tree" / "tree.nwk"
@@ -186,7 +212,11 @@ class JobManager:
                 ids = [ln.split("\t", 1)[0] for ln in Path(paths["asv_table"]).read_text().splitlines()[1:]]
                 meta.write_text("sample_id\n" + "".join(f"{s}\n" for s in ids), encoding="utf-8")
             return {**paths, "metadata": str(meta)}
-        res = out / "aldex2.tsv"
+        if kind == "cutadapt-trim":
+            return wf.write_trimmed_manifest(out)
+        if kind == "vsearch-otu":
+            return wf.collapse_asv_to_otu(Path(state_data["asv"]), out / "clusters.uc", out)
+        res = out / f"{kind}.tsv"
         if not res.is_file():
-            raise EngineError("O ALDEx2 terminou sem gerar resultados; veja o log.", "no_output")
+            raise EngineError(f"O fluxo '{kind}' terminou sem gerar resultados; veja o log.", "no_output")
         return {"results": str(res)}

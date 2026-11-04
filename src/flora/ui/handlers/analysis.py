@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import polars as pl
 
 from flora.analysis import stats
+from flora.analysis.unifrac import TreeError, parse_newick, unifrac
 from flora.ui.handlers.workspace import _groups_frame
 from flora.ui.http import UiHttpError, json_success
 
@@ -221,6 +222,62 @@ def get_alpha_stats(state, params: dict | None = None):
 
 
 # ---------------------------------------------------------------------------
+# Phylogenetic tree (needed for UniFrac)
+# ---------------------------------------------------------------------------
+_TREE_METRICS = ("unifrac", "weighted_unifrac")
+_MAX_TREE_BYTES = 50 * 1024 * 1024
+
+
+def _tree_path(state):
+    return state.data_dir / "tree.nwk"
+
+
+def _load_tree(state):
+    path = _tree_path(state)
+    if not path.is_file():
+        raise UiHttpError(
+            "UniFrac precisa de uma árvore filogenética. Envie um Newick em Estatística → Árvore, "
+            "ou gere-a com o QIIME 2 (opção 'Construir árvore') em Motores de análise.",
+            code="requires_tree",
+        )
+    try:
+        return parse_newick(path.read_text(encoding="utf-8"))
+    except TreeError as exc:
+        raise UiHttpError(f"A árvore salva é inválida: {exc}", code="invalid_tree") from exc
+
+
+def tree_status(state, params: dict | None = None):
+    path = _tree_path(state)
+    if not path.is_file():
+        return json_success(data={"present": False, "tips": 0, "overlap": 0, "features": 0})
+    try:
+        tree = parse_newick(path.read_text(encoding="utf-8"))
+    except TreeError as exc:
+        return json_success(data={"present": True, "valid": False, "error": str(exc)})
+    features = [r[0] for r in state.db.query("SELECT DISTINCT feature_id FROM asv").to_polars().iter_rows()]
+    return json_success(data={"present": True, "valid": True, "tips": len(tree.tips), "features": len(features), "overlap": sum(1 for f in features if f in tree.tips)})
+
+
+def save_tree(state, body: dict):
+    """Store a Newick tree for the active project after checking it parses and matches the features."""
+    text = str(body.get("newick") or "")
+    if len(text.encode()) > _MAX_TREE_BYTES:
+        raise UiHttpError("Árvore maior que 50 MB.", status=413, code="too_large")
+    try:
+        tree = parse_newick(text)
+    except TreeError as exc:
+        raise UiHttpError(f"Newick inválido: {exc}", code="invalid_tree") from exc
+    features = [r[0] for r in state.db.query("SELECT DISTINCT feature_id FROM asv").to_polars().iter_rows()]
+    overlap = sum(1 for f in features if f in tree.tips)
+    if features and overlap == 0:
+        raise UiHttpError("Nenhuma ponta da árvore tem o nome de uma feature do projeto; confira se os IDs dos ASVs são os mesmos.", code="tree_mismatch")
+    path = _tree_path(state)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return json_success(data={"tips": len(tree.tips), "features": len(features), "overlap": overlap})
+
+
+# ---------------------------------------------------------------------------
 # Beta statistics
 # ---------------------------------------------------------------------------
 def get_beta_stats(state, params: dict | None = None):
@@ -229,11 +286,10 @@ def get_beta_stats(state, params: dict | None = None):
     metric = _q(params, "metric", "bray_curtis")
     group_by = _q(params, "group_by")
     permutations = _int(params, "permutations", 999, 99, _MAX_PERMUTATIONS)
-    if metric == "unifrac":
-        raise UiHttpError("UniFrac exige uma árvore filogenética (sequências dos ASVs). Gere-a com o QIIME 2 em Configurações → Motores de análise.", code="requires_tree")
-    if metric not in stats.DISTANCES:
-        raise UiHttpError(f"Distância desconhecida: {metric}. Use {', '.join(stats.DISTANCES)}.", code="invalid_metric")
-    samples, _features, X = _counts(db)
+    if metric not in (*stats.DISTANCES, *_TREE_METRICS):
+        raise UiHttpError(f"Distância desconhecida: {metric}. Use {', '.join((*stats.DISTANCES, *_TREE_METRICS))}.", code="invalid_metric")
+    tree = _load_tree(state) if metric in _TREE_METRICS else None
+    samples, features, X = _counts(db)
     groups = _require_groups(db, group_by, samples)
     keep = [i for i, g in enumerate(groups) if g]
     sizes: dict[str, int] = {}
@@ -242,13 +298,25 @@ def get_beta_stats(state, params: dict | None = None):
     notes = []
     if min(sizes.values()) < 3:
         notes.append("Há grupos com menos de 3 amostras: o poder do teste é baixo.")
-    D = stats.distance_matrix(X[keep], metric)
+    if tree is not None:
+        try:
+            D, missing = unifrac(X[keep], features, tree, weighted=metric == "weighted_unifrac")
+        except TreeError as exc:
+            raise UiHttpError(str(exc), code="tree_mismatch") from exc
+        if missing:
+            notes.append(f"{missing} de {len(features)} features não estão na árvore e foram ignoradas no UniFrac.")
+    else:
+        D = stats.distance_matrix(X[keep], metric)
     g = [groups[i] for i in keep]
     try:
         perm = stats.permanova(D, g, permutations=permutations)
         disp = stats.permdisp(D, g, permutations=permutations)
     except ValueError as exc:
         raise UiHttpError(str(exc), code="insufficient_groups") from exc
+    backend = _q(params, "backend")
+    crosscheck = None
+    if backend == "skbio":
+        crosscheck = _skbio_permanova(D, [samples[i] for i in keep], g, permutations)
     if disp["p"] < 0.05:
         notes.append("PERMDISP significativo: uma PERMANOVA significativa pode refletir diferença de dispersão, não só de posição entre grupos.")
     coords, vals = stats.pcoa(D, 2)
@@ -260,7 +328,18 @@ def get_beta_stats(state, params: dict | None = None):
         fig.add_trace(go.Scatter(x=coords[idx, 0], y=coords[idx, 1] if coords.shape[1] > 1 else np.zeros(len(idx)), mode="markers", name=name,
                                  text=[samples[keep[j]] for j in idx], marker={"size": 9, "color": _PALETTE[i % len(_PALETTE)]}))
     fig.update_layout(margin={"t": 16, "r": 16, "b": 48, "l": 56}, xaxis={"title": f"PCo1 ({explained[0] * 100:.1f}%)"}, yaxis={"title": f"PCo2 ({explained[1] * 100:.1f}%)"})
-    return json_success(data={"metric": metric, "group_by": group_by, "permanova": perm, "permdisp": disp, "sizes": sizes, "notes": notes, "plot": _plot(fig)})
+    return json_success(data={"metric": metric, "group_by": group_by, "permanova": perm, "permdisp": disp, "sizes": sizes, "notes": notes, "plot": _plot(fig), "crosscheck": crosscheck})
+
+
+def _skbio_permanova(D, ids: list[str], groups: list[str], permutations: int) -> dict[str, Any]:
+    """Independent PERMANOVA from scikit-bio, to cross-check FLORA's own implementation."""
+    try:
+        from skbio import DistanceMatrix
+        from skbio.stats.distance import permanova
+    except Exception as exc:  # noqa: BLE001 - a missing optional engine is a user-facing condition
+        raise UiHttpError("O scikit-bio não está instalado (pip install scikit-bio).", code="engine_unavailable", status=409) from exc
+    res = permanova(DistanceMatrix(D, ids), grouping=groups, permutations=permutations)
+    return {"backend": "scikit-bio", "f": float(res["test statistic"]), "p": float(res["p-value"])}
 
 
 # ---------------------------------------------------------------------------

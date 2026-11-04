@@ -187,3 +187,211 @@ def aldex2_command(asv: str, metadata: str, column: str, a: str, b: str, out: Pa
         if not value or "\n" in value:
             raise WorkflowError(f"{label} inválido")
     return ["Rscript", "--vanilla", str(out / "aldex2.R"), asv, metadata, column, a, b, str(out / "aldex2.tsv")], _ALDEX2_R
+
+
+# ---------------------------------------------------------------------------
+# More R workflows: ANCOM-BC2 and vegan
+# ---------------------------------------------------------------------------
+_ANCOMBC2_R = r'''
+suppressMessages({ library(ANCOMBC); library(TreeSummarizedExperiment) })
+args <- commandArgs(trailingOnly = TRUE)
+asv <- read.delim(args[1], check.names = FALSE, row.names = 1); meta <- read.delim(args[2], check.names = FALSE, row.names = 1)
+col <- args[3]; a <- args[4]; b <- args[5]; out_file <- args[6]
+meta <- meta[meta[[col]] %in% c(a, b), , drop = FALSE]
+meta[[col]] <- factor(meta[[col]], levels = c(a, b))
+counts <- t(as.matrix(asv[rownames(meta), , drop = FALSE]))
+tse <- TreeSummarizedExperiment(assays = list(counts = counts), colData = S4Vectors::DataFrame(meta))
+res <- ancombc2(data = tse, assay_name = "counts", fix_formula = col, p_adj_method = "BH", prv_cut = 0.10,
+                group = col, struc_zero = FALSE, neg_lb = FALSE, alpha = 0.05)$res
+lfc <- res[[paste0("lfc_", col, b)]]
+write.table(data.frame(feature_id = res$taxon, diff_btw = lfc, effect = lfc, p = res[[paste0("p_", col, b)]], q = res[[paste0("q_", col, b)]]),
+            out_file, sep = "\t", quote = FALSE, row.names = FALSE)
+'''
+
+_VEGAN_R = r'''
+suppressMessages(library(vegan))
+args <- commandArgs(trailingOnly = TRUE)
+asv <- read.delim(args[1], check.names = FALSE, row.names = 1); meta <- read.delim(args[2], check.names = FALSE, row.names = 1)
+col <- args[3]; method <- args[4]; perms <- as.integer(args[5]); out_file <- args[6]
+meta <- meta[rownames(asv), , drop = FALSE]; keep <- !is.na(meta[[col]]) & meta[[col]] != ""
+asv <- asv[keep, , drop = FALSE]; grp <- factor(meta[[col]][keep])
+d <- if (method == "jaccard") vegdist(asv, method = "jaccard", binary = TRUE) else if (method == "aitchison") {
+  x <- log(as.matrix(asv) + 0.5); dist(x - rowMeans(x)) } else vegdist(decostand(asv, "total"), method = "bray")
+ad <- adonis2(d ~ grp, permutations = perms)
+bd <- betadisper(d, grp); pt <- permutest(bd, permutations = perms)
+res <- data.frame(test = c("PERMANOVA (adonis2)", "PERMDISP (betadisper)"),
+                  statistic = c(ad$F[1], pt$tab$F[1]), r2 = c(ad$R2[1], NA), p = c(ad$`Pr(>F)`[1], pt$tab$`Pr(>F)`[1]))
+write.table(res, out_file, sep = "\t", quote = FALSE, row.names = FALSE)
+'''
+
+_VEGAN_METHODS = {"bray_curtis": "bray", "jaccard": "jaccard", "aitchison": "aitchison"}
+
+
+def ancombc2_command(asv: str, metadata: str, column: str, a: str, b: str, out: Path) -> tuple[list[str], str]:
+    _file(asv, "Tabela ASV")
+    _file(metadata, "Metadata")
+    for label, value in (("column", column), ("a", a), ("b", b)):
+        if not value or "\n" in value:
+            raise WorkflowError(f"{label} inválido")
+    return ["Rscript", "--vanilla", str(out / "ancombc2.R"), asv, metadata, column, a, b, str(out / "ancombc2.tsv")], _ANCOMBC2_R
+
+
+def vegan_command(asv: str, metadata: str, column: str, metric: str, permutations: int, out: Path) -> tuple[list[str], str]:
+    _file(asv, "Tabela ASV")
+    _file(metadata, "Metadata")
+    if metric not in _VEGAN_METHODS:
+        raise WorkflowError(f"Distância não suportada no vegan: {metric}. Use {', '.join(_VEGAN_METHODS)}.")
+    if not column or "\n" in column:
+        raise WorkflowError("column inválido")
+    return ["Rscript", "--vanilla", str(out / "vegan.R"), asv, metadata, column, _VEGAN_METHODS[metric],
+            _int({"p": permutations}, "p", 999, 99, 99999), str(out / "vegan.tsv")], _VEGAN_R
+
+
+# ---------------------------------------------------------------------------
+# cutadapt (primer removal) and VSEARCH (ASV -> OTU)
+# ---------------------------------------------------------------------------
+_PRIMER = re.compile(r"^[ACGTURYSWKMBDHVNacgturyswkmbdhvn]{10,60}$")
+_FASTQ_R1 = re.compile(r"^(?P<sample>.+?)(?:_R?1)(?:_001)?\.f(?:ast)?q(?:\.gz)?$")
+
+
+def _primer(value: str | None, label: str, required: bool = False) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        if required:
+            raise WorkflowError(f"{label} é obrigatório")
+        return None
+    if not _PRIMER.match(value):
+        raise WorkflowError(f"{label} deve ter só letras de DNA/IUPAC (10 a 60 bases)")
+    return value.upper()
+
+
+def cutadapt_commands(fastq_dir: str, out: Path, fwd_primer: str, rev_primer: str | None, threads: int) -> list[dict]:
+    """One cutadapt call per sample (paired when a reverse primer is given). Output goes to ``out/trimmed``."""
+    folder = Path(fastq_dir)
+    if not folder.is_dir():
+        raise WorkflowError(f"Pasta de FASTQ não encontrada: {fastq_dir}")
+    g, G = _primer(fwd_primer, "Primer forward", required=True), _primer(rev_primer, "Primer reverse")
+    files = sorted(p for p in folder.iterdir() if p.is_file())
+    steps = []
+    for f in files:
+        m = _FASTQ_R1.match(f.name)
+        if not m:
+            continue
+        sample = m.group("sample")
+        r2 = next((p for p in files if p.name == f.name.replace("_R1", "_R2").replace("_1.", "_2.", 1) and p != f), None) if G else None
+        trimmed = out / "trimmed"
+        cmd = ["cutadapt", "-j", str(max(1, min(int(threads), 64))), "-g", g, "--discard-untrimmed", "-o", str(trimmed / f.name)]
+        if G and r2:
+            cmd += ["-G", G, "-p", str(trimmed / r2.name), str(f), str(r2)]
+        else:
+            cmd += [str(f)]
+        steps.append({"label": f"cutadapt {sample}", "cmd": cmd})
+    if not steps:
+        raise WorkflowError("Nenhum FASTQ _R1/_1 encontrado na pasta.")
+    return steps
+
+
+def write_trimmed_manifest(out: Path) -> dict[str, str]:
+    """QIIME 2 manifest (absolute paths) for the files cutadapt produced, ready for the qiime2-dada2 workflow."""
+    trimmed = out / "trimmed"
+    files = sorted(p for p in trimmed.iterdir() if p.is_file()) if trimmed.is_dir() else []
+    rows = []
+    for f in files:
+        m = _FASTQ_R1.match(f.name)
+        if m:
+            r2 = next((p for p in files if p.name == f.name.replace("_R1", "_R2").replace("_1.", "_2.", 1) and p != f), None)
+            rows.append((m.group("sample"), f, r2))
+    if not rows:
+        raise WorkflowError("O cutadapt não gerou nenhum arquivo; os primers podem não ter sido encontrados (--discard-untrimmed).")
+    paired = all(r[2] for r in rows)
+    manifest = out / "manifest.tsv"
+    with open(manifest, "w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["sample-id", "forward-absolute-filepath"] + (["reverse-absolute-filepath"] if paired else []))
+        for sample, f1, f2 in rows:
+            w.writerow([sample, str(f1.resolve())] + ([str(f2.resolve())] if paired else []))
+    return {"manifest": str(manifest), "trimmed_dir": str(trimmed)}
+
+
+def vsearch_cluster_command(fasta: str, identity: float, out: Path, threads: int) -> list[str]:
+    _file(fasta, "FASTA das sequências dos ASVs")
+    if not 0.5 <= float(identity) <= 1.0:
+        raise WorkflowError("identity deve estar entre 0,5 e 1,0")
+    return ["vsearch", "--cluster_fast", fasta, "--id", f"{float(identity):.4f}", "--centroids", str(out / "otus.fasta"), "--uc", str(out / "clusters.uc"),
+            "--threads", str(max(1, min(int(threads), 64)))]
+
+
+def collapse_asv_to_otu(asv_tsv: Path, uc_file: Path, out: Path) -> dict[str, str]:
+    """Sum ASV counts per VSEARCH cluster. ``.uc`` records: S = centroid, H = hit (query joins target's cluster)."""
+    cluster_of: dict[str, str] = {}
+    for line in uc_file.read_text(encoding="utf-8").splitlines():
+        cols = line.split("\t")
+        if cols[0] == "S":
+            cluster_of[cols[8].split(";")[0]] = cols[8].split(";")[0]
+        elif cols[0] == "H":
+            cluster_of[cols[8].split(";")[0]] = cols[9].split(";")[0]
+    if not cluster_of:
+        raise WorkflowError("O VSEARCH não gerou clusters; confira se os cabeçalhos do FASTA são os IDs dos ASVs.")
+    with open(asv_tsv, encoding="utf-8", newline="") as fh:
+        reader = csv.reader(fh, delimiter="\t")
+        header = next(reader)
+        features = header[1:]
+        otus = sorted({cluster_of[f] for f in features if f in cluster_of})
+        idx = {o: i for i, o in enumerate(otus)}
+        rows = []
+        for row in reader:
+            sums = [0.0] * len(otus)
+            for f, v in zip(features, row[1:], strict=False):
+                if f in cluster_of and v not in ("", "0"):
+                    sums[idx[cluster_of[f]]] += float(v)
+            rows.append([row[0], *[int(x) if float(x).is_integer() else x for x in sums]])
+    if not otus:
+        raise WorkflowError("Nenhum ASV da tabela aparece no FASTA agrupado.")
+    otu_path, map_path = out / "otu_table.tsv", out / "asv_to_otu.tsv"
+    with open(otu_path, "w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["sample_id", *otus])
+        w.writerows(rows)
+    with open(map_path, "w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["asv", "otu"])
+        w.writerows(sorted(cluster_of.items()))
+    return {"otu_table": str(otu_path), "asv_to_otu": str(map_path), "otus_fasta": str(out / "otus.fasta"), "clusters": str(uc_file)}
+
+
+def parse_diff_results(path: Path, limit: int = 200) -> dict[str, Any]:
+    """Generic result table from an R workflow (``feature_id, diff_btw, effect, p, q`` or any TSV)."""
+    with open(path, encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        columns = list(reader.fieldnames or [])
+        rows = [dict(r) for r in reader]
+
+    def num(v: str | None) -> float | None:
+        try:
+            return float(v) if v not in (None, "", "NA", "NaN") else None
+        except ValueError:
+            return None
+
+    if {"feature_id", "diff_btw", "q"} <= set(columns):
+        rows.sort(key=lambda r: (num(r["q"]) is None, num(r["q"]) or 0.0))
+    return {"columns": columns, "rows": rows[:limit], "total": len(rows)}
+
+
+# ---------------------------------------------------------------------------
+# QIIME 2 through its Python API
+# ---------------------------------------------------------------------------
+BRIDGE = Path(__file__).with_name("q2_bridge.py")
+
+
+def qiime2_python_job(manifest: str, out: Path, paired: bool, params: dict[str, Any], classifier: str | None,
+                      threads: int, build_tree: bool, python: str) -> tuple[dict[str, Any], list[str]]:
+    """Spec for ``q2_bridge.py`` and the command that runs it with the QIIME 2 environment's Python."""
+    _file(manifest, "Manifest")
+    if classifier:
+        _file(classifier, "Classificador (.qza)")
+    spec = {
+        "manifest": manifest, "out": str(out), "paired": paired, "classifier": classifier or None, "build_tree": build_tree,
+        "threads": max(1, min(int(threads), 128)),
+        "params": {k: int(_int(params, k, 0, 0, 2000)) for k in ("trim_left_f", "trunc_len_f", "trim_left_r", "trunc_len_r")},
+    }
+    return spec, [python, str(BRIDGE), str(out / "spec.json")]
