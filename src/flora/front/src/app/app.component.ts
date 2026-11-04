@@ -9,6 +9,7 @@ import { filter, interval, map, startWith } from 'rxjs';
 
 import { AgentService } from './core/agents/agent.service';
 import { FloraRepository } from './core/data/flora.repository';
+import { WorkspaceInfo } from './core/models/domain';
 import { WorkspaceStore } from './core/workspace/workspace.store';
 import { LanguageSwitchComponent } from './core/i18n/language-switch.component';
 import { CommandPaletteComponent } from './shared/command-palette.component';
@@ -71,6 +72,14 @@ type Connection = 'mock' | 'checking' | 'online' | 'offline';
           <p-button icon="pi pi-bars" [text]="true" [rounded]="true" severity="secondary" (onClick)="store.toggleSidebar()"
                     [ariaLabel]="'Alternar menu lateral' | t" />
           <nav class="crumbs" [attr.aria-label]="'Localização' | t"><span>{{ 'FLORA' | t }}</span><i class="pi pi-angle-right"></i><strong>{{ title() }}</strong></nav>
+          @if (workspace(); as ws) {
+            <span class="ws-chip" [class.volatile]="!ws.persistent" [attr.title]="ws.dbPath">
+              <i class="pi pi-folder-open" aria-hidden="true"></i>
+              <b>{{ ws.project?.name || t('Sem projeto ativo') }}</b>
+              <i class="pi pi-database" aria-hidden="true"></i>
+              <span>{{ dbLabel(ws) }}</span>
+            </span>
+          }
           <button type="button" class="search-btn" (click)="store.openPalette()" [attr.aria-label]="'Abrir paleta de comandos' | t">
             <i class="pi pi-search"></i><span>{{ 'Buscar ou executar…' | t }}</span><kbd>{{ 'Ctrl K' | t }}</kbd>
           </button>
@@ -108,6 +117,7 @@ export class AppComponent implements OnInit {
   readonly lab = signal(this.router.url.startsWith('/ml'));
   readonly title = signal(t('Início'));
   readonly health = signal<'checking' | 'online' | 'offline'>('checking');
+  readonly workspace = signal<WorkspaceInfo | null>(null);
   readonly connection = computed<Connection>(() => (this.source.mocked ? 'mock' : this.health()));
   readonly connectionLabel = computed(() => ({ mock: t('Mock 16S'), checking: t('Conectando…'), online: t('API conectada'), offline: t('API offline') })[this.connection()]);
 
@@ -123,6 +133,7 @@ export class AppComponent implements OnInit {
   readonly library = [
     { path: '/projects', label: t('Projetos'), icon: 'pi pi-folder' },
     { path: '/downloads', label: t('Downloads'), icon: 'pi pi-download' },
+    { path: '/engines', label: t('Motores de análise'), icon: 'pi pi-wrench' },
     { path: '/settings', label: t('Modelos de IA'), icon: 'pi pi-cog' }
   ];
 
@@ -133,7 +144,21 @@ export class AppComponent implements OnInit {
         this.lab.set(e.urlAfterRedirects.startsWith('/ml'));
         const path = '/' + e.urlAfterRedirects.split(/[/?#]/)[1];
         this.title.set([...this.primary, ...this.library].find((i) => i.path === path)?.label ?? 'FLORA');
+        void this.refreshWorkspace();
       });
+  }
+
+  /** `:memory:` databases vanish on restart, so the header says so instead of showing a path. */
+  dbLabel(ws: WorkspaceInfo): string {
+    return ws.persistent ? ws.dbPath.split('/').pop() || ws.dbPath : t('em memória (não salvo)');
+  }
+
+  private async refreshWorkspace(): Promise<void> {
+    try {
+      this.workspace.set(await this.repository.workspaceInfo());
+    } catch {
+      this.workspace.set(null);
+    }
   }
 
   ngOnInit(): void {

@@ -16,6 +16,10 @@ import {
   DatasetTable,
   ExploreSchema,
   TablePage,
+  AnalysisKind,
+  EngineInfo,
+  EngineJob,
+  WorkspaceInfo,
   LibrarySource,
   SampleMap,
   LocalDataset,
@@ -49,7 +53,7 @@ import { FloraRepository } from '../flora.repository';
 import { aggregateIngest } from '../ingest-aggregate';
 import { settleChart } from '../settle-chart';
 import { LANG, t } from '../../i18n/i18n';
-import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toLocalDataset, toSampleMap, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
+import { Raw, toCatalogEntry, toChart, toComparisons, toDifferential, toDownload, toMetadataPreview, toStudy, toEngineJob, toLocalDataset, toSampleMap, toExperiment, toPreview, toRecent, toSections, toTree, toFigure } from './mappers';
 
 interface StatusResponse {
   success: boolean;
@@ -374,6 +378,50 @@ export class HttpFloraRepository extends FloraRepository {
       return snapshot;
     }
     return this.pipeline();
+  }
+
+  readonly apiBase = environment.apiBaseUrl;
+
+  async workspaceInfo(): Promise<WorkspaceInfo> {
+    const res = await this.send<Raw>('GET', '/api/status');
+    const project = res['project'] as { id: string; name: string; stage: string } | null | undefined;
+    return { project: project ?? null, dbPath: String(res['db_path'] ?? ''), persistent: res['db_persistent'] === true };
+  }
+
+  async analysis(kind: AnalysisKind, params: Record<string, string | number>): Promise<Record<string, unknown>> {
+    return this.send<Record<string, unknown>>('GET', `/api/analysis/${kind}`, { params });
+  }
+
+  async applyQc(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.send<Record<string, unknown>>('POST', '/api/analysis/qc/apply', { body });
+  }
+
+  async analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }> {
+    const res = await this.send<{ settings: Record<string, string>; taxonomy_db_options: string[] }>('GET', '/api/analysis/settings');
+    return { taxonomyDb: res.settings?.['taxonomy_db'] ?? '', options: res.taxonomy_db_options ?? [] };
+  }
+
+  async saveTaxonomyDb(value: string): Promise<void> {
+    await this.send('POST', '/api/analysis/settings', { body: { taxonomy_db: value } });
+  }
+
+  async engines(fresh = false): Promise<EngineInfo[]> {
+    const res = await this.send<{ engines: EngineInfo[] }>('GET', '/api/engines', { params: fresh ? { fresh: 1 } : {} });
+    return res.engines ?? [];
+  }
+
+  async runEngine(body: Record<string, unknown>): Promise<EngineJob> {
+    const res = await this.send<{ job: unknown }>('POST', '/api/engines/run', { body });
+    return toEngineJob(res.job);
+  }
+
+  async engineJobs(): Promise<EngineJob[]> {
+    const res = await this.send<{ jobs: unknown[] }>('GET', '/api/engines/jobs');
+    return (res.jobs ?? []).map(toEngineJob);
+  }
+
+  async cancelEngineJob(id: string): Promise<void> {
+    await this.send('POST', '/api/engines/jobs/cancel', { body: { id } });
   }
 
   async exploreSchema(): Promise<ExploreSchema> {

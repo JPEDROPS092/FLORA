@@ -6,6 +6,7 @@ import {
   DownloadJob,
   MetadataPreview,
   StudyEntry,
+  EngineJob,
   SampleMap,
   LocalDataset,
   GroupComparison,
@@ -195,7 +196,9 @@ export function toDownload(raw: unknown): DownloadJob {
 
 export function toCatalogEntry(raw: unknown): CatalogEntry {
   const s = obj(raw);
+  const local = s['local_state'];
   return {
+    localState: local === 'ready' || local === 'metadata_only' || local === 'partial' ? local : 'none',
     id: str(s['id']),
     title: str(s['title']),
     titlePt: str(s['title_pt']) || str(s['title']),
@@ -316,5 +319,22 @@ export function toSampleMap(raw: unknown): SampleMap {
     total: Number(m['total']) || 0,
     mapped: Number(m['mapped']) || 0,
     skipped: Number(m['skipped']) || 0
+  };
+}
+
+export function toEngineJob(raw: unknown): EngineJob {
+  const j = obj(raw);
+  const status = j['status'];
+  return {
+    id: str(j['id']),
+    kind: str(j['kind']),
+    status: status === 'queued' || status === 'completed' || status === 'failed' || status === 'cancelled' ? status : 'running',
+    progress: Number(j['progress']) || 0,
+    step: str(j['step']),
+    steps: strings(j['steps']),
+    log: strings(j['log']),
+    error: str(j['error']),
+    artifacts: Object.fromEntries(Object.entries(obj(j['artifacts'])).map(([k, v]) => [k, String(v)])),
+    createdAt: str(j['created_at'])
   };
 }

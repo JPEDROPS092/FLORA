@@ -6,6 +6,10 @@ import {
   CatalogQuery,
   DownloadJob,
   DownloadRequest,
+  AnalysisKind,
+  EngineInfo,
+  EngineJob,
+  WorkspaceInfo,
   DatasetTable,
   ExploreSchema,
   TablePage,
@@ -63,6 +67,17 @@ export abstract class FloraRepository {
   abstract exportReport(request: ExportRequest): Promise<ScientificExport>;
   abstract downloads(): Promise<DownloadJob[]>;
   abstract requestDownload(request: DownloadRequest): Promise<DownloadJob>;
+  /** Base URL of the API, to build file-download links ('' when mocked). */
+  abstract readonly apiBase: string;
+  abstract workspaceInfo(): Promise<WorkspaceInfo>;
+  abstract analysis(kind: AnalysisKind, params: Record<string, string | number>): Promise<Record<string, unknown>>;
+  abstract applyQc(body: Record<string, unknown>): Promise<Record<string, unknown>>;
+  abstract analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }>;
+  abstract saveTaxonomyDb(value: string): Promise<void>;
+  abstract engines(fresh?: boolean): Promise<EngineInfo[]>;
+  abstract runEngine(body: Record<string, unknown>): Promise<EngineJob>;
+  abstract engineJobs(): Promise<EngineJob[]>;
+  abstract cancelEngineJob(id: string): Promise<void>;
   abstract exploreSchema(): Promise<ExploreSchema>;
   abstract exploreTable(name: DatasetTable, query: string, offset: number, limit: number): Promise<TablePage>;
   abstract datasets(): Promise<LocalDataset[]>;

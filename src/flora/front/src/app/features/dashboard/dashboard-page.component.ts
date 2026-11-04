@@ -15,6 +15,7 @@ import { DashboardSnapshot, DiagnosticEntry, RecentAnalysis, ResearchProject } f
 import { PlotCardComponent } from '../../shared/plot-card.component';
 
 import { MascotComponent } from '../../shared/mascot.component';
+import { WorkflowStepsComponent } from '../../shared/workflow-steps.component';
 import { TPipe } from '../../core/i18n/t.pipe';
 
 @Component({
@@ -22,6 +23,7 @@ import { TPipe } from '../../core/i18n/t.pipe';
   standalone: true,
   imports: [TPipe, 
     MascotComponent,
+    WorkflowStepsComponent,
     DecimalPipe,
     RouterLink,
     PrimeTemplate,
@@ -48,6 +50,8 @@ import { TPipe } from '../../core/i18n/t.pipe';
           <flora-mascot name="binoculars" [size]="84" [alt]="'Mascote FLORA com binóculos' | t" />
         </div>
       </header>
+
+      <flora-workflow-steps />
 
       <nav class="questions">
         <span>{{ 'O que você deseja investigar?' | t }}</span>

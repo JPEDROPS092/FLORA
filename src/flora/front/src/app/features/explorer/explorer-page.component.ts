@@ -19,6 +19,7 @@ import { FloraRepository } from '../../core/data/flora.repository';
 import { ChartResult, DatasetTable, ExploreSchema, ExplorationBundle, ExplorerView, ResearchProject, TablePage, TaxonNode } from '../../core/models/domain';
 import { downloadBlob } from '../../shared/download';
 import { PlotCardComponent } from '../../shared/plot-card.component';
+import { AnalysisPanelComponent } from './analysis-panel.component';
 import { TPipe } from '../../core/i18n/t.pipe';
 import { t } from '../../core/i18n/i18n';
 
@@ -40,7 +41,8 @@ import { t } from '../../core/i18n/i18n';
     TagModule,
     TreeModule,
     PrimeTemplate,
-    PlotCardComponent
+    PlotCardComponent,
+    AnalysisPanelComponent
   ],
   template: `
     <section class="page">
@@ -130,11 +132,19 @@ import { t } from '../../core/i18n/i18n';
               <p-tab value="beta">{{ 'Beta' | t }}</p-tab>
               <p-tab value="taxonomy">{{ 'Taxonomia' | t }}</p-tab>
               <p-tab value="relations">{{ 'Relações' | t }}</p-tab>
+              <p-tab value="qc">{{ 'Qualidade' | t }}</p-tab>
+              <p-tab value="rarefaction">{{ 'Rarefação' | t }}</p-tab>
+              <p-tab value="stats">{{ 'Estatística' | t }}</p-tab>
               <p-tab value="data"><i class="pi pi-table"></i> {{ 'Dados' | t }}</p-tab>
             </p-tablist>
           </p-tabs>
 
-          @if (view() === 'data') {
+          @if (view() === 'qc' || view() === 'rarefaction' || view() === 'stats') {
+          <article class="surface">
+            <div class="section-title"><h2>{{ viewTitle() }}</h2></div>
+            <flora-analysis-panel [mode]="panelMode()" [groupColumns]="groupColumns()" [initialGroup]="groupBy()" [minReadsInput]="rarefactionDepth" (changed)="onDataChanged()" />
+          </article>
+          } @else if (view() === 'data') {
           <article class="surface">
             <div class="section-title"><h2>{{ 'Dataset carregado' | t }}</h2><p>{{ 'O que o projeto ativo tem no DuckDB: amostras, features e taxonomia.' | t }}</p></div>
             <div class="data-overview">
@@ -150,6 +160,9 @@ import { t } from '../../core/i18n/i18n';
               }
               <input pInputText [ngModel]="dataQuery()" (ngModelChange)="onDataQuery($event)" [placeholder]="'Buscar por amostra, bioma, gênero…' | t" [attr.aria-label]="'Buscar nos dados' | t" />
               <p-button type="button" severity="secondary" [text]="true" icon="pi pi-download" [label]="'Exportar CSV' | t" (onClick)="exportDataPage()" />
+              <a class="export-link" [href]="exportUrl('features_tsv')" download>TSV</a>
+              <a class="export-link" [href]="exportUrl('biom')" download>BIOM</a>
+              <a class="export-link" [href]="exportUrl('taxonomy_tsv')" download>{{ 'Taxonomia' | t }}</a>
             </div>
             <p-table [value]="dataPage()?.rows ?? []" [lazy]="true" (onLazyLoad)="loadData($event)" [paginator]="true" [rows]="25" [totalRecords]="dataPage()?.total ?? 0" [loading]="dataLoading()" [scrollable]="true" styleClass="nowrap">
               <ng-template pTemplate="header">
@@ -177,13 +190,19 @@ import { t } from '../../core/i18n/i18n';
               <div class="section-title">
                 <h2>{{ viewTitle() }}</h2>
                 <p>{{ view() === 'beta' || view() === 'pcoa' ? bundle()?.distanceNote : '' }}</p>
+                @if (view() !== 'beta') {
+                  <div class="chart-group">
+                    <label for="chartGroup">{{ 'Agrupar por' | t }}</label>
+                    <p-select inputId="chartGroup" [options]="groupColumns()" optionLabel="name" optionValue="name" [ngModel]="groupBy()" (ngModelChange)="changeGroup($event)" appendTo="body" size="small" />
+                  </div>
+                }
               </div>
               <flora-plot [result]="activeChart()" [height]="560" />
             </div>
           </article>
           }
 
-          @if (view() !== 'data') {
+          @if (view() !== 'data' && view() !== 'qc' && view() !== 'rarefaction' && view() !== 'stats') {
           <article class="surface">
             <div class="section-title">
               <h2>{{ 'Comparação de grupos' | t }}</h2>
@@ -249,6 +268,9 @@ import { t } from '../../core/i18n/i18n';
     .chip.on { background: var(--flora-primary-soft); border-color: var(--flora-primary); color: var(--flora-primary); font-weight: 600; }
     .data-bar input { flex: 1; min-width: 180px; }
     .nowrap td, .nowrap th { white-space: nowrap; }
+    .chart-group { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+    .chart-group label { font-size: .8rem; color: var(--flora-muted); }
+    .export-link { font-size: .84rem; border: 1px solid var(--flora-border); border-radius: 999px; padding: 3px 12px; text-decoration: none; }
   `
 })
 export class ExplorerPageComponent {
@@ -326,6 +348,27 @@ export class ExplorerPageComponent {
         return this.apply();
       });
     });
+  }
+
+  readonly rarefactionDepth = 1000;
+
+  panelMode(): 'qc' | 'rarefaction' | 'stats' {
+    const v = this.view();
+    return v === 'rarefaction' || v === 'stats' ? v : 'qc';
+  }
+
+  exportUrl(format: 'features_tsv' | 'biom' | 'taxonomy_tsv'): string {
+    return `${this.repository.apiBase}/api/export/dataset?format=${format}`;
+  }
+
+  /** Switch the grouping variable straight from a chart and redraw with all of its values. */
+  changeGroup(name: string): void {
+    this.filters.controls.groupBy.setValue(name);
+    void this.apply();
+  }
+
+  onDataChanged(): void {
+    void this.loadContext().then(() => this.apply());
   }
 
   stageLabel(stage: string): string {
@@ -432,7 +475,7 @@ export class ExplorerPageComponent {
       return null;
     }
     const view = this.view();
-    return view === 'data' ? null : bundle[view];
+    return view === 'data' || view === 'qc' || view === 'rarefaction' || view === 'stats' ? null : bundle[view];
   }
 
   viewTitle(): string {
@@ -447,13 +490,19 @@ export class ExplorerPageComponent {
         return t('Co-ocorrência entre gêneros');
       case 'data':
         return t('Dados');
+      case 'qc':
+        return t('Controle de qualidade');
+      case 'rarefaction':
+        return t('Curvas de rarefação');
+      case 'stats':
+        return t('Testes estatísticos');
       default:
         return t('PCoA');
     }
   }
 
   onView(value: string | number | undefined): void {
-    if (value === 'pcoa' || value === 'alpha' || value === 'beta' || value === 'taxonomy' || value === 'relations' || value === 'data') {
+    if (value === 'pcoa' || value === 'alpha' || value === 'beta' || value === 'taxonomy' || value === 'relations' || value === 'data' || value === 'qc' || value === 'rarefaction' || value === 'stats') {
       this.view.set(value);
       if (value === 'data' && !this.dataPage()) void this.fetchData();
     }

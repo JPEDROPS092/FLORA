@@ -6,6 +6,7 @@ import { t } from '../i18n/i18n';
 interface PlotlyApi {
   newPlot: (target: HTMLElement, data: unknown[], layout: object, config?: object) => Promise<void>;
   purge?: (target: HTMLElement) => void;
+  downloadImage?: (target: HTMLElement, options: object) => Promise<string>;
 }
 
 declare global {
@@ -16,6 +17,11 @@ declare global {
 
 @Injectable({ providedIn: 'root' })
 export class PlotlyService {
+  /** Vector export for papers; Plotly draws it in the browser, so no server image engine is needed. */
+  async exportSvg(target: HTMLElement, filename = 'flora-figura'): Promise<void> {
+    await window.Plotly?.downloadImage?.(target, { format: 'svg', filename, width: 1000, height: 640 });
+  }
+
   async render(target: HTMLElement, figure: PlotFigure, theme: ThemeMode): Promise<void> {
     if (!window.Plotly) {
       target.replaceChildren(notice(t('Plotly não está disponível neste navegador.')));

@@ -12,6 +12,10 @@ import {
   DatasetTable,
   ExploreSchema,
   TablePage,
+  AnalysisKind,
+  EngineInfo,
+  EngineJob,
+  WorkspaceInfo,
   LibrarySource,
   SampleMap,
   LocalDataset,
@@ -287,6 +291,48 @@ export class MockFloraRepository extends FloraRepository {
     await wait();
     this.normalization = { ...config };
     return this.pipelineSnapshot();
+  }
+
+  readonly apiBase = '';
+
+  async workspaceInfo(): Promise<WorkspaceInfo> {
+    await wait();
+    return { project: { id: 'mock', name: 'FL16S-SORGHUM-01', stage: 'ingested' }, dbPath: 'mock', persistent: false };
+  }
+
+  async analysis(_kind: AnalysisKind, _params: Record<string, string | number>): Promise<Record<string, unknown>> {
+    await wait();
+    throw new Error(t('Esta análise só está disponível com a API conectada.'));
+  }
+
+  async applyQc(): Promise<Record<string, unknown>> {
+    throw new Error(t('Esta análise só está disponível com a API conectada.'));
+  }
+
+  async analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }> {
+    await wait();
+    return { taxonomyDb: '', options: ['', 'SILVA 138', 'GTDB r214'] };
+  }
+
+  async saveTaxonomyDb(): Promise<void> {
+    await wait();
+  }
+
+  async engines(): Promise<EngineInfo[]> {
+    await wait();
+    return [];
+  }
+
+  async runEngine(): Promise<EngineJob> {
+    throw new Error(t('Os motores externos só estão disponíveis com a API conectada.'));
+  }
+
+  async engineJobs(): Promise<EngineJob[]> {
+    return [];
+  }
+
+  async cancelEngineJob(): Promise<void> {
+    await wait();
   }
 
   async exploreSchema(): Promise<ExploreSchema> {

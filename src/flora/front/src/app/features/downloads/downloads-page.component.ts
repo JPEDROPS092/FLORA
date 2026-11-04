@@ -1,4 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { INSTITUTIONS } from '../../shared/brand.data';
@@ -15,7 +16,7 @@ import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 
 import { FloraRepository } from '../../core/data/flora.repository';
-import { CatalogEntry, DownloadJob, DownloadRequest, MetadataPreview, SampleMap } from '../../core/models/domain';
+import { CatalogEntry, LocalState, DownloadJob, DownloadRequest, MetadataPreview, SampleMap } from '../../core/models/domain';
 import { SampleMapComponent } from '../../shared/sample-map.component';
 import { TPipe } from '../../core/i18n/t.pipe';
 import { t } from '../../core/i18n/i18n';
@@ -29,6 +30,7 @@ interface FilterOption {
   selector: 'flora-downloads',
   standalone: true,
   imports: [
+    RouterLink,
     SampleMapComponent,
     NgTemplateOutlet,
     FormsModule,
@@ -189,6 +191,7 @@ interface FilterOption {
             <code class="acc">{{ study.accession }}</code>
             @if (study.highlight === 'amazonia') { <p-tag [value]="t('Amazônia')" severity="success" /> }
             <p-tag [value]="seqLabel(study.seqType)" severity="secondary" />
+            @if (study.localState !== 'none') { <p-tag [value]="localLabel(study.localState)" [severity]="localSeverity(study.localState)" /> }
           </div>
           <h3>{{ study.titlePt }}</h3>
           <p class="official">{{ study.title }}</p>
@@ -234,7 +237,19 @@ interface FilterOption {
               <p-button icon="pi pi-download" [label]="'Baixar' | t" [disabled]="!study.importable" [loading]="downloadState() === 'running'" (onClick)="downloadCurrent()" />
               @if (downloadState() === 'completed') { <span class="status-pass">{{ 'Download concluído' | t }}</span> }
               @if (downloadState() === 'failed') { <span class="status-fail">{{ downloadDetail() || t('Falha no download.') }}</span> }
+              @if (study.localState !== 'none') { <p-tag [value]="localLabel(study.localState)" [severity]="localSeverity(study.localState)" /> }
             </div>
+            @if (study.localState === 'ready') {
+              <p class="ok-note">{{ 'Metadata, tabela de abundância e taxonomia já estão no disco.' | t }} <a routerLink="/pipeline">{{ 'Ingerir no Pipeline' | t }}</a></p>
+            } @else if (study.localState === 'metadata_only' || study.localState === 'partial') {
+              <p class="warn-note" role="status">{{ 'Só os metadados foram baixados: sem tabela de abundância e taxonomia não há o que analisar.' | t }}</p>
+            }
+            @if (study.source === 'ena' || study.localState === 'metadata_only') {
+              <p class="warn-note" role="note">
+                {{ 'Este estudo é de leituras brutas (FASTQ). O FLORA só analisa tabelas já processadas (ASV/OTU + taxonomia): processe com QIIME 2 ou DADA2 e depois ingira.' | t }}
+                <a routerLink="/engines">{{ 'Motores de análise' | t }}</a>
+              </p>
+            }
             <h3>{{ 'Mapa das amostras' | t }}</h3>
             <flora-sample-map [map]="sampleMap()" [height]="340" />
             <h3>{{ 'Prévia dos metadados' | t }}</h3>
@@ -261,6 +276,8 @@ interface FilterOption {
   styles: `
     .library { display: grid; gap: 14px; }
     .muted { color: var(--flora-muted); font-size: .86rem; }
+    .ok-note { color: var(--flora-ok); font-size: .86rem; }
+    .warn-note { color: var(--flora-warn); font-size: .86rem; border-left: 3px solid var(--flora-warn); padding-left: 8px; }
     .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .filter-row.selects p-select { min-width: 160px; flex: 1; }
     .lib-search { display: flex; gap: 8px; flex: 1; min-width: 240px; }
@@ -470,12 +487,25 @@ export class DownloadsPageComponent {
       detail: failed ? job.detail : t('Download concluído')
     });
     await this.reload();
-    if (!failed) await this.loadMap(study);
+    if (!failed) {
+      await this.loadMap(study);
+      await this.loadCatalog();
+      const fresh = this.studies().find((item) => item.source === study.source && item.accession === study.accession);
+      if (fresh) this.selected.set(fresh);
+    }
   }
 
   artifactPaths(job: DownloadJob): string {
     const paths = job.artifacts.map((item) => item.path).filter(Boolean);
     return paths.length ? paths.join(', ') : '—';
+  }
+
+  localLabel(state: LocalState): string {
+    return { ready: t('Pronto para análise'), metadata_only: t('Só metadados'), partial: t('Parcial'), none: t('Não baixado') }[state];
+  }
+
+  localSeverity(state: LocalState): 'success' | 'warn' | 'secondary' {
+    return state === 'ready' ? 'success' : state === 'none' ? 'secondary' : 'warn';
   }
 
   seqLabel(value: string): string {

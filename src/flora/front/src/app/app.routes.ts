@@ -7,6 +7,7 @@ import { AiModelsPageComponent } from './features/settings/ai-models-page.compon
 import { AgentsPageComponent } from './features/agents/agents-page.component';
 import { DashboardPageComponent } from './features/dashboard/dashboard-page.component';
 import { DownloadsPageComponent } from './features/downloads/downloads-page.component';
+import { EnginesPageComponent } from './features/engines/engines-page.component';
 import { ExplorerPageComponent } from './features/explorer/explorer-page.component';
 import { MlLabPageComponent } from './features/ml-lab/ml-lab-page.component';
 import { PipelinePageComponent } from './features/pipeline/pipeline-page.component';
@@ -24,6 +25,7 @@ export const routes: Routes = [
   { path: 'agents', component: AgentsPageComponent, title: t('Agentes de IA') },
   { path: 'settings', component: AiModelsPageComponent, title: t('Modelos de IA') },
   { path: 'projects', component: ProjectsPageComponent, title: t('Projetos') },
+  { path: 'engines', component: EnginesPageComponent, title: t('Motores de análise') },
   { path: 'downloads', component: DownloadsPageComponent, title: t('Downloads') },
   { path: 'overview', redirectTo: 'dashboard' },
   { path: 'workspace', redirectTo: 'pipeline' },

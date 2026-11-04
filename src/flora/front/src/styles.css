@@ -413,3 +413,8 @@ code { font-family: ui-monospace, monospace; font-size: .74rem; background: var(
 .llm-note header { display: flex; gap: 6px; align-items: center; font-size: .74rem; font-weight: 650; color: var(--flora-primary); }
 .llm-note small { color: var(--flora-muted); }
 .native-note { display: block; padding: 8px 10px; border: 1px dashed var(--flora-border); border-radius: 8px; line-height: 1.5; }
+
+.ws-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; border: 1px solid var(--flora-border); border-radius: 999px; padding: 3px 12px; color: var(--flora-muted); max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-chip b { color: var(--flora-text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ws-chip.volatile { border-color: var(--flora-warn); color: var(--flora-warn); }
+@media (max-width: 900px) { .ws-chip { display: none; } }

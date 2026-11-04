@@ -205,7 +205,7 @@ export interface PipelineSnapshot {
   note?: string;
 }
 
-export type ExplorerView = 'pcoa' | 'alpha' | 'beta' | 'taxonomy' | 'relations' | 'data';
+export type ExplorerView = 'pcoa' | 'alpha' | 'beta' | 'taxonomy' | 'relations' | 'data' | 'qc' | 'rarefaction' | 'stats';
 
 export interface ExplorationQuery {
   /** Metadata column the groups come from (e.g. `biome`). */
@@ -431,7 +431,11 @@ export interface CatalogFile {
 }
 
 /** One curated dataset. Text fields other than the official title are Portuguese. */
+export type LocalState = 'ready' | 'metadata_only' | 'partial' | 'none';
+
 export interface CatalogEntry {
+  /** What is on disk for this study: complete tables, metadata only, or nothing. */
+  localState: LocalState;
   id: string;
   title: string;
   titlePt: string;
@@ -530,4 +534,36 @@ export interface SampleMap {
   total: number;
   mapped: number;
   skipped: number;
+}
+
+export type AnalysisKind = 'qc' | 'rarefaction' | 'alpha_stats' | 'beta_stats' | 'volcano' | 'mixs';
+
+export interface EngineInfo {
+  id: string;
+  name: string;
+  kind: string;
+  capabilities: string[];
+  available: boolean;
+  version: string;
+  install: string;
+}
+
+export interface EngineJob {
+  id: string;
+  kind: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  step: string;
+  steps: string[];
+  log: string[];
+  error: string;
+  artifacts: Record<string, string>;
+  createdAt: string;
+}
+
+/** Which project and database file the API is using right now. */
+export interface WorkspaceInfo {
+  project: { id: string; name: string; stage: string } | null;
+  dbPath: string;
+  persistent: boolean;
 }
