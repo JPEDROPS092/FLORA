@@ -48,7 +48,11 @@ def test_ingest_preview_detects_mismatches(state, tmp_path):
     asv = tmp_path / "asv.tsv"
     asv.write_text("sample_id\tf1\tf2\nA\t5\t5\nB\t0\t0\nD\t3\t3\n")
     res = workspace.preview_ingest(state, {"metadata_path": str(meta), "asv_path": str(asv), "wide_format": True, "min_reads": 7})
-    assert res["summary"] == {"matched": 2, "metadata_only": 1, "asv_only": 1, "low_depth": 1, "total_asvs": 2}
+    summary = res["summary"]
+    assert {k: summary[k] for k in ("matched", "metadata_only", "asv_only", "low_depth", "total_asvs")} == {
+        "matched": 2, "metadata_only": 1, "asv_only": 1, "low_depth": 1, "total_asvs": 2,
+    }
+    assert summary["suggested_depth"] == 1 and summary["reads_max"] == 10 and summary["reads_min"] == 0
     by_id = {r["sample_id"]: r for r in res["rows"]}
     assert by_id["A"]["status"] == "pass"
     assert by_id["B"]["status"] == "fail"  # zero reads

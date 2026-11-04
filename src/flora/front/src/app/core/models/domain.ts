@@ -162,6 +162,10 @@ export interface IngestPreview {
     asvOnly: number;
     lowDepth: number;
     totalAsvs: number;
+    readsMin?: number;
+    readsMedian?: number;
+    readsMax?: number;
+    suggestedDepth?: number;
   };
   histogram: PlotFigure;
   mocked: boolean;
@@ -285,6 +289,9 @@ export interface TrainRequest {
   targetColumn: string;
   trainFilter: string;
   testFilter: string;
+  /** When true, the API builds a stratified train/test split and the SQL filters are ignored. */
+  autoSplit?: boolean;
+  testSize?: number;
   normalize: 'clr' | 'tss' | 'none';
   cvFolds: number;
   seed: number;
@@ -387,6 +394,8 @@ export interface LocalDataset {
   missing: string[];
   complete: boolean;
   rawReadsOnly: boolean;
+  metadataOnly?: boolean;
+  analyzable?: boolean;
   samples: number;
   columns: string[];
   modified: string;

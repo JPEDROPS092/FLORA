@@ -38,6 +38,17 @@ class _BufferHandler(logging.Handler):
             del _LOG_BUFFER[: len(_LOG_BUFFER) - _LOG_BUFFER_MAX]
 
 
+def _public_failure(exc: Exception) -> UiHttpError:
+    """A short Portuguese message. The traceback stays in the server log."""
+    detail = str(exc).splitlines()[0][:300] if str(exc) else type(exc).__name__
+    return UiHttpError(
+        "A etapa falhou. Confira os dados do projeto e tente de novo. "
+        f"Se continuar, o detalhe técnico é: {detail}",
+        status=500,
+        code="internal_error",
+    )
+
+
 def _install_buffer_handler() -> None:
     root = logging.getLogger()
     for handler in root.handlers:
@@ -99,6 +110,7 @@ GET_ROUTES = {
 
 POST_ROUTES = {
     "/api/ingest/dataset": ingest.ingest_dataset,
+    "/api/ingest/clear": ingest.clear_dataset,
     "/api/ingest/metadata": ingest.ingest_metadata,
     "/api/ingest/asv": ingest.ingest_asv,
     "/api/ingest/taxonomy": ingest.ingest_taxonomy,
@@ -229,7 +241,7 @@ def _make_handler(state: FLORAState):
 
                 handler = GET_ROUTES.get(path)
                 if handler is None:
-                    raise UiHttpError(f"Unknown endpoint: {path}", status=404, code="not_found")
+                    raise UiHttpError(f"Endpoint desconhecido: {path}", status=404, code="not_found")
 
                 payload = handler(state, parse_qs(parsed.query))
                 if isinstance(payload, RawResponse):
@@ -245,10 +257,7 @@ def _make_handler(state: FLORAState):
                 _serve_frontend_missing(self, str(exc))
             except Exception as exc:
                 logger.error("Handler error: %s\n%s", exc, traceback.format_exc())
-                send_error(
-                    self,
-                    UiHttpError(f"Internal error: {exc}", status=500, code="internal_error"),
-                )
+                send_error(self, _public_failure(exc))
 
         def do_POST(self):
             parsed = urlparse(self.path)
@@ -267,7 +276,7 @@ def _make_handler(state: FLORAState):
 
                 handler = POST_ROUTES.get(path)
                 if handler is None:
-                    raise UiHttpError(f"Unknown endpoint: {path}", status=404, code="not_found")
+                    raise UiHttpError(f"Endpoint desconhecido: {path}", status=404, code="not_found")
 
                 payload = handler(state, body)
                 send_json(self, payload)
@@ -275,10 +284,7 @@ def _make_handler(state: FLORAState):
                 send_error(self, exc)
             except Exception as exc:
                 logger.error("Handler error: %s\n%s", exc, traceback.format_exc())
-                send_error(
-                    self,
-                    UiHttpError(f"Internal error: {exc}", status=500, code="internal_error"),
-                )
+                send_error(self, _public_failure(exc))
 
     return FLORAHandler
 

@@ -313,9 +313,20 @@ export class MockFloraRepository extends FloraRepository {
     throw new Error(t('Esta análise só está disponível com a API conectada.'));
   }
 
-  async analysisSettings(): Promise<{ taxonomyDb: string; options: string[] }> {
+  async clearProjectData(): Promise<void> {
     await wait();
-    return { taxonomyDb: '', options: ['', 'SILVA 138', 'GTDB r214'] };
+    this.ingested = false;
+  }
+
+  async computeDiversity(depth?: number | null): Promise<Record<string, unknown>> {
+    await wait();
+    const chosen = depth && depth > 0 ? depth : this.normalization.rarefactionDepth;
+    return { sampling_depth: chosen, depth_source: 'adaptive_min', dropped_count: 0, retained: 75, reads: { min: 640, median: 18000, max: 42000 } };
+  }
+
+  async analysisSettings(): Promise<{ taxonomyDb: string; options: string[]; minReads: number | null }> {
+    await wait();
+    return { taxonomyDb: '', options: ['', 'SILVA 138', 'GTDB r214'], minReads: null };
   }
 
   async saveTaxonomyDb(): Promise<void> {
@@ -422,8 +433,8 @@ export class MockFloraRepository extends FloraRepository {
 
   async trainModel(request: TrainRequest): Promise<MlExperiment> {
     await wait();
-    if (!request.trainFilter.trim() || !request.testFilter.trim()) {
-      return this.failedExperiment(request, t('train_filter e test_filter são obrigatórios.'));
+    if (request.autoSplit === false && (!request.trainFilter.trim() || !request.testFilter.trim())) {
+      return this.failedExperiment(request, t('Informe os filtros SQL ou use a divisão automática estratificada.'));
     }
     const experiment = this.seedExperiment(request.model, request.seed, this.experimentStore.length, request);
     this.experimentStore = [experiment, ...this.experimentStore];
@@ -507,6 +518,8 @@ export class MockFloraRepository extends FloraRepository {
         missing: [],
         complete: true,
         rawReadsOnly: false,
+        metadataOnly: false,
+        analyzable: true,
         samples: 48,
         columns: ['sample_id', 'group', 'host', 'site'],
         modified: '2026-02-11T18:02:00+00:00'

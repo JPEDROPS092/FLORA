@@ -142,7 +142,7 @@ import { t } from '../../core/i18n/i18n';
           @if (view() === 'qc' || view() === 'rarefaction' || view() === 'stats') {
           <article class="surface">
             <div class="section-title"><h2>{{ viewTitle() }}</h2></div>
-            <flora-analysis-panel [mode]="panelMode()" [groupColumns]="groupColumns()" [initialGroup]="groupBy()" [minReadsInput]="rarefactionDepth" (changed)="onDataChanged()" />
+            <flora-analysis-panel [mode]="panelMode()" [groupColumns]="groupColumns()" [initialGroup]="groupBy()" [minReadsInput]="rarefactionDepth()" (changed)="onDataChanged()" />
           </article>
           } @else if (view() === 'data') {
           <article class="surface">
@@ -350,7 +350,7 @@ export class ExplorerPageComponent {
     });
   }
 
-  readonly rarefactionDepth = 1000;
+  readonly rarefactionDepth = signal(1000);
 
   panelMode(): 'qc' | 'rarefaction' | 'stats' {
     const v = this.view();
@@ -377,9 +377,15 @@ export class ExplorerPageComponent {
 
   /** Loads the project list and the dataset schema, then seeds the group filters from the real data. */
   private async loadContext(): Promise<void> {
-    const [projects, schema] = await Promise.all([this.repository.projects(), this.repository.exploreSchema()]);
+    const [projects, schema, settings] = await Promise.all([
+      this.repository.projects(),
+      this.repository.exploreSchema(),
+      this.repository.analysisSettings().catch(() => ({ taxonomyDb: '', options: [] as string[], minReads: null as number | null }))
+    ]);
     this.projects.set(projects);
     this.schema.set(schema);
+    const suggested = schema.reads && schema.reads.min > 0 ? Math.max(1, Math.floor(schema.reads.min)) : 1000;
+    this.rarefactionDepth.set(settings.minReads && settings.minReads > 0 ? settings.minReads : suggested);
     const first = schema.groupColumns[0];
     this.filters.controls.groupBy.setValue(first?.name ?? '', { emitEvent: false });
     this.groupBy.set(first?.name ?? '');

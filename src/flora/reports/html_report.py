@@ -1,13 +1,11 @@
-"""Self-contained HTML report generator for FLORA analysis runs.
+"""HTML report generator for FLORA analysis runs.
 
-FLORAReport collects Plotly figures, metric tables, and text sections
-and renders them into a single auto-contained HTML file that requires
-no external dependencies to open.
+FLORAReport collects Plotly figures, metric tables, and text sections.
+Plotly itself is loaded once from the CDN, so the file stays small.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -16,7 +14,17 @@ from typing import Any
 
 import polars as pl
 from jinja2 import Environment, BaseLoader
-from plotly.offline import get_plotlyjs
+
+
+def _plotly_cdn() -> str:
+    """Plotly loaded once from the CDN, so the HTML is not a multi-megabyte copy of the library."""
+    try:
+        from plotly.offline.offline import get_plotlyjs_version
+
+        version = get_plotlyjs_version()
+    except Exception:  # noqa: BLE001 - a missing helper still has a published CDN build
+        version = "2.35.2"
+    return f"https://cdn.plot.ly/plotly-{version}.min.js"
 
 logger = logging.getLogger("flora.reports")
 
@@ -65,7 +73,7 @@ _TEMPLATE = """<!DOCTYPE html>
     .section, .hero-card, .notice-card { box-shadow: none; border: 1px solid #d1d5db; break-inside: avoid; }
   }
 </style>
-<script>{{ plotly_js | safe }}</script>
+{% if plotly_src %}<script src="{{ plotly_src }}" charset="utf-8"></script>{% endif %}
 </head>
 <body>
 <header>
@@ -351,7 +359,7 @@ class FLORAReport:
     def save(self, path: str | Path) -> Path:
         """Render and save the report to an HTML file.
 
-        The output file is fully self-contained (Plotly loaded from CDN).
+        Plotly is referenced once from the CDN instead of being embedded.
 
         Parameters
         ----------
@@ -390,7 +398,7 @@ class FLORAReport:
                 "overview": self.summary_overview,
                 "notes": self.summary_notes,
             } if self.summary_overview or self.summary_notes else None,
-            plotly_js=get_plotlyjs(),
+            plotly_src=_plotly_cdn() if any(s.section_type == "plot" for s in self._sections) else "",
         )
 
         with open(dest, "w", encoding="utf-8") as fh:

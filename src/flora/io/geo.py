@@ -35,6 +35,11 @@ def _column(header: list[str], names: tuple[str, ...]) -> str | None:
     return next((lowered[n] for n in names if n in lowered), None)
 
 
+def parse_lat_lon(text: str) -> tuple[float, float] | None:
+    """Parse a combined coordinate such as '10.5 S 30.2 W' or '1.5 -2.5'. Returns None when it does not match."""
+    return _split_lat_lon(text)
+
+
 def _split_lat_lon(text: str) -> tuple[float, float] | None:
     m = _PAIR.match(text or "")
     if not m:

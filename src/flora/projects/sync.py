@@ -229,9 +229,15 @@ class SyncManager:
 
     def _ingest(self, project_id: str, files: dict[str, Path]) -> dict[str, Any]:
         pipe = self._pipeline_for(project_id)
-        pipe.ingest_metadata(files["metadata"])
-        pipe.ingest_asv_table(files["asv"], wide_format=True)
-        pipe.ingest_taxonomy(files["taxonomy"])
+        snapshot = pipe.snapshot_dataset()
+        try:
+            pipe.clear_dataset()
+            pipe.ingest_metadata(files["metadata"])
+            pipe.ingest_asv_table(files["asv"], wide_format=None)
+            pipe.ingest_taxonomy(files["taxonomy"])
+        except Exception:
+            pipe.restore_dataset(snapshot)
+            raise
         samples = int(pipe.db.query("SELECT COUNT(*) AS n FROM samples").to_polars()["n"][0])
         asvs = int(pipe.db.query("SELECT COUNT(DISTINCT feature_id) AS n FROM asv").to_polars()["n"][0])
         groups = [r[0] for r in pipe.db.query("SELECT DISTINCT biome FROM samples WHERE biome IS NOT NULL ORDER BY 1").to_polars().iter_rows()]

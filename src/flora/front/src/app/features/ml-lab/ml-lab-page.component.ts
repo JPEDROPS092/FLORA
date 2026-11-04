@@ -7,6 +7,7 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
+import { ToggleSwitchModule } from 'primeng/toggleswitch';
 
 import { FloraRepository } from '../../core/data/flora.repository';
 import { ClusterSummary, MlExperiment, ModelComparisonRow } from '../../core/models/domain';
@@ -26,6 +27,7 @@ import { t } from '../../core/i18n/i18n';
     InputTextModule,
     SelectModule,
     TagModule,
+    ToggleSwitchModule,
     PlotCardComponent
   ],
   template: `
@@ -89,20 +91,21 @@ import { t } from '../../core/i18n/i18n';
                 <label for="target">{{ 'Coluna alvo' | t }}</label>
                 <input id="target" pInputText formControlName="targetColumn" />
               </div>
-              <div class="field">
-                <label for="trainFilter">{{ 'Filtro de treino' | t }}</label>
-                <input id="trainFilter" pInputText formControlName="trainFilter" />
-                @if (trainForm.controls.trainFilter.invalid && trainForm.controls.trainFilter.touched) {
-                  <small class="field-error">{{ 'O filtro de treino é obrigatório.' | t }}</small>
-                }
+              <div class="field inline">
+                <p-toggleswitch inputId="autoSplit" formControlName="autoSplit" />
+                <label for="autoSplit">{{ 'Divisão automática estratificada' | t }}</label>
               </div>
-              <div class="field">
-                <label for="testFilter">{{ 'Filtro de teste' | t }}</label>
-                <input id="testFilter" pInputText formControlName="testFilter" />
-                @if (trainForm.controls.testFilter.invalid && trainForm.controls.testFilter.touched) {
-                  <small class="field-error">{{ 'O filtro de teste é obrigatório.' | t }}</small>
-                }
-              </div>
+              <p class="note">{{ 'A divisão automática separa treino e teste mantendo a proporção de cada classe. Desligue para informar filtros SQL.' | t }}</p>
+              @if (!trainForm.controls.autoSplit.value) {
+                <div class="field">
+                  <label for="trainFilter">{{ 'Filtro de treino' | t }}</label>
+                  <input id="trainFilter" pInputText formControlName="trainFilter" />
+                </div>
+                <div class="field">
+                  <label for="testFilter">{{ 'Filtro de teste' | t }}</label>
+                  <input id="testFilter" pInputText formControlName="testFilter" />
+                </div>
+              }
               <div class="field">
                 <label for="folds">{{ 'Dobras de CV' | t }}</label>
                 <p-inputnumber inputId="folds" formControlName="cvFolds" [min]="2" [max]="10" [fluid]="true" />
@@ -210,8 +213,9 @@ export class MlLabPageComponent {
   readonly trainForm = this.fb.nonNullable.group({
     model: ['random_forest' as const, Validators.required],
     targetColumn: ['group', Validators.required],
-    trainFilter: ["site != 'Janaúba'", Validators.required],
-    testFilter: ["site = 'Janaúba'", Validators.required],
+    autoSplit: [true],
+    trainFilter: ["site != 'Janaúba'"],
+    testFilter: ["site = 'Janaúba'"],
     normalize: ['clr' as const],
     cvFolds: [5, [Validators.required, Validators.min(2), Validators.max(10)]],
     seed: [42, Validators.required]
@@ -229,13 +233,17 @@ export class MlLabPageComponent {
   }
 
   async train(): Promise<void> {
-    if (this.trainForm.invalid) {
+    const raw = this.trainForm.getRawValue();
+    if (this.trainForm.invalid || (!raw.autoSplit && (!raw.trainFilter.trim() || !raw.testFilter.trim()))) {
       this.trainForm.markAllAsTouched();
+      if (!raw.autoSplit) {
+        this.messages.add({ severity: 'error', summary: t('Treino'), detail: t('Informe os filtros SQL ou use a divisão automática estratificada.') });
+      }
       return;
     }
     this.busy.set(true);
     try {
-      const experiment = await this.repository.trainModel(this.trainForm.getRawValue());
+      const experiment = await this.repository.trainModel({ ...raw, autoSplit: raw.autoSplit, testSize: 0.25 });
       this.messages.add({
         severity: experiment.status === 'completed' ? 'success' : 'error',
         summary: 'Experimento',

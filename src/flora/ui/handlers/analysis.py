@@ -84,8 +84,27 @@ def _organelle_features(db) -> list[str]:
 
 def get_qc(state, params: dict | None = None):
     """Reads per sample, depth cut-off and chloroplast/mitochondria content."""
+    from flora.ui.reads import effective_min_reads
+
     db = state.db
-    min_reads = _int(params, "min_reads", 1000, 0, 10**9)
+    try:
+        n_asv = int(db.query("SELECT COUNT(*) FROM asv").to_polars().row(0)[0])
+        n_samples = int(db.query("SELECT COUNT(*) FROM samples").to_polars().row(0)[0])
+    except Exception:  # noqa: BLE001
+        n_asv, n_samples = 0, 0
+    if n_asv == 0:
+        if n_samples:
+            raise UiHttpError(
+                "Há metadata, mas nenhuma tabela ASV. O controle de qualidade não pode marcar todas as amostras como reprovadas com 0 reads. "
+                "Ingira a tabela ASV (e a taxonomia) e tente de novo.",
+                code="missing_asv_table",
+            )
+        raise UiHttpError(
+            "Não há dados neste projeto. Ingira metadata, tabela ASV e taxonomia antes do controle de qualidade.",
+            code="missing_asv_table",
+        )
+    supplied = "min_reads" in (params or {})
+    min_reads = _int(params, "min_reads", 1000, 0, 10**9) if supplied else effective_min_reads(state)
     organelle = _organelle_features(db)
     rows = db.query(
         "SELECT s.sample_id, COALESCE(SUM(a.abundance), 0) AS reads, COUNT(a.feature_id) AS features "
@@ -152,6 +171,9 @@ def apply_qc(state, body: dict):
         for table in ("asv", "sample_metadata", "samples"):
             db.execute(f"DELETE FROM {table} WHERE sample_id = ?", [sid])
     db.execute("INSERT INTO qc_log (action, detail) VALUES (?, ?)", ["apply_qc", json.dumps({**plan, "min_reads": min_reads, "dropped_samples": low[:200]})])
+    from flora.ui.project_progress import record_project_step
+
+    record_project_step(state, "qc", json.dumps(plan))
     return json_success(data={"applied": True, "plan": plan})
 
 
@@ -202,6 +224,13 @@ def get_alpha_stats(state, params: dict | None = None):
     wide = db.pivot_asv(normalize=None)
     groups = _require_groups(db, group_by, wide["sample_id"].to_list())
     alpha = compute_alpha_diversity(wide, metrics=_ALPHA_METRICS)
+    n_samples = len(wide)
+    caution: list[str] = []
+    n_groups = len({g for g in groups if g})
+    if n_samples < 6:
+        caution.append(f"Só {n_samples} amostras. Com menos de 6, Kruskal-Wallis tem pouco poder e o resultado é instável.")
+    if n_groups < 2:
+        caution.append("É preciso pelo menos 2 grupos para comparar.")
     tests = []
     for metric in _ALPHA_METRICS:
         by_group: dict[str, list[float]] = {}
@@ -218,7 +247,7 @@ def get_alpha_stats(state, params: dict | None = None):
     notes = ["Kruskal-Wallis por métrica; q = Benjamini-Hochberg entre as métricas. Pares: Mann-Whitney com BH dentro de cada métrica."]
     if not tests:
         notes.append("Nenhum teste pôde ser calculado (valores idênticos ou grupos insuficientes).")
-    return json_success(data={"group_by": group_by, "tests": tests, "notes": notes})
+    return json_success(data={"group_by": group_by, "tests": tests, "notes": notes, "caution": caution, "n_samples": n_samples, "n_groups": n_groups})
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +325,8 @@ def get_beta_stats(state, params: dict | None = None):
     for i in keep:
         sizes[groups[i]] = sizes.get(groups[i], 0) + 1
     notes = []
+    if len(keep) < 6:
+        notes.append(f"Só {len(keep)} amostras. Com menos de 6, PERMANOVA e PERMDISP têm pouco poder — interprete com cautela.")
     if min(sizes.values()) < 3:
         notes.append("Há grupos com menos de 3 amostras: o poder do teste é baixo.")
     if tree is not None:
@@ -367,6 +398,12 @@ def get_volcano(state, params: dict | None = None):
     samples = [r[0] for r in db.query("SELECT sample_id FROM samples ORDER BY sample_id").to_polars().iter_rows()]
     groups = _require_groups(db, group_by, samples)
     levels = sorted({g for g in groups if g})
+    if len(levels) > 2 and (not a or not b):
+        raise UiHttpError(
+            f"Há {len(levels)} grupos ({', '.join(levels)}). O volcano compara só dois: escolha o grupo A e o grupo B.",
+            code="needs_contrast",
+            details={"groups": levels},
+        )
     if not a or not b:
         a, b = levels[0], levels[1]
     if a not in levels or b not in levels or a == b:
@@ -425,10 +462,35 @@ _MIXS = [
 ]
 
 
+def _lat_lon_fill(db, total: int) -> tuple[str, float]:
+    """How many samples have usable coordinates. Empty schema columns do not count as present."""
+    from flora.io.geo import parse_lat_lon
+
+    try:
+        both = int(db.query(
+            "SELECT COUNT(*) FROM samples WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
+        ).to_polars().row(0)[0])
+    except Exception:  # noqa: BLE001
+        both = 0
+    if both:
+        return "latitude + longitude", round(both / total * 100, 1)
+    try:
+        rows = db.query(
+            "SELECT value FROM sample_metadata WHERE lower(key) IN ('lat_lon', 'latlon', 'coordinates') AND value IS NOT NULL AND value <> ''"
+        ).to_polars()
+    except Exception:  # noqa: BLE001
+        return "", 0.0
+    parsed = sum(1 for (value,) in rows.iter_rows() if parse_lat_lon(str(value)))
+    if parsed:
+        return "lat_lon", round(parsed / total * 100, 1)
+    return "", 0.0
+
+
 def get_mixs(state, params: dict | None = None):
     """Compare the sample metadata with MIxS core / MIMARKS fields (by name and common aliases)."""
     db = state.db
-    columns = [c for c in db.query("SELECT * FROM samples LIMIT 0").to_polars().columns if c != "sample_id"]
+    sample_columns = [c for c in db.query("SELECT * FROM samples LIMIT 0").to_polars().columns if c != "sample_id"]
+    columns = list(sample_columns)
     try:
         columns += [r[0] for r in db.query("SELECT DISTINCT key FROM sample_metadata").to_polars().iter_rows()]
     except Exception:  # noqa: BLE001
@@ -437,7 +499,7 @@ def get_mixs(state, params: dict | None = None):
     lower = {c.lower(): c for c in columns}
 
     def filled(col: str) -> float:
-        if col in db.query("SELECT * FROM samples LIMIT 0").to_polars().columns:
+        if col in sample_columns:
             n = db.query(f'SELECT COUNT(*) FROM samples WHERE "{col}" IS NOT NULL AND CAST("{col}" AS VARCHAR) <> \'\'').to_polars().row(0)[0]
         else:
             n = db.query("SELECT COUNT(DISTINCT sample_id) FROM sample_metadata WHERE key = ? AND value IS NOT NULL AND value <> ''", [col]).to_polars().row(0)[0]
@@ -445,16 +507,17 @@ def get_mixs(state, params: dict | None = None):
 
     fields = []
     for name, level, aliases in _MIXS:
-        found, pct = "", 0.0
-        for alias in aliases:
-            if alias == "latitude+longitude":
-                if "latitude" in lower and "longitude" in lower:
-                    found, pct = "latitude + longitude", min(filled(lower["latitude"]), filled(lower["longitude"]))
+        if name == "lat_lon":
+            found, pct = _lat_lon_fill(db, total)
+        else:
+            found, pct = "", 0.0
+            for alias in aliases:
+                if alias == "latitude+longitude":
+                    continue
+                elif alias in lower and filled(lower[alias]) > 0:
+                    found, pct = lower[alias], filled(lower[alias])
                     break
-            elif alias in lower:
-                found, pct = lower[alias], filled(lower[alias])
-                break
-        fields.append({"field": name, "level": level, "column": found, "present": bool(found), "filled_pct": pct})
+        fields.append({"field": name, "level": level, "column": found, "present": pct > 0, "filled_pct": pct})
     required = [f for f in fields if f["level"] == "obrigatório"]
     return json_success(data={
         "fields": fields,
@@ -484,9 +547,19 @@ def get_settings(state, params: dict | None = None):
 def save_settings(state, body: dict):
     db = state.db
     db.execute("CREATE TABLE IF NOT EXISTS analysis_settings (key TEXT PRIMARY KEY, value TEXT)")
-    value = str(body.get("taxonomy_db", ""))
-    if value not in _TAXONOMY_DBS:
-        raise UiHttpError(f"Banco taxonômico desconhecido: {value}", code="invalid_taxonomy_db")
-    db.execute("DELETE FROM analysis_settings WHERE key = 'taxonomy_db'")
-    db.execute("INSERT INTO analysis_settings (key, value) VALUES ('taxonomy_db', ?)", [value])
+    if "taxonomy_db" in body:
+        value = str(body.get("taxonomy_db", ""))
+        if value not in _TAXONOMY_DBS:
+            raise UiHttpError(f"Banco taxonômico desconhecido: {value}. Use um destes: {', '.join(n for n in _TAXONOMY_DBS if n) or 'SILVA, GTDB, Greengenes2'}.", code="invalid_taxonomy_db")
+        db.execute("DELETE FROM analysis_settings WHERE key = 'taxonomy_db'")
+        db.execute("INSERT INTO analysis_settings (key, value) VALUES ('taxonomy_db', ?)", [value])
+    if body.get("min_reads") not in (None, ""):
+        try:
+            reads = int(body.get("min_reads"))
+        except (TypeError, ValueError) as exc:
+            raise UiHttpError("O limiar de reads precisa ser um número inteiro.", code="invalid_min_reads") from exc
+        if reads < 1:
+            raise UiHttpError("O limiar de reads precisa ser pelo menos 1.", code="invalid_min_reads")
+        db.execute("DELETE FROM analysis_settings WHERE key = 'min_reads'")
+        db.execute("INSERT INTO analysis_settings (key, value) VALUES ('min_reads', ?)", [str(reads)])
     return json_success(data={"settings": read_settings(db)})

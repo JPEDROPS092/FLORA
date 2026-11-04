@@ -18,10 +18,57 @@ def _safe_filter(value: str, name: str) -> str:
     """The filters are interpolated into a WHERE clause: allow one plain predicate only."""
     value = (value or "").strip()
     if not value:
-        raise UiHttpError("train_filter and test_filter are required", code="missing_filters")
+        raise UiHttpError(
+            "Informe os filtros SQL de treino e de teste, ou use a divisão automática estratificada (split=auto) — ela separa as classes sem SQL.",
+            code="missing_filters",
+        )
     if _FORBIDDEN.search(value):
-        raise UiHttpError(f"{name} must be a single SQL predicate (no ';', comments or DDL/DML).", code="invalid_filter")
+        raise UiHttpError(
+            f"{name} precisa ser um único predicado SQL (sem ';', comentários ou comandos como DROP). Exemplo: biome = 'Amazon'.",
+            code="invalid_filter",
+        )
     return value
+
+
+def _quote_ids(ids: list[str]) -> str:
+    quoted = ", ".join("'" + str(sid).replace("'", "''") + "'" for sid in ids)
+    return f"sample_id IN ({quoted})"
+
+
+def _stratified_filters(state, target: str, test_size: float, seed: int) -> tuple[str, str]:
+    """Build train/test SQL filters with one share of every class. Raises a Portuguese error when a class is too small."""
+    from sklearn.model_selection import train_test_split
+
+    if not _IDENT.match(str(target)):
+        raise UiHttpError("A coluna alvo precisa ser um nome simples, sem espaços.", code="invalid_target")
+    columns = state.db.query("SELECT * FROM samples LIMIT 0").to_polars().columns
+    if target in columns:
+        frame = state.db.query(f'SELECT sample_id, CAST("{target}" AS VARCHAR) AS label FROM samples').to_polars()
+    else:
+        frame = state.db.query(
+            "SELECT sample_id, value AS label FROM sample_metadata WHERE key = ?", [target]
+        ).to_polars()
+    rows = [(str(sid), str(label)) for sid, label in frame.iter_rows() if label not in (None, "")]
+    if len(rows) < 4:
+        raise UiHttpError(
+            f"A divisão estratificada precisa de pelo menos 4 amostras com valor em '{target}'. Há {len(rows)}.",
+            code="insufficient_samples",
+        )
+    from collections import Counter
+
+    counts = Counter(label for _, label in rows)
+    small = [label for label, n in counts.items() if n < 2]
+    if small:
+        raise UiHttpError(
+            f"A divisão estratificada precisa de pelo menos 2 amostras em cada classe de '{target}'. "
+            f"Classes com uma só amostra: {', '.join(small[:8])}. Escolha outra coluna ou use filtros SQL.",
+            code="insufficient_classes",
+        )
+    ids = [sid for sid, _ in rows]
+    labels = [label for _, label in rows]
+    fraction = min(0.5, max(0.1, float(test_size or 0.2)))
+    train_ids, test_ids = train_test_split(ids, test_size=fraction, random_state=seed, stratify=labels)
+    return _quote_ids(list(train_ids)), _quote_ids(list(test_ids))
 
 
 def _fig(fig) -> dict:
@@ -50,9 +97,15 @@ def classify(state, body: dict):
             raise UiHttpError(f"Unknown model: {model_type}", code="invalid_model")
         target = body.get("target_column", "biome")
         if not _IDENT.match(str(target)):
-            raise UiHttpError("target_column must be a plain column name.", code="invalid_target")
-        train_filter = _safe_filter(body.get("train_filter", ""), "train_filter")
-        test_filter = _safe_filter(body.get("test_filter", ""), "test_filter")
+            raise UiHttpError("A coluna alvo precisa ser um nome simples, sem espaços.", code="invalid_target")
+        auto = body.get("split") in {"auto", "stratified"} or (
+            not str(body.get("train_filter") or "").strip() and not str(body.get("test_filter") or "").strip()
+        )
+        if auto:
+            train_filter, test_filter = _stratified_filters(state, target, float(body.get("test_size") or 0.2), int(body.get("seed", 42)))
+        else:
+            train_filter = _safe_filter(body.get("train_filter", ""), "train_filter")
+            test_filter = _safe_filter(body.get("test_filter", ""), "test_filter")
         cv_folds = max(2, int(body.get("cv_folds", 5)))
         seed = int(body.get("seed", 42))
         normalize = body.get("normalize", "clr")
@@ -98,7 +151,10 @@ def classify(state, body: dict):
             importance = _fig(plot_feature_importance(pl.DataFrame(importances).rename({"value": "importance"}), top_n=10))
 
         n_test = len(test)
-        limitations = [tr(lang, "ml.lim.split"), tr(lang, "ml.lim.compositional")]
+        limitations = [
+            tr(lang, "ml.lim.auto_split", pct=int(round(float(body.get("test_size") or 0.2) * 100))) if auto else tr(lang, "ml.lim.split"),
+            tr(lang, "ml.lim.compositional"),
+        ]
         if n_test < 30:
             limitations.insert(0, tr(lang, "ml.lim.small_test", n=n_test))
         if importances:
